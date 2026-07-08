@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>clusterheart</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">clusterheart</div>
+  <div class="ctx-switcher" title="kubeconfig context">
+    <span class="k">context</span>
+    <select id="ctx-select" class="sel"></select>
+    <span id="ctx-status" class="dim"></span>
+  </div>
+  <div class="stats" id="stats">
+    <span class="kv"><span class="k">nodes</span><span class="v" id="s-nodes">—</span></span>
+    <span class="kv"><span class="k">cpu</span><span class="v" id="s-cpu">—</span></span>
+    <span class="kv"><span class="k">memory</span><span class="v" id="s-mem">—</span></span>
+    <span class="kv"><span class="k">pods</span><span class="v" id="s-pods">—</span></span>
+  </div>
+  <div class="meta">
+    <span id="refresh-meta" class="dim">refresh: idle</span>
+    <button id="refresh-btn" class="btn">refresh</button>
+  </div>
+</header>
+
+<div id="layout">
+  <nav id="sidebar">
+    <a href="#" class="nav" data-view="pods">pods</a>
+    <a href="#" class="nav" data-view="nodes">nodes</a>
+    <a href="#" class="nav" data-view="resources">resources</a>
+    <a href="#" class="nav" data-view="finops">finops</a>
+    <a href="#" class="nav" data-view="gemini">AI</a>
+
+    <div id="row-help" class="hint">
+      <div class="hint-title">pod shortcuts</div>
+      <div><kbd>l</kbd> logs</div>
+      <div><kbd>y</kbd> yaml</div>
+      <div><kbd>d</kbd> diagnose</div>
+      <div><kbd>s</kbd> shell</div>
+      <div><kbd>f</kbd> port-fwd</div>
+      <div><kbd>x</kbd> delete</div>
+      <div><kbd>g</kbd> AI</div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- POD VIEW -->
+    <section id="view-pods" class="view active">
+      <div id="pf-bar" class="pf-bar hidden"></div>
+      <div class="toolbar">
+        <span class="filter-label">namespace</span>
+        <select id="ns-select" class="sel"><option value="ALL">ALL</option></select>
+        <input id="search" class="input" placeholder="search pod/namespace/node" />
+        <span class="sep"></span>
+        <span class="sort-group">
+          <button class="btn sort" data-sort="default">default</button>
+          <button class="btn sort" data-sort="cpu">cpu</button>
+          <button class="btn sort" data-sort="mem">mem</button>
+          <button class="btn sort" data-sort="restarts">restarts</button>
+        </span>
+        <span class="sep"></span>
+        <label class="chk"><input type="checkbox" id="issues-only" /> issues only</label>
+        <label class="chk"><input type="checkbox" id="hide-cron" /> cronjobs</label>
+        <span class="sep"></span>
+        <span id="pod-count" class="dim">0 pods</span>
+      </div>
+
+      <div class="table-wrap">
+        <table id="pod-table">
+          <thead>
+            <tr>
+              <th class="c-ns">NAMESPACE</th>
+              <th class="c-name">POD</th>
+              <th class="c-ready">READY</th>
+              <th class="c-status">STATUS</th>
+              <th class="c-rest">↻</th>
+              <th class="c-cpu">CPU</th>
+              <th class="c-mem">MEM</th>
+              <th class="c-age">AGE</th>
+              <th class="c-node">NODE</th>
+              <th class="c-msg">MESSAGE</th>
+            </tr>
+          </thead>
+          <tbody id="pod-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- NODES VIEW -->
+    <section id="view-nodes" class="view">
+      <div class="toolbar">
+        <span class="title">cluster nodes</span>
+        <span class="sep"></span>
+        <span id="node-summary" class="dim"></span>
+      </div>
+      <div class="scroll-y">
+        <div id="consolidation-card" class="consolidation-card"></div>
+        <div id="node-list" class="node-list"></div>
+        <div id="top-consumers" class="consumers"></div>
+      </div>
+    </section>
+
+    <!-- RESOURCES VIEW -->
+    <section id="view-resources" class="view">
+      <div class="toolbar">
+        <span class="filter-label">namespace</span>
+        <select id="res-ns-select" class="sel"><option value="ALL">ALL</option></select>
+        <input id="res-search" class="input" placeholder="filter pod / verdict" />
+        <span class="sep"></span>
+        <button class="btn" id="res-sort-name">sort: name</button>
+        <button class="btn" id="res-sort-cpu">cpu%</button>
+        <button class="btn" id="res-sort-mem">mem%</button>
+        <button class="btn" id="res-sort-verdict">verdict</button>
+        <span class="sep"></span>
+        <label class="chk"><input type="checkbox" id="res-issues-only" /> issues only</label>
+      </div>
+      <div id="res-summary" class="panel"></div>
+      <div class="table-wrap">
+        <table id="res-table">
+          <thead>
+            <tr>
+              <th>NAMESPACE</th><th>POD</th>
+              <th class="num">CPU REQ</th><th class="num">CPU LIM</th><th class="num">CPU USE</th><th class="num">CPU%</th>
+              <th class="num">MEM REQ</th><th class="num">MEM LIM</th><th class="num">MEM USE</th><th class="num">MEM%</th>
+              <th class="vrd">VERDICT</th>
+              <th class="act"></th>
+            </tr>
+          </thead>
+          <tbody id="res-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FINOPS VIEW -->
+    <section id="view-finops" class="view">
+      <div class="scroll-y">
+        <div class="finops-card">
+          <div class="card-head">
+            <span class="title">aws daily spend</span>
+            <span class="grow"></span>
+            <span id="costs-meta" class="dim"></span>
+            <button id="costs-load" class="btn">load costs</button>
+          </div>
+          <div id="cost-chart" class="card-body"></div>
+        </div>
+
+        <div class="finops-card">
+          <div class="card-head">
+            <span class="title">cluster right-sizing</span>
+            <span class="grow"></span>
+            <span class="dim">headroom %</span>
+            <input id="headroom" type="number" min="0" max="100" value="20" class="input small" />
+          </div>
+          <div id="finops-projection" class="card-body"></div>
+        </div>
+
+        <div class="finops-card">
+          <div class="card-head">
+            <span class="title">right-sizing candidates</span>
+            <span class="grow"></span>
+            <span class="filter-label">namespace</span>
+            <select id="cand-ns-select" class="sel"><option value="ALL">ALL</option></select>
+            <span class="sep"></span>
+            <span id="candidates-meta" class="dim"></span>
+          </div>
+          <div id="finops-candidates" class="card-body"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GEMINI VIEW -->
+    <section id="view-gemini" class="view">
+      <div class="toolbar">
+        <span class="title">chat</span>
+        <span class="sep"></span>
+        <span class="filter-label">provider</span>
+        <select id="gemini-provider" class="sel">
+          <option value="gemini">gemini</option>
+          <option value="openrouter">openrouter</option>
+        </select>
+        <span class="sep"></span>
+        <span id="gemini-ctx" class="dim">context: cluster</span>
+        <span class="sep"></span>
+        <button id="gemini-clear" class="btn">clear</button>
+      </div>
+      <div id="gemini-history" class="chat"></div>
+      <div class="chat-input">
+        <input id="gemini-input" class="input grow" placeholder="ask AI about the selected pod or cluster..." />
+        <button id="gemini-send" class="btn primary">send</button>
+      </div>
+      <div id="gemini-err" class="err"></div>
+    </section>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span id="modal-title">title</span>
+      <div>
+        <button id="modal-copy" class="btn">copy</button>
+        <button id="modal-close" class="btn">close</button>
+      </div>
+    </div>
+    <pre id="modal-body" class="modal-body"></pre>
+  </div>
+</div>
+
+<!-- SHELL MODAL -->
+<div id="shell-modal" class="modal hidden">
+  <div class="modal-box shell-box">
+    <div class="modal-head">
+      <span id="shell-title">shell</span>
+      <div>
+        <span id="shell-status" class="dim"></span>
+        <button id="shell-close" class="btn">close</button>
+      </div>
+    </div>
+    <div id="shell-term"></div>
+  </div>
+</div>
+
+<!-- PORT-FORWARD START MODAL -->
+<div id="pf-modal" class="modal hidden">
+  <div class="confirm-box">
+    <div class="pf-form">
+      <div id="pf-title" class="pf-title">port-forward</div>
+      <div class="pf-row"><label>pod port</label><input id="pf-pod-port" class="input small" type="number" /></div>
+      <div class="pf-row"><label>local port</label><input id="pf-local-port" class="input small" type="number" placeholder="auto" /></div>
+      <div class="pf-row"><label>container</label><select id="pf-container" class="sel"></select></div>
+      <div id="pf-err" class="err"></div>
+    </div>
+    <div class="confirm-actions">
+      <button id="pf-start" class="btn primary">start</button>
+      <button id="pf-cancel" class="btn">cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- PATCH MODAL -->
+<div id="patch-modal" class="modal hidden">
+  <div class="modal-box patch-box">
+    <div class="modal-head">
+      <span id="patch-title">patch resources</span>
+      <div><button id="patch-close" class="btn">close</button></div>
+    </div>
+    <div class="patch-body">
+      <div id="patch-meta" class="dim"></div>
+      <div id="patch-grid" class="patch-grid"></div>
+      <div class="patch-cmd-wrap">
+        <div class="patch-cmd-label">command</div>
+        <pre id="patch-cmd" class="code-block">—</pre>
+      </div>
+      <div id="patch-result" class="patch-result"></div>
+      <div id="patch-err" class="err"></div>
+      <div class="modal-actions">
+        <button id="patch-copy" class="btn">copy command</button>
+        <button id="patch-apply" class="btn danger">apply to cluster</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTAINER PICKER -->
+<div id="container-modal" class="modal hidden">
+  <div class="confirm-box">
+    <div id="container-title" class="pf-title">select container</div>
+    <div id="container-list" class="container-list"></div>
+    <div class="confirm-actions">
+      <button id="container-cancel" class="btn">cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM -->
+<div id="confirm" class="modal hidden">
+  <div class="confirm-box">
+    <div id="confirm-text"></div>
+    <div class="confirm-actions">
+      <button id="confirm-yes" class="btn danger">confirm</button>
+      <button id="confirm-no" class="btn">cancel</button>
+    </div>
+  </div>
+</div>
+
+<footer id="footer">
+  <span id="status-msg" class="dim">ready</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

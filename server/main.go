@@ -1,0 +1,412 @@
+// Clusterheart account server (MongoDB-backed).
+//
+// Handles sign-up, login, logout and sessions (bcrypt-hashed passwords, signed
+// session tokens) plus an admin panel where the owner approves or revokes who
+// may use the app. Users live in the `users` collection of the MongoDB
+// database named by MONGO_DB (default "clusterheart").
+//
+// The Electron desktop app calls POST /api/login on launch: the response tells
+// it whether this user has been granted permission.
+package main
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"flag"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+type User struct {
+	Email     string    `bson:"email" json:"email"`
+	Name      string    `bson:"name" json:"name"`
+	PassHash  string    `bson:"passHash" json:"-"`
+	Approved  bool      `bson:"approved" json:"approved"`
+	Created   time.Time `bson:"created" json:"created"`
+	LastLogin time.Time `bson:"lastLogin" json:"lastLogin"`
+}
+
+type app struct {
+	store       *store
+	secret      []byte
+	adminEmails map[string]bool
+}
+
+func (a *app) isAdmin(email string) bool {
+	return a.adminEmails[strings.ToLower(strings.TrimSpace(email))]
+}
+
+// --- sessions ------------------------------------------------------------
+// A session token is base64url(email|expiryRFC3339).hmac. Stateless: works as
+// a cookie (web) and as a bearer token (Electron).
+
+const sessionCookie = "ch_session"
+const sessionTTL = 30 * 24 * time.Hour
+
+func (a *app) mint(email string) string {
+	exp := time.Now().Add(sessionTTL)
+	msg := strings.ToLower(email) + "|" + exp.UTC().Format(time.RFC3339)
+	mac := hmac.New(sha256.New, a.secret)
+	mac.Write([]byte(msg))
+	return base64.RawURLEncoding.EncodeToString([]byte(msg)) + "." + hex.EncodeToString(mac.Sum(nil))
+}
+
+func (a *app) parse(token string) (string, bool) {
+	parts := strings.SplitN(token, ".", 2)
+	if len(parts) != 2 {
+		return "", false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", false
+	}
+	mac := hmac.New(sha256.New, a.secret)
+	mac.Write(raw)
+	if !hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(parts[1])) {
+		return "", false
+	}
+	fields := strings.SplitN(string(raw), "|", 2)
+	if len(fields) != 2 {
+		return "", false
+	}
+	exp, err := time.Parse(time.RFC3339, fields[1])
+	if err != nil || time.Now().After(exp) {
+		return "", false
+	}
+	return fields[0], true
+}
+
+// sessionUser resolves the current user from a cookie or Authorization bearer.
+func (a *app) sessionUser(r *http.Request) *User {
+	token := ""
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		token = c.Value
+	}
+	if token == "" {
+		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+			token = strings.TrimPrefix(h, "Bearer ")
+		}
+	}
+	if token == "" {
+		return nil
+	}
+	email, ok := a.parse(token)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	u, err := a.store.find(ctx, email)
+	if err != nil {
+		return nil
+	}
+	return u
+}
+
+// --- API handlers --------------------------------------------------------
+
+func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Name, Email, Password string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]any{"error": "bad request"})
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+	name := strings.TrimSpace(body.Name)
+	if !strings.Contains(email, "@") || len(email) < 5 {
+		writeJSON(w, 400, map[string]any{"error": "Enter a valid email address."})
+		return
+	}
+	if len(body.Password) < 8 {
+		writeJSON(w, 400, map[string]any{"error": "Password must be at least 8 characters."})
+		return
+	}
+	if name == "" {
+		writeJSON(w, 400, map[string]any{"error": "Please enter your name."})
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": "could not create account"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	err = a.store.insert(ctx, &User{
+		Email:    email,
+		Name:     name,
+		PassHash: string(hash),
+		Approved: false,
+		Created:  time.Now(),
+	})
+	if err == errUserExists {
+		writeJSON(w, 409, map[string]any{"error": "An account with this email already exists."})
+		return
+	}
+	if err != nil {
+		writeJSON(w, 500, map[string]any{"error": "could not create account"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Email, Password string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]any{"error": "bad request"})
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	u, err := a.store.find(ctx, email)
+	if err != nil {
+		writeJSON(w, 503, map[string]any{"error": "service unavailable, try again"})
+		return
+	}
+	if u == nil || bcrypt.CompareHashAndPassword([]byte(u.PassHash), []byte(body.Password)) != nil {
+		writeJSON(w, 401, map[string]any{"error": "Incorrect email or password."})
+		return
+	}
+	_ = a.store.setLastLogin(ctx, email)
+
+	token := a.mint(email)
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(sessionTTL),
+	})
+	writeJSON(w, 200, map[string]any{
+		"ok":       true,
+		"approved": u.Approved,
+		"name":     u.Name,
+		"email":    u.Email,
+		"admin":    a.isAdmin(email),
+		"token":    token,
+	})
+}
+
+func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil {
+		writeJSON(w, 200, map[string]any{"valid": false})
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"valid":    true,
+		"approved": u.Approved,
+		"name":     u.Name,
+		"email":    u.Email,
+		"admin":    a.isAdmin(u.Email),
+	})
+}
+
+func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+func (a *app) handleApprove(w http.ResponseWriter, r *http.Request) {
+	me := a.sessionUser(r)
+	if me == nil || !a.isAdmin(me.Email) {
+		writeJSON(w, 403, map[string]any{"error": "forbidden"})
+		return
+	}
+	var body struct {
+		Email    string `json:"email"`
+		Approved bool   `json:"approved"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]any{"error": "bad request"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if err := a.store.setApproved(ctx, body.Email, body.Approved); err != nil {
+		writeJSON(w, 500, map[string]any{"error": "update failed"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// --- page handlers -------------------------------------------------------
+
+func (a *app) pageLogin(w http.ResponseWriter, r *http.Request) {
+	if u := a.sessionUser(r); u != nil {
+		http.Redirect(w, r, "/account", http.StatusSeeOther)
+		return
+	}
+	render(w, loginTmpl, nil)
+}
+
+func (a *app) pageSignup(w http.ResponseWriter, r *http.Request) {
+	render(w, signupTmpl, nil)
+}
+
+func (a *app) pageAccount(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	render(w, accountTmpl, map[string]any{
+		"Name":     u.Name,
+		"Email":    u.Email,
+		"Approved": u.Approved,
+		"IsAdmin":  a.isAdmin(u.Email),
+	})
+}
+
+func (a *app) pageAdmin(w http.ResponseWriter, r *http.Request) {
+	me := a.sessionUser(r)
+	if me == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if !a.isAdmin(me.Email) {
+		http.Redirect(w, r, "/account", http.StatusSeeOther)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	list, err := a.store.list(ctx)
+	if err != nil {
+		http.Error(w, "could not load users", 500)
+		return
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Approved != list[j].Approved {
+			return !list[i].Approved // pending first
+		}
+		return list[i].Created.After(list[j].Created)
+	})
+	pending := 0
+	for _, u := range list {
+		if !u.Approved {
+			pending++
+		}
+	}
+	render(w, adminTmpl, map[string]any{"Users": list, "Me": me.Name, "Pending": pending})
+}
+
+// --- wiring --------------------------------------------------------------
+
+func post(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST required", http.StatusMethodNotAllowed)
+			return
+		}
+		h(w, r)
+	}
+}
+
+// statusWriter captures the response status for request logging.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusWriter) WriteHeader(c int) { s.status = c; s.ResponseWriter.WriteHeader(c) }
+
+// logging logs every request with its method, path, status and duration so we
+// can see whether requests actually arrive and how long they take.
+func logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, status: 200}
+		next.ServeHTTP(sw, r)
+		log.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, sw.status, time.Since(start))
+	})
+}
+
+func main() {
+	loadDotEnv(".env")
+
+	addr := flag.String("addr", envOr("ADDR", "127.0.0.1:9000"), "listen address")
+	flag.Parse()
+
+	st, err := openStore(context.Background())
+	if err != nil {
+		log.Fatalf("mongo: %v", err)
+	}
+	log.Printf("connected to MongoDB (db=%s)", envOr("MONGO_DB", "clusterheart"))
+
+	a := &app{
+		store:       st,
+		secret:      loadOrCreateSecret(envOr("SECRET_FILE", "secret.key")),
+		adminEmails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+	}
+	if len(a.adminEmails) == 0 {
+		log.Println("WARNING: ADMIN_EMAILS is empty — nobody can reach /admin. Set it in server/.env")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/login", a.pageLogin)
+	mux.HandleFunc("/signup", a.pageSignup)
+	mux.HandleFunc("/account", a.pageAccount)
+	mux.HandleFunc("/admin", a.pageAdmin)
+	mux.HandleFunc("/api/signup", post(a.handleSignup))
+	mux.HandleFunc("/api/login", post(a.handleLogin))
+	mux.HandleFunc("/api/logout", post(a.handleLogout))
+	mux.HandleFunc("/api/session", a.handleSession)
+	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	})
+
+	log.Printf("clusterheart account server on http://%s", *addr)
+	log.Fatal(http.ListenAndServe(*addr, logging(mux)))
+}
+
+// --- helpers -------------------------------------------------------------
+
+func loadOrCreateSecret(path string) []byte {
+	if env := os.Getenv("SESSION_SECRET"); env != "" {
+		return []byte(env)
+	}
+	if b, err := os.ReadFile(path); err == nil && len(b) >= 32 {
+		return b
+	}
+	b := make([]byte, 48)
+	_, _ = rand.Read(b)
+	_ = os.WriteFile(path, b, 0o600) // persist so sessions survive restarts
+	return b
+}
+
+func parseAdminEmails(s string) map[string]bool {
+	out := map[string]bool{}
+	for _, e := range strings.Split(s, ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			out[e] = true
+		}
+	}
+	return out
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

@@ -1,0 +1,75 @@
+{
+  "name": "clusterheart",
+  "productName": "Clusterheart",
+  "version": "1.0.0",
+  "description": "Kubernetes / EKS health + FinOps dashboard",
+  "author": "Shivansh Sukhija <sukhija.shivansh@gmail.com>",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.clusterheart.app",
+    "productName": "Clusterheart",
+    "files": [
+      "main.js",
+      "preload.js",
+      "login.html",
+      "login.js",
+      "!resources/**"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/clusterheart-darwin-arm64",
+          "to": "clusterheart-darwin-arm64"
+        },
+        {
+          "from": "resources/clusterheart-darwin-amd64",
+          "to": "clusterheart-darwin-amd64"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/clusterheart-windows-amd64.exe",
+          "to": "clusterheart-windows-amd64.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

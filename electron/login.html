@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <title>Clusterheart</title>
+  <style>
+    :root{
+      --bg:#070910;--text:#e8ecf5;--muted:#8b95a9;--border:rgba(255,255,255,.08);
+      --accent:#2F6BEF;--accent2:#5b9dff;--green:#3ecf8e;--amber:#f5b544;--red:#f2555a;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;-webkit-user-select:none;user-select:none}
+    body{
+      background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      background-image:
+        radial-gradient(600px 400px at 15% -5%,rgba(47,107,239,.22),transparent 60%),
+        radial-gradient(700px 500px at 110% 110%,rgba(91,157,255,.14),transparent 55%);
+    }
+    .center{height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}
+    .card{
+      width:100%;max-width:400px;padding:40px 36px;
+      background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));
+      border:1px solid var(--border);border-radius:18px;
+      box-shadow:0 30px 80px -20px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.02) inset;
+    }
+    .brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+    .brand svg{filter:drop-shadow(0 4px 10px rgba(47,107,239,.5))}
+    .wordmark{font-size:20px;font-weight:700;letter-spacing:-.4px}
+    .wordmark .a{color:var(--accent2)}
+    h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0 0 6px}
+    .sub{color:var(--muted);font-size:13.5px;margin:0 0 26px;line-height:1.5}
+    label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:16px 0 7px}
+    input{
+      width:100%;padding:12px 14px;font-size:14px;color:var(--text);
+      background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;outline:none;
+      -webkit-user-select:text;user-select:text;transition:border-color .15s,box-shadow .15s;
+    }
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,107,239,.22)}
+    input::placeholder{color:#586074}
+    .btn{
+      width:100%;margin-top:24px;padding:12px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;
+      background:linear-gradient(135deg,#3B74F0,#5b9dff);border:none;border-radius:10px;
+      box-shadow:0 8px 22px -6px rgba(47,107,239,.6);transition:transform .12s,box-shadow .12s,opacity .12s;
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn:disabled{opacity:.55;cursor:default;transform:none;box-shadow:none}
+    .btn.secondary{background:linear-gradient(135deg,#39414f,#4a5464);box-shadow:none}
+    .alt{margin-top:20px;font-size:13px;color:var(--muted);text-align:center}
+    .link{color:var(--accent2);cursor:pointer}.link:hover{text-decoration:underline}
+    .msg{min-height:20px;margin-top:16px;font-size:13px}
+    .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:20px;font-size:12.5px;font-weight:600;margin-bottom:16px}
+    .pill.off{background:rgba(245,181,68,.14);color:var(--amber)}
+    .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+    .hidden{display:none}
+    .spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--accent2);border-radius:50%;animation:r .8s linear infinite;margin:8px auto}
+    @keyframes r{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="center"><div class="card">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 100 100">
+        <circle cx="50" cy="18" r="9" fill="#7CA0F2"/><circle cx="22" cy="34" r="8" fill="#C3D4F7"/>
+        <circle cx="78" cy="34" r="8" fill="#C3D4F7"/><circle cx="50" cy="50" r="13" fill="#2F6BEF"/>
+        <circle cx="22" cy="66" r="8" fill="#3B74F0"/><circle cx="78" cy="66" r="8" fill="#3B74F0"/>
+        <circle cx="50" cy="82" r="9" fill="#2F6BEF"/>
+      </svg>
+      <span class="wordmark">cluster<span class="a">heart</span></span>
+    </div>
+
+    <!-- resume check -->
+    <div id="loading">
+      <div class="spin"></div>
+      <p class="sub" style="text-align:center;margin-top:14px">Checking your session…</p>
+    </div>
+
+    <!-- sign-in form -->
+    <div id="form" class="hidden">
+      <h1>Welcome back</h1>
+      <p class="sub">Sign in to open the dashboard.</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
+      <label for="pass">Password</label>
+      <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••" />
+      <button class="btn" id="go">Sign in</button>
+      <div id="msg" class="msg"></div>
+      <div class="alt">New here? <span class="link" id="signup">Create an account</span></div>
+    </div>
+
+    <!-- pending approval -->
+    <div id="pending" class="hidden">
+      <span class="pill off"><span class="dot"></span>Pending approval</span>
+      <h1>Almost there</h1>
+      <p class="sub" id="pendingName">Your account is waiting for the owner to approve it. You'll get in as soon as they do.</p>
+      <button class="btn" id="recheck">Check again</button>
+      <button class="btn secondary" id="signout">Sign out</button>
+    </div>
+  </div></div>
+
+  <script src="login.js"></script>
+</body>
+</html>

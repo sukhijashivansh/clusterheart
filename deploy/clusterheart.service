@@ -1,0 +1,28 @@
+# Reference systemd unit for the Clusterheart account server.
+# Install on the VPS as /etc/systemd/system/clusterheart.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now clusterheart
+#
+# Assumes the binary + .env live in /opt/clusterheart (matches REMOTE_DIR in
+# the deploy workflow). The .env must contain: MONGO_URI, MONGO_DB,
+# ADMIN_EMAILS, SESSION_SECRET, and ADDR=0.0.0.0:9000
+
+[Unit]
+Description=Clusterheart account server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/clusterheart
+EnvironmentFile=/opt/clusterheart/.env
+ExecStart=/opt/clusterheart/clusterheart-server
+Restart=always
+RestartSec=3
+# Hardening (optional but recommended). Drop if it interferes with your setup.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

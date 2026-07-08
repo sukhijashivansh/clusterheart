@@ -1,0 +1,23 @@
+# --- secrets (never commit) ---
+.env
+*.env
+!*.env.example
+server/secret.key
+**/secret.key
+
+# --- build output / binaries ---
+server/clusterheart-server
+app/clusterheart-app
+app/kubepulse-ui
+clusterheart-server
+clusterheart-app
+kubepulse-ui
+electron/dist/
+electron/resources/clusterheart-*
+
+# --- deps ---
+node_modules/
+
+# --- os / editor cruft ---
+.DS_Store
+*.log
