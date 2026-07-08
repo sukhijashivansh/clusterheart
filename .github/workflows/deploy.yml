@@ -19,7 +19,7 @@ concurrency:
 
 env:
   # --- EDIT THESE to match the VPS ---
-  REMOTE_DIR: /opt/clusterheart # dir holding the binary + .env on the server
+  REMOTE_DIR: /root/clusterheart/server # dir holding the binary + .env on the server
   SERVICE_NAME: clusterheart # systemd unit name -> `systemctl restart <name>`
 
 jobs:
