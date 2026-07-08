@@ -26,6 +26,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Check required secrets
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          SSHPASS: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+        run: |
+          missing=""
+          [ -z "$SSH_HOST" ] && missing="$missing DEPLOY_SSH_HOST"
+          [ -z "$SSH_USER" ] && missing="$missing DEPLOY_SSH_USER"
+          [ -z "$SSHPASS" ]  && missing="$missing DEPLOY_SSH_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo secret(s):$missing — set with 'gh secret set <NAME>', then re-run."
+            exit 1
+          fi
+          echo "All deploy secrets present."
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
