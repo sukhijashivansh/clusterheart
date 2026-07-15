@@ -375,9 +375,20 @@ func main() {
 	mux.HandleFunc("/api/logout", post(a.handleLogout))
 	mux.HandleFunc("/api/session", a.handleSession)
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
+
+	// Serve the desktop-app installers straight from this server (no GitHub
+	// release needed — the source stays private). Drop the .dmg/.exe/.AppImage
+	// files into DOWNLOADS_DIR (default: ./downloads next to the binary).
+	downloadsDir := os.Getenv("DOWNLOADS_DIR")
+	if downloadsDir == "" {
+		downloadsDir = "downloads"
+	}
+	mux.Handle("/downloads/", http.StripPrefix("/downloads/",
+		http.FileServer(http.Dir(downloadsDir))))
+
 	mux.HandleFunc("/", a.pageHome)
 
-	log.Printf("clusterheart account server on http://%s", *addr)
+	log.Printf("clusterheart account server on http://%s (downloads: %s)", *addr, downloadsDir)
 	log.Fatal(http.ListenAndServe(*addr, logging(mux)))
 }
 

@@ -33,13 +33,7 @@
       "output": "dist",
       "buildResources": "build"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Decodx09",
-        "repo": "clusterheart"
-      }
-    ],
+    "publish": null,
     "mac": {
       "icon": "build/icon.png",
       "category": "public.app-category.developer-tools",

@@ -21,3 +21,6 @@ node_modules/
 # --- os / editor cruft ---
 .DS_Store
 *.log
+
+# --- served installers (built by CI, scp-ed to the server) ---
+server/downloads/

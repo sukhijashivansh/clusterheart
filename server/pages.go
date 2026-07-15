@@ -39,7 +39,9 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
   --green:#0f9d63;--amber:#c9880f;--red:#e5484d;
 }
 *{box-sizing:border-box}
+html{scroll-behavior:smooth}
 html,body{margin:0;min-height:100%}
+#download{scroll-margin-top:78px}
 body{
   background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
@@ -161,6 +163,19 @@ table.users tbody tr:hover{background:#f8fafc}
 .lp-foot{max-width:1080px;margin:0 auto;padding:32px;display:flex;align-items:center;justify-content:space-between;gap:16px;
   border-top:1px solid var(--border);color:var(--muted);font-size:13px;flex-wrap:wrap;margin-top:40px}
 .lp-foot .brand{margin:0}.lp-foot .wordmark{font-size:16px}
+/* download cards */
+.dl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:820px;margin:0 auto}
+.dl-card{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
+  padding:26px 18px;background:#fff;border:1px solid var(--border);border-radius:16px;color:var(--text);
+  box-shadow:0 18px 44px -34px rgba(15,23,42,.2);transition:transform .16s,box-shadow .16s,border-color .16s}
+.dl-card:hover{transform:translateY(-4px);text-decoration:none;border-color:rgba(47,107,239,.4);
+  box-shadow:0 26px 54px -30px rgba(47,107,239,.35)}
+.dl-ic{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;margin-bottom:8px;color:var(--accent-ink);
+  background:linear-gradient(135deg,rgba(47,107,239,.12),rgba(91,157,255,.10));border:1px solid rgba(47,107,239,.14)}
+.dl-os{font-size:16px;font-weight:750;letter-spacing:-.2px}
+.dl-sub{font-size:12.5px;color:var(--muted)}.dl-sub b{color:var(--text);font-weight:650}
+.dl-note{text-align:center;color:var(--muted);font-size:12.5px;max-width:600px;margin:26px auto 0;line-height:1.6}
+.dl-note code{background:#f1f4f9;border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}
 
 /* responsive: landing */
 @media (max-width:820px){
@@ -171,9 +186,12 @@ table.users tbody tr:hover{background:#f8fafc}
   .lp-band{padding:44px 22px}
   .lp-foot{flex-direction:column;text-align:center;gap:10px}
 }
+@media (max-width:820px){
+  .dl-grid{grid-template-columns:repeat(2,1fr)}
+}
 @media (max-width:560px){
   .lp-nav-actions{gap:12px}
-  .lp-nav-actions a:not(.lp-btn){display:none}   /* keep just the Get started button */
+  .lp-nav-actions a:not(.lp-btn){display:none}   /* keep just the Download button */
 }
 
 /* responsive: auth cards */
@@ -233,7 +251,7 @@ const homeBody = `{{define "body"}}
   <div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
   <div class="lp-nav-actions">
     <a href="/login">Sign in</a>
-    <a class="lp-btn primary" href="/signup">Get started</a>
+    <a class="lp-btn primary" href="#download">Download</a>
   </div>
 </nav>
 
@@ -242,8 +260,8 @@ const homeBody = `{{define "body"}}
   <h1>Your cluster's health &amp; cost,<br><span class="grad">in one calm view.</span></h1>
   <p class="lead">Clusterheart is a desktop dashboard for your Kubernetes clusters — live health, real AWS spend, right-sizing insights, and an AI copilot for kubectl. It reads your local kubeconfig, so credentials never leave your machine.</p>
   <div class="lp-cta">
-    <a class="lp-btn primary" href="/signup">Create your account</a>
-    <a class="lp-btn ghost" href="/login">Sign in</a>
+    <a class="lp-btn primary" href="#download">Download the app</a>
+    <a class="lp-btn ghost" href="/signup">Create account</a>
   </div>
   <div class="lp-trust">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -297,6 +315,35 @@ const homeBody = `{{define "body"}}
     <div class="step"><h3>Get approved</h3><p>The owner approves you from the admin panel — you'll see it the moment they do.</p></div>
     <div class="step"><h3>Open the desktop app</h3><p>Launch Clusterheart, sign in, and your dashboard boots against your cluster.</p></div>
   </div>
+</section>
+
+<section id="download" class="lp-section lp-wrap">
+  <p class="lp-kicker">Download</p>
+  <h2 class="lp-h2">Get the desktop app</h2>
+  <p class="lp-sub2">Free · runs on your machine · reads your local kubeconfig. Pick your platform:</p>
+  <div class="dl-grid">
+    <a class="dl-card" href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">
+      <span class="dl-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
+      <span class="dl-os">macOS</span>
+      <span class="dl-sub">Apple Silicon · <b>.dmg</b></span>
+    </a>
+    <a class="dl-card" href="/downloads/Clusterheart-macOS-Intel.dmg">
+      <span class="dl-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
+      <span class="dl-os">macOS</span>
+      <span class="dl-sub">Intel · <b>.dmg</b></span>
+    </a>
+    <a class="dl-card" href="/downloads/Clusterheart-Windows.exe">
+      <span class="dl-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zm8-13.9L21 3v8.5h-10V4.5zm0 15l10 1.5V12.5H11v6z"/></svg></span>
+      <span class="dl-os">Windows</span>
+      <span class="dl-sub">64-bit · <b>.exe</b></span>
+    </a>
+    <a class="dl-card" href="/downloads/Clusterheart-Linux.AppImage">
+      <span class="dl-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1.7 0-3 1.6-3 3.4 0 1.1.1 2-.5 3-.7 1-2.3 2.4-2.3 4.9 0 .9.3 1.7.7 2.4-.5.4-1 1-1 1.8 0 1.4 1.6 1.8 3.2 2.2 1 .3 1.4.9 2.9.9s1.9-.6 2.9-.9c1.6-.4 3.2-.8 3.2-2.2 0-.8-.5-1.4-1-1.8.4-.7.7-1.5.7-2.4 0-2.5-1.6-3.9-2.3-4.9-.6-1-.5-1.9-.5-3C15 3.6 13.7 2 12 2zm-1.4 3.1c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z"/></svg></span>
+      <span class="dl-os">Linux</span>
+      <span class="dl-sub">x86-64 · <b>.AppImage</b></span>
+    </a>
+  </div>
+  <p class="dl-note">Builds are unsigned — on macOS <b>right-click → Open</b> the first time; on Windows choose <b>More info → Run anyway</b>. Need Intel Mac, Linux ARM or a <code>.deb</code>? <a href="/downloads/">Browse all builds →</a></p>
 </section>
 
 <section class="lp-wrap">

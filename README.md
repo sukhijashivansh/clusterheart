@@ -11,20 +11,23 @@ clusterheart/
 
 ## Download
 
-Grab the latest desktop app for your OS from the
-**[Releases page](https://github.com/Decodx09/clusterheart/releases/latest)**:
+The desktop app is served **from the home page itself** — the server hosts the
+installers under `/downloads/` and the landing page's **Download** section links
+to them. The repo stays private; nothing is published to a public GitHub
+release.
 
-| OS | File |
-|----|------|
-| macOS (Apple Silicon / Intel) | `Clusterheart-<ver>-mac-arm64.dmg` / `…-x64.dmg` |
-| Windows | `Clusterheart-<ver>-win-x64.exe` |
-| Linux | `Clusterheart-<ver>-linux-x86_64.AppImage` / `.deb` |
+- **Where files live:** `DOWNLOADS_DIR` (default `downloads/` next to the server
+  binary; on the VPS: `/root/clusterheart/server/downloads`).
+- **How they get there:** [`.github/workflows/release.yml`](.github/workflows/release.yml)
+  builds macOS/Windows/Linux on a `v*` tag and **scp's the installers to that
+  folder** using the same `DEPLOY_SSH_*` secrets as the server deploy. No GitHub
+  release involved.
+- To cut a build: bump `version` in `electron/package.json`, then
+  `git tag v1.0.1 && git push origin v1.0.1`.
 
-Installers are built automatically for all three platforms by
-[`.github/workflows/release.yml`](.github/workflows/release.yml) whenever a
-`v*` tag is pushed. To cut a release: bump `version` in
-`electron/package.json`, then `git tag v1.0.1 && git push origin v1.0.1` — the
-build lands as a **draft** release you review and publish.
+Canonical download URLs the landing page links to:
+`/downloads/Clusterheart-macOS-AppleSilicon.dmg`, `…-macOS-Intel.dmg`,
+`…-Windows.exe`, `…-Linux.AppImage` (browse all at `/downloads/`).
 
 ## How it fits together
 
