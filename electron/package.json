@@ -3,6 +3,7 @@
   "productName": "Clusterheart",
   "version": "1.0.0",
   "description": "Kubernetes / EKS health + FinOps dashboard",
+  "homepage": "https://github.com/Decodx09/clusterheart",
   "author": "Shivansh Sukhija <sukhija.shivansh@gmail.com>",
   "license": "UNLICENSED",
   "private": true,
