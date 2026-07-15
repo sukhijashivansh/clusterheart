@@ -9,6 +9,23 @@ clusterheart/
 └── server/     the account server — real auth + your approve/revoke admin panel
 ```
 
+## Download
+
+Grab the latest desktop app for your OS from the
+**[Releases page](https://github.com/Decodx09/clusterheart/releases/latest)**:
+
+| OS | File |
+|----|------|
+| macOS (Apple Silicon / Intel) | `Clusterheart-<ver>-mac-arm64.dmg` / `…-x64.dmg` |
+| Windows | `Clusterheart-<ver>-win-x64.exe` |
+| Linux | `Clusterheart-<ver>-linux-x86_64.AppImage` / `.deb` |
+
+Installers are built automatically for all three platforms by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) whenever a
+`v*` tag is pushed. To cut a release: bump `version` in
+`electron/package.json`, then `git tag v1.0.1 && git push origin v1.0.1` — the
+build lands as a **draft** release you review and publish.
+
 ## How it fits together
 
 ```

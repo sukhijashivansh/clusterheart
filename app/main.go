@@ -7,13 +7,16 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -212,6 +215,7 @@ func main() {
 	mux.HandleFunc("/api/pod/", s.handlePod)
 	mux.HandleFunc("/api/namespace/", s.handleNamespaceOps)
 	mux.HandleFunc("/api/costs", s.handleCosts)
+	mux.HandleFunc("/api/loadtest", s.handleLoadTest)
 	mux.HandleFunc("/api/gemini", s.handleGemini)
 	mux.HandleFunc("/api/shell", s.handleShell)
 	mux.HandleFunc("/api/portforward", s.handlePortForwardCollection)
@@ -866,6 +870,351 @@ func (s *server) handleCosts(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, points)
 }
+
+// --- /api/loadtest  (JMeter, non-GUI, local CLI) -------------------------
+// POST {url, method, threads, rampSeconds, durationSeconds}. Generates a
+// minimal JMeter test plan, runs `jmeter -n`, parses the JTL results, and
+// returns aggregate stats + a per-second time series. Load originates from
+// this machine, so the target must be reachable locally (a public URL, or a
+// cluster Service you've port-forwarded via the app).
+func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, 405, "POST required")
+		return
+	}
+	var body struct {
+		URL             string `json:"url"`
+		Method          string `json:"method"`
+		Threads         int    `json:"threads"`
+		RampSeconds     int    `json:"rampSeconds"`
+		DurationSeconds int    `json:"durationSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, "bad body: "+err.Error())
+		return
+	}
+
+	target, err := url.Parse(strings.TrimSpace(body.URL))
+	if err != nil || target.Scheme == "" || target.Host == "" {
+		writeErr(w, 400, "enter a full target URL, e.g. http://127.0.0.1:8080/health")
+		return
+	}
+	if target.Scheme != "http" && target.Scheme != "https" {
+		writeErr(w, 400, "only http/https targets are supported")
+		return
+	}
+	method := strings.ToUpper(strings.TrimSpace(body.Method))
+	if method == "" {
+		method = "GET"
+	}
+	// Bound the knobs so a stray value can't hammer a target or hang the app.
+	threads := clampInt(body.Threads, 1, 500)
+	ramp := clampInt(body.RampSeconds, 0, 300)
+	duration := clampInt(body.DurationSeconds, 1, 300)
+
+	if _, err := exec.LookPath("jmeter"); err != nil {
+		writeErr(w, 400, "JMeter not found on PATH — install it with `brew install jmeter` (needs Java, which is present), then retry")
+		return
+	}
+
+	scheme := target.Scheme
+	host := target.Hostname()
+	port := target.Port()
+	if port == "" {
+		if scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	path := target.RequestURI() // path + query
+
+	dir, err := os.MkdirTemp("", "clusterheart-jmeter-")
+	if err != nil {
+		writeErr(w, 500, "temp dir: "+err.Error())
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	plan := jmxTemplate
+	repl := strings.NewReplacer(
+		"{{THREADS}}", strconv.Itoa(threads),
+		"{{RAMP}}", strconv.Itoa(ramp),
+		"{{DURATION}}", strconv.Itoa(duration),
+		"{{SCHEME}}", scheme,
+		"{{HOST}}", xmlEscape(host),
+		"{{PORT}}", port,
+		"{{PATH}}", xmlEscape(path),
+		"{{METHOD}}", method,
+	)
+	plan = repl.Replace(plan)
+
+	jmxPath := filepath.Join(dir, "plan.jmx")
+	jtlPath := filepath.Join(dir, "results.jtl")
+	if err := os.WriteFile(jmxPath, []byte(plan), 0o600); err != nil {
+		writeErr(w, 500, "write plan: "+err.Error())
+		return
+	}
+
+	// Give JMeter the test duration plus generous headroom for JVM startup and
+	// end-of-test flushing before we cut it off.
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(duration+60)*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "jmeter", "-n",
+		"-t", jmxPath,
+		"-l", jtlPath,
+		"-j", filepath.Join(dir, "jmeter.log"))
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			writeErr(w, 504, "load test timed out")
+			return
+		}
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		writeErr(w, 500, "jmeter failed: "+lastLine(msg))
+		return
+	}
+
+	res, err := parseJTL(jtlPath)
+	if err != nil {
+		writeErr(w, 500, "parse results: "+err.Error())
+		return
+	}
+	res.Target = method + " " + target.String()
+	res.Threads = threads
+	writeJSON(w, 200, res)
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func xmlEscape(s string) string {
+	var b bytes.Buffer
+	_ = xmlEscapeTo(&b, s)
+	return b.String()
+}
+func xmlEscapeTo(b *bytes.Buffer, s string) error {
+	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
+	_, err := b.WriteString(r.Replace(s))
+	return err
+}
+
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+// LoadResult is the aggregate report returned to the UI.
+type LoadResult struct {
+	Target     string       `json:"target"`
+	Threads    int          `json:"threads"`
+	Samples    int          `json:"samples"`
+	Errors     int          `json:"errors"`
+	ErrorPct   float64      `json:"errorPct"`
+	Throughput float64      `json:"throughput"` // requests/sec over the wall-clock window
+	DurationS  float64      `json:"durationS"`
+	AvgMs      float64      `json:"avgMs"`
+	MinMs      int64        `json:"minMs"`
+	MaxMs      int64        `json:"maxMs"`
+	P50Ms      int64        `json:"p50Ms"`
+	P90Ms      int64        `json:"p90Ms"`
+	P95Ms      int64        `json:"p95Ms"`
+	P99Ms      int64        `json:"p99Ms"`
+	Series     []LoadBucket `json:"series"`
+}
+
+// LoadBucket is one second of the test: how many requests completed, their
+// average latency, and how many failed.
+type LoadBucket struct {
+	T      int64   `json:"t"` // seconds since test start
+	Count  int     `json:"count"`
+	AvgMs  float64 `json:"avgMs"`
+	Errors int     `json:"errors"`
+}
+
+// parseJTL reads JMeter's default CSV results file in a single pass. Relevant
+// columns: timeStamp(ms), elapsed(ms), success(bool).
+func parseJTL(path string) (*LoadResult, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	rd := csv.NewReader(f)
+	rd.FieldsPerRecord = -1 // JTL rows vary (failureMessage may be empty/quoted)
+	header, err := rd.Read()
+	if err != nil {
+		return nil, fmt.Errorf("no results — target may be unreachable")
+	}
+	col := map[string]int{}
+	for i, h := range header {
+		col[h] = i
+	}
+	iTS, okTS := col["timeStamp"]
+	iEl, okEl := col["elapsed"]
+	iOk, okOk := col["success"]
+	if !okTS || !okEl || !okOk {
+		return nil, fmt.Errorf("unexpected results format")
+	}
+
+	type sample struct {
+		ts, el int64
+		ok     bool
+	}
+	var samples []sample
+	var sumAll float64
+	errors := 0
+	var minTS, maxEnd int64
+	for {
+		rec, rerr := rd.Read()
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil || len(rec) <= iEl || len(rec) <= iTS || len(rec) <= iOk {
+			continue
+		}
+		ts, _ := strconv.ParseInt(rec[iTS], 10, 64)
+		el, _ := strconv.ParseInt(rec[iEl], 10, 64)
+		ok := strings.EqualFold(rec[iOk], "true")
+		if len(samples) == 0 || ts < minTS {
+			minTS = ts
+		}
+		if end := ts + el; end > maxEnd {
+			maxEnd = end
+		}
+		samples = append(samples, sample{ts, el, ok})
+		sumAll += float64(el)
+		if !ok {
+			errors++
+		}
+	}
+	n := len(samples)
+	if n == 0 {
+		return nil, fmt.Errorf("no samples recorded — target may be unreachable")
+	}
+
+	res := &LoadResult{
+		Samples:  n,
+		Errors:   errors,
+		ErrorPct: math.Round(float64(errors)/float64(n)*1000) / 10,
+		AvgMs:    math.Round(sumAll/float64(n)*10) / 10,
+	}
+
+	sorted := make([]int64, n)
+	for i, s := range samples {
+		sorted[i] = s.el
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	res.MinMs, res.MaxMs = sorted[0], sorted[n-1]
+	res.P50Ms = percentile(sorted, 50)
+	res.P90Ms = percentile(sorted, 90)
+	res.P95Ms = percentile(sorted, 95)
+	res.P99Ms = percentile(sorted, 99)
+
+	wall := float64(maxEnd-minTS) / 1000.0
+	if wall <= 0 {
+		wall = 1
+	}
+	res.DurationS = math.Round(wall*10) / 10
+	res.Throughput = math.Round(float64(n)/wall*100) / 100
+
+	// Per-second buckets relative to test start.
+	m := map[int64]*LoadBucket{}
+	for _, s := range samples {
+		sec := (s.ts - minTS) / 1000
+		if sec < 0 {
+			sec = 0
+		}
+		b := m[sec]
+		if b == nil {
+			b = &LoadBucket{T: sec}
+			m[sec] = b
+		}
+		b.Count++
+		b.AvgMs += float64(s.el) // sum now; averaged below
+		if !s.ok {
+			b.Errors++
+		}
+	}
+	series := make([]LoadBucket, 0, len(m))
+	for _, b := range m {
+		b.AvgMs = math.Round(b.AvgMs/float64(b.Count)*10) / 10
+		series = append(series, *b)
+	}
+	sort.Slice(series, func(i, j int) bool { return series[i].T < series[j].T })
+	res.Series = series
+	return res, nil
+}
+
+// percentile returns the p-th percentile (nearest-rank) of a sorted slice.
+func percentile(sorted []int64, p int) int64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	rank := int(math.Ceil(float64(p)/100*float64(len(sorted)))) - 1
+	if rank < 0 {
+		rank = 0
+	}
+	if rank >= len(sorted) {
+		rank = len(sorted) - 1
+	}
+	return sorted[rank]
+}
+
+const jmxTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Clusterheart Load Test" enabled="true">
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+      <stringProp name="TestPlan.user_define_classpath"></stringProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Threads" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <intProp name="LoopController.loops">-1</intProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">{{THREADS}}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">{{RAMP}}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">{{DURATION}}</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments"/>
+          </elementProp>
+          <stringProp name="HTTPSampler.domain">{{HOST}}</stringProp>
+          <stringProp name="HTTPSampler.port">{{PORT}}</stringProp>
+          <stringProp name="HTTPSampler.protocol">{{SCHEME}}</stringProp>
+          <stringProp name="HTTPSampler.path">{{PATH}}</stringProp>
+          <stringProp name="HTTPSampler.method">{{METHOD}}</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>`
 
 // --- /api/gemini ---
 // POST body: {"provider":"gemini|openrouter","namespace":"ns","pod":"name","history":[{"role":"user|model","text":"..."}]}

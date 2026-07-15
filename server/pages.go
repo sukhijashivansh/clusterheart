@@ -125,19 +125,19 @@ table.users tbody tr:hover{background:#f8fafc}
 .lp-btn.ghost{color:var(--text);border:1px solid var(--border-strong);background:#fff}
 .lp-btn.ghost:hover{background:#f7f9fc;text-decoration:none;transform:translateY(-1px)}
 .lp-wrap{max-width:1080px;margin:0 auto;padding:0 32px}
-.lp-hero{text-align:center;padding:84px 0 20px}
+.lp-hero{text-align:center;padding:clamp(48px,8vw,88px) 0 20px}
 .eyebrow{display:inline-flex;align-items:center;gap:7px;margin-bottom:22px;padding:6px 14px;border-radius:999px;
   font-size:12.5px;font-weight:650;letter-spacing:.2px;color:var(--accent-ink);background:rgba(47,107,239,.09);border:1px solid rgba(47,107,239,.16)}
 .eyebrow .dot{background:var(--accent);box-shadow:0 0 0 3px rgba(47,107,239,.18)}
-.lp-hero h1{font-size:52px;line-height:1.08;font-weight:820;letter-spacing:-1.6px;margin:0 auto 20px;max-width:800px}
+.lp-hero h1{font-size:clamp(30px,6.2vw,52px);line-height:1.08;font-weight:820;letter-spacing:-1.4px;margin:0 auto 20px;max-width:800px}
 .lp-hero h1 .grad{background:linear-gradient(120deg,#2F6BEF,#5b9dff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.lp-hero .lead{font-size:17.5px;line-height:1.6;color:var(--muted);max-width:600px;margin:0 auto 34px}
+.lp-hero .lead{font-size:clamp(15px,2.2vw,17.5px);line-height:1.6;color:var(--muted);max-width:600px;margin:0 auto 34px}
 .lp-cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .lp-cta .lp-btn{padding:13px 26px;font-size:15px}
 .lp-trust{margin-top:22px;font-size:12.5px;color:var(--faint);display:flex;align-items:center;justify-content:center;gap:8px}
 .lp-section{padding:56px 0}
 .lp-kicker{text-align:center;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
-.lp-h2{text-align:center;font-size:30px;font-weight:780;letter-spacing:-.8px;margin:0 0 12px}
+.lp-h2{text-align:center;font-size:clamp(23px,4vw,30px);font-weight:780;letter-spacing:-.8px;margin:0 0 12px}
 .lp-sub2{text-align:center;color:var(--muted);font-size:15px;max-width:560px;margin:0 auto 40px}
 .lp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 .fcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:26px 24px;
@@ -161,6 +161,20 @@ table.users tbody tr:hover{background:#f8fafc}
 .lp-foot{max-width:1080px;margin:0 auto;padding:32px;display:flex;align-items:center;justify-content:space-between;gap:16px;
   border-top:1px solid var(--border);color:var(--muted);font-size:13px;flex-wrap:wrap;margin-top:40px}
 .lp-foot .brand{margin:0}.lp-foot .wordmark{font-size:16px}
+
+/* responsive: landing */
+@media (max-width:820px){
+  .lp-nav{padding:13px 18px}
+  .lp-wrap{padding:0 18px}
+  .lp-grid,.steps{grid-template-columns:1fr}
+  .lp-section{padding:44px 0}
+  .lp-band{padding:44px 22px}
+  .lp-foot{flex-direction:column;text-align:center;gap:10px}
+}
+@media (max-width:560px){
+  .lp-nav-actions{gap:12px}
+  .lp-nav-actions a:not(.lp-btn){display:none}   /* keep just the Get started button */
+}
 
 /* responsive: auth cards */
 @media (max-width:480px){

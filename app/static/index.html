@@ -33,6 +33,7 @@
     <a href="#" class="nav" data-view="nodes">nodes</a>
     <a href="#" class="nav" data-view="resources">resources</a>
     <a href="#" class="nav" data-view="finops">finops</a>
+    <a href="#" class="nav" data-view="load">load</a>
     <a href="#" class="nav" data-view="gemini">AI</a>
 
     <div id="row-help" class="hint">
@@ -170,6 +171,47 @@
           <div id="finops-candidates" class="card-body"></div>
         </div>
       </div>
+    </section>
+
+    <!-- LOAD VIEW (JMeter) -->
+    <section id="view-load" class="view">
+      <div class="toolbar">
+        <span class="title">load test</span>
+        <span class="sep"></span>
+        <span class="dim">JMeter · load runs from this machine — target a public URL or a port-forwarded service</span>
+      </div>
+      <div class="lt-form">
+        <div class="lt-row">
+          <label class="lt-field grow">
+            <span>target URL</span>
+            <input id="lt-url" class="input" placeholder="http://127.0.0.1:8080/health" />
+          </label>
+          <label class="lt-field">
+            <span>method</span>
+            <select id="lt-method" class="sel">
+              <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>HEAD</option>
+            </select>
+          </label>
+        </div>
+        <div class="lt-row">
+          <label class="lt-field">
+            <span>threads (users)</span>
+            <input id="lt-threads" class="input small" type="number" min="1" max="500" value="20" />
+          </label>
+          <label class="lt-field">
+            <span>ramp-up (s)</span>
+            <input id="lt-ramp" class="input small" type="number" min="0" max="300" value="5" />
+          </label>
+          <label class="lt-field">
+            <span>duration (s)</span>
+            <input id="lt-duration" class="input small" type="number" min="1" max="300" value="30" />
+          </label>
+          <span class="grow"></span>
+          <button id="lt-run" class="btn primary">Run test</button>
+        </div>
+        <div id="lt-status" class="dim"></div>
+      </div>
+      <div id="lt-results"></div>
     </section>
 
     <!-- GEMINI VIEW -->

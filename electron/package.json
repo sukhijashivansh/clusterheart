@@ -10,7 +10,9 @@
   "scripts": {
     "start": "electron .",
     "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win"
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder -mwl"
   },
   "devDependencies": {
     "electron": "31.7.7",
@@ -19,6 +21,7 @@
   "build": {
     "appId": "com.clusterheart.app",
     "productName": "Clusterheart",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
       "preload.js",
@@ -27,9 +30,18 @@
       "!resources/**"
     ],
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Decodx09",
+        "repo": "clusterheart"
+      }
+    ],
     "mac": {
+      "icon": "build/icon.png",
       "category": "public.app-category.developer-tools",
       "target": [
         {
@@ -52,6 +64,7 @@
       ]
     },
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "nsis",
@@ -64,6 +77,37 @@
         {
           "from": "resources/clusterheart-windows-amd64.exe",
           "to": "clusterheart-windows-amd64.exe"
+        }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Development",
+      "maintainer": "Shivansh Sukhija <sukhija.shivansh@gmail.com>",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/clusterheart-linux-amd64",
+          "to": "clusterheart-linux-amd64"
+        },
+        {
+          "from": "resources/clusterheart-linux-arm64",
+          "to": "clusterheart-linux-arm64"
         }
       ]
     },

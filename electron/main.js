@@ -201,6 +201,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1180, height: 780, minWidth: 900, minHeight: 620,
     backgroundColor: '#ffffff', title: 'Clusterheart',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   win.loadFile('login.html');
@@ -212,7 +213,14 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => { buildMenu(); createWindow(); });
+app.whenReady().then(() => {
+  // Dock icon in dev (packaged builds get the icon from electron-builder).
+  if (process.platform === 'darwin' && app.dock) {
+    try { app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); } catch (_) {}
+  }
+  buildMenu();
+  createWindow();
+});
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => { app.isQuitting = true; stopDashboard(); });

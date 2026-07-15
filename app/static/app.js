@@ -1233,6 +1233,141 @@ function attachCostTooltip(avg) {
   plot.onmouseleave = () => tip.classList.remove("show");
 }
 
+// ---------- load test (JMeter) ----------
+let ltBusy = false;
+let ltLast = null;
+
+async function runLoadTest() {
+  if (ltBusy) return;
+  const url = $("#lt-url").value.trim();
+  if (!url) { $("#lt-status").textContent = "enter a target URL first"; return; }
+  const payload = {
+    url,
+    method: $("#lt-method").value,
+    threads: parseInt($("#lt-threads").value, 10) || 1,
+    rampSeconds: parseInt($("#lt-ramp").value, 10) || 0,
+    durationSeconds: parseInt($("#lt-duration").value, 10) || 1,
+  };
+  ltBusy = true;
+  $("#lt-run").disabled = true;
+  const dur = payload.durationSeconds;
+  $("#lt-status").innerHTML = `<span class="lt-spin"></span> running ${payload.threads} users for ${dur}s against ${payload.method} ${url} — watch the cluster metrics react above…`;
+  const started = Date.now();
+  const tick = setInterval(() => {
+    const left = Math.max(0, dur - Math.round((Date.now() - started) / 1000));
+    $("#lt-status").innerHTML = `<span class="lt-spin"></span> running… ~${left}s left (plus JMeter startup). Watch pods/CPU update above.`;
+  }, 1000);
+  try {
+    const r = await fetch("/api/loadtest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `${r.status}`);
+    ltLast = j;
+    renderLoadResult(j);
+    $("#lt-status").textContent = `done · ${j.samples} requests in ${j.durationS}s`;
+  } catch (e) {
+    $("#lt-results").innerHTML = `<div class="lt-err">${e.message}</div>`;
+    $("#lt-status").textContent = "failed";
+  } finally {
+    clearInterval(tick);
+    ltBusy = false;
+    $("#lt-run").disabled = false;
+  }
+}
+
+function renderLoadResult(j) {
+  const stat = (label, val, cls) =>
+    `<div class="lt-stat"><div class="lt-stat-v ${cls || ""}">${val}</div><div class="lt-stat-l">${label}</div></div>`;
+  const errCls = j.errorPct > 5 ? "hot" : j.errorPct > 0 ? "warn" : "ok";
+  const cards = [
+    stat("requests", j.samples),
+    stat("throughput", `${j.throughput}<span class="u">/s</span>`),
+    stat("errors", `${j.errorPct}<span class="u">%</span>`, errCls),
+    stat("avg", `${Math.round(j.avgMs)}<span class="u">ms</span>`),
+    stat("p90", `${j.p90Ms}<span class="u">ms</span>`),
+    stat("p95", `${j.p95Ms}<span class="u">ms</span>`),
+    stat("p99", `${j.p99Ms}<span class="u">ms</span>`),
+    stat("max", `${j.maxMs}<span class="u">ms</span>`),
+  ].join("");
+
+  $("#lt-results").innerHTML = `
+    <div class="lt-target">${j.target} · ${j.threads} concurrent</div>
+    <div class="lt-stats">${cards}</div>
+    <div class="lt-chart-card">
+      <div class="lt-chart-head">
+        <span>requests / second</span>
+        <span class="lt-legend">
+          <span class="lg"><i class="sw ok"></i>ok</span>
+          <span class="lg"><i class="sw err"></i>errors</span>
+          <span class="lg"><i class="sw lat"></i>avg latency</span>
+        </span>
+      </div>
+      <div class="lt-chart" id="lt-chart"></div>
+    </div>`;
+  drawLoadChart($("#lt-chart"), j.series || []);
+}
+
+// drawLoadChart renders a throughput + latency SVG. Bars are requests/sec with
+// the errored portion stacked in red; a connected line shows avg latency on a
+// second (right-hand) axis. Gridlines + axis labels on both sides.
+function drawLoadChart(host, s) {
+  if (!s.length) { host.innerHTML = '<div class="dim" style="padding:20px">no timeline</div>'; return; }
+  const W = Math.max(560, (host.clientWidth || 900));
+  const H = 248;
+  const m = { t: 28, r: 58, b: 26, l: 54 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const n = s.length;
+  const maxCount = Math.max(1, ...s.map(b => b.count));
+  const maxLat = Math.max(1, ...s.map(b => b.avgMs));
+  const band = iw / n;
+  const bw = Math.min(band * 0.72, 30);
+  const yBot = m.t + ih;
+
+  const svgns = "http://www.w3.org/2000/svg";
+  const parts = [];
+  // gridlines + left/right axis labels
+  for (let k = 0; k <= 4; k++) {
+    const y = m.t + (ih * k) / 4;
+    parts.push(`<line x1="${m.l}" y1="${y}" x2="${m.l + iw}" y2="${y}" stroke="var(--border)" stroke-width="1"/>`);
+    const lv = Math.round(maxCount * (1 - k / 4));
+    const rv = Math.round(maxLat * (1 - k / 4));
+    parts.push(`<text x="${m.l - 8}" y="${y + 3}" text-anchor="end" class="lt-axis">${lv}</text>`);
+    parts.push(`<text x="${m.l + iw + 8}" y="${y + 3}" text-anchor="start" class="lt-axis lat">${rv}</text>`);
+  }
+  // bars (ok + error stacked)
+  s.forEach((b, i) => {
+    const x = m.l + band * i + (band - bw) / 2;
+    const okC = Math.max(0, b.count - b.errors);
+    const okH = (okC / maxCount) * ih;
+    const erH = (b.errors / maxCount) * ih;
+    const tip = `t=${b.t}s · ${b.count} req · ${b.avgMs}ms avg${b.errors ? ` · ${b.errors} errors` : ""}`;
+    if (okH > 0) parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - okH).toFixed(1)}" width="${bw.toFixed(1)}" height="${okH.toFixed(1)}" fill="var(--accent)" opacity="0.85"><title>${tip}</title></rect>`);
+    if (erH > 0) parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - okH - erH).toFixed(1)}" width="${bw.toFixed(1)}" height="${erH.toFixed(1)}" fill="var(--red)"><title>${tip}</title></rect>`);
+  });
+  // latency line + points
+  const pts = s.map((b, i) => {
+    const cx = m.l + band * i + band / 2;
+    const cy = m.t + ih - (b.avgMs / maxLat) * ih;
+    return [cx, cy];
+  });
+  parts.push(`<polyline points="${pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")}" fill="none" stroke="var(--yellow)" stroke-width="1.5"/>`);
+  pts.forEach(p => parts.push(`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2" fill="var(--yellow)"/>`));
+  // x-axis time ticks (start, mid, end)
+  const ticks = n <= 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
+  [...new Set(ticks)].forEach(i => {
+    const cx = m.l + band * i + band / 2;
+    parts.push(`<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" class="lt-axis">${s[i].t}s</text>`);
+  });
+  // axis captions — sit near the very top, clear of the first gridline label
+  parts.push(`<text x="${m.l - 8}" y="12" text-anchor="end" class="lt-axis dimlbl">req/s</text>`);
+  parts.push(`<text x="${m.l + iw + 8}" y="12" text-anchor="start" class="lt-axis dimlbl lat">ms</text>`);
+
+  host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="${svgns}">${parts.join("")}</svg>`;
+}
+
 // ---------- gemini ----------
 // renderTurnText parses model responses for sentiment-marked bullets and
 // returns a DOM fragment so the chat view can color each line. The model is
@@ -1801,6 +1936,9 @@ function init() {
     renderFinOps();
   });
   $("#costs-load").addEventListener("click", loadCosts);
+
+  $("#lt-run").addEventListener("click", runLoadTest);
+  $("#lt-url").addEventListener("keydown", e => { if (e.key === "Enter") runLoadTest(); });
 
   $("#gemini-send").addEventListener("click", sendGemini);
   $("#gemini-input").addEventListener("keydown", e => { if (e.key === "Enter") sendGemini(); });
