@@ -1293,6 +1293,45 @@ function renderGemini() {
   $("#gemini-ctx").textContent = ctx;
   const provSel = $("#gemini-provider");
   if (provSel && provSel.value !== state.gemini.provider) provSel.value = state.gemini.provider;
+  syncApiKeyField();
+}
+
+// API keys are stored client-side (localStorage), one per provider, and sent
+// with each chat request. They never persist on the server.
+function apiKeyStoreKey(provider) { return "clusterheart:apiKey:" + provider; }
+function loadApiKey(provider) {
+  try { return localStorage.getItem(apiKeyStoreKey(provider)) || ""; } catch (_) { return ""; }
+}
+function saveApiKey(provider, val) {
+  try {
+    if (val) localStorage.setItem(apiKeyStoreKey(provider), val);
+    else localStorage.removeItem(apiKeyStoreKey(provider));
+  } catch (_) {}
+}
+// Reflect the saved key for the active provider into the input + status label.
+function syncApiKeyField() {
+  const input = $("#gemini-key");
+  const status = $("#gemini-key-status");
+  if (!input) return;
+  const saved = loadApiKey(state.gemini.provider);
+  input.value = saved;
+  input.placeholder = `${state.gemini.provider} key — stored locally`;
+  if (status) status.textContent = saved ? "saved ✓" : "not set";
+  const mt = $("#gemini-maxtokens");
+  if (mt) { try { mt.value = localStorage.getItem("clusterheart:maxTokens") || ""; } catch (_) {} }
+  const md = $("#gemini-model");
+  if (md) { try { md.value = localStorage.getItem("clusterheart:orModel") || ""; } catch (_) {} }
+}
+// Optional reply-length cap (OpenRouter). Empty = server default (1500).
+function loadMaxTokens() {
+  const mt = $("#gemini-maxtokens");
+  const n = mt ? parseInt(mt.value, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+// Optional OpenRouter model id. Empty = server's free default.
+function loadModel() {
+  const md = $("#gemini-model");
+  return md ? md.value.trim() : "";
 }
 
 async function sendGemini() {
@@ -1311,6 +1350,9 @@ async function sendGemini() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         provider: state.gemini.provider,
+        apiKey: loadApiKey(state.gemini.provider),
+        model: loadModel(),
+        maxTokens: loadMaxTokens(),
         namespace: state.gemini.pod ? state.gemini.pod.namespace : "",
         pod: state.gemini.pod ? state.gemini.pod.name : "",
         history: state.gemini.history,
@@ -1766,6 +1808,26 @@ function init() {
   $("#gemini-provider").addEventListener("change", e => {
     state.gemini.provider = e.target.value;
     setMsg(`chat provider: ${state.gemini.provider}`);
+    syncApiKeyField();
+  });
+  $("#gemini-key").addEventListener("input", e => {
+    saveApiKey(state.gemini.provider, e.target.value.trim());
+    const status = $("#gemini-key-status");
+    if (status) status.textContent = e.target.value.trim() ? "saved ✓" : "not set";
+  });
+  $("#gemini-maxtokens").addEventListener("input", e => {
+    try {
+      const v = e.target.value.trim();
+      if (v) localStorage.setItem("clusterheart:maxTokens", v);
+      else localStorage.removeItem("clusterheart:maxTokens");
+    } catch (_) {}
+  });
+  $("#gemini-model").addEventListener("input", e => {
+    try {
+      const v = e.target.value.trim();
+      if (v) localStorage.setItem("clusterheart:orModel", v);
+      else localStorage.removeItem("clusterheart:orModel");
+    } catch (_) {}
   });
 
   $("#modal-close").addEventListener("click", closeModal);

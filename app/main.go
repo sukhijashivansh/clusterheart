@@ -765,6 +765,52 @@ func (s *server) handleNamespaceOps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"status": "all pods deleted", "namespace": ns})
 }
 
+// awsEnvFromKubeContext returns environment overrides (AWS_PROFILE / region)
+// pulled from the current kube context's exec-auth block, so `aws` subcommands
+// authenticate the same way kubectl does for this cluster. Without this, the
+// cost command runs against the default profile — which typically has no
+// credentials — and fails with NoCredentials even though the cluster is live.
+// Returns nil when there's no kubeconfig file or the context uses no exec auth.
+func (s *server) awsEnvFromKubeContext() []string {
+	path := s.kubeconfigPath()
+	if path == "" {
+		return nil
+	}
+	apiCfg, err := clientcmd.LoadFromFile(path)
+	if err != nil || apiCfg == nil {
+		return nil
+	}
+	s.clientsMu.RLock()
+	ctxName := s.currentCtx
+	s.clientsMu.RUnlock()
+	if ctxName == "" {
+		ctxName = apiCfg.CurrentContext
+	}
+	kctx, ok := apiCfg.Contexts[ctxName]
+	if !ok {
+		return nil
+	}
+	auth, ok := apiCfg.AuthInfos[kctx.AuthInfo]
+	if !ok || auth.Exec == nil {
+		return nil
+	}
+	var out []string
+	for _, e := range auth.Exec.Env {
+		if e.Name == "AWS_PROFILE" && e.Value != "" {
+			out = append(out, "AWS_PROFILE="+e.Value)
+		}
+	}
+	// Fall back to the --region arg only if the resolved profile doesn't carry
+	// its own region. Cost Explorer is reachable regardless, but the CLI needs
+	// a region configured to make the call.
+	for i, a := range auth.Exec.Args {
+		if a == "--region" && i+1 < len(auth.Exec.Args) {
+			out = append(out, "AWS_REGION="+auth.Exec.Args[i+1])
+		}
+	}
+	return out
+}
+
 // --- /api/costs  (AWS Cost Explorer) ---
 func (s *server) handleCosts(w http.ResponseWriter, r *http.Request) {
 	end := time.Now().UTC()
@@ -778,6 +824,9 @@ func (s *server) handleCosts(w http.ResponseWriter, r *http.Request) {
 		"--granularity", "DAILY",
 		"--metrics", "UnblendedCost",
 		"--output", "json")
+	// Authenticate the same way the active cluster does (SSO profile from the
+	// kube context), so costs load without a separate `aws configure`.
+	cmd.Env = append(os.Environ(), s.awsEnvFromKubeContext()...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -788,6 +837,8 @@ func (s *server) handleCosts(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.Contains(msg, "executable file not found") {
 			msg = "aws CLI not found on PATH"
+		} else if strings.Contains(msg, "NoCredentials") || strings.Contains(msg, "Unable to locate credentials") {
+			msg = "no AWS credentials for the active cluster's profile — run `aws sso login` (or `aws configure`) for it, then retry"
 		}
 		writeErr(w, 500, msg)
 		return
@@ -828,6 +879,9 @@ func (s *server) handleGemini(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Provider  string `json:"provider"`
+		ApiKey    string `json:"apiKey"`
+		Model     string `json:"model"`
+		MaxTokens int    `json:"maxTokens"`
 		Namespace string `json:"namespace"`
 		Pod       string `json:"pod"`
 		History   []struct {
@@ -871,7 +925,7 @@ func (s *server) handleGemini(w http.ResponseWriter, r *http.Request) {
 		hist = append(hist, chatTurn{Role: t.Role, Text: t.Text})
 	}
 
-	text, status, err := s.chatLoop(r.Context(), provider, sys, hist)
+	text, status, err := s.chatLoop(r.Context(), provider, strings.TrimSpace(body.ApiKey), strings.TrimSpace(body.Model), body.MaxTokens, sys, hist)
 	if err != nil {
 		writeErr(w, status, err.Error())
 		return
@@ -944,10 +998,12 @@ func buildChatSystemPrompt(clusterCtx, podCtx string) string {
 	return sys
 }
 
-func callGemini(parent context.Context, sys string, history []chatTurn) (string, int, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+func callGemini(parent context.Context, apiKey, sys string, history []chatTurn) (string, int, error) {
 	if apiKey == "" {
-		return "", 400, fmt.Errorf("GEMINI_API_KEY env var not set")
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if apiKey == "" {
+		return "", 400, fmt.Errorf("no Gemini API key — add one via the key field in the AI tab (or set GEMINI_API_KEY)")
 	}
 	type part struct {
 		Text string `json:"text"`
@@ -1015,14 +1071,33 @@ func callGemini(parent context.Context, sys string, history []chatTurn) (string,
 // OPENROUTER_MODEL. We pass the kubepulse system prompt as the first
 // "system" message and translate our internal {role,text} history (where
 // "model" means the assistant) to OpenAI's {role,content} shape.
-func callOpenRouter(parent context.Context, sys string, history []chatTurn) (string, int, error) {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
+func callOpenRouter(parent context.Context, apiKey, model string, maxTokens int, sys string, history []chatTurn) (string, int, error) {
+	// Prefer a key supplied by the UI (stored client-side); fall back to the env
+	// var for headless/dev use.
 	if apiKey == "" {
-		return "", 400, fmt.Errorf("OPENROUTER_API_KEY env var not set")
+		apiKey = os.Getenv("OPENROUTER_API_KEY")
 	}
-	model := os.Getenv("OPENROUTER_MODEL")
+	if apiKey == "" {
+		return "", 400, fmt.Errorf("no OpenRouter API key — add one via the key field in the AI tab (or set OPENROUTER_API_KEY)")
+	}
+	// Model priority: UI field > OPENROUTER_MODEL env > free defaults so chat
+	// works with a $0 balance. Paid models (e.g. anthropic/claude-sonnet-4.5)
+	// require OpenRouter credits; the ":free" models don't. When no model is
+	// pinned we try several free models in order, since any individual free
+	// model is often rate-limited or its upstream provider is momentarily down.
 	if model == "" {
-		model = "anthropic/claude-sonnet-4.5"
+		model = os.Getenv("OPENROUTER_MODEL")
+	}
+	var candidates []string
+	if model != "" {
+		candidates = []string{model} // explicit choice — respect it, no fallback
+	} else {
+		candidates = []string{
+			"meta-llama/llama-3.3-70b-instruct:free",
+			"qwen/qwen3-next-80b-a3b-instruct:free",
+			"openai/gpt-oss-20b:free",
+			"google/gemma-4-31b-it:free",
+		}
 	}
 	type message struct {
 		Role    string `json:"role"`
@@ -1038,7 +1113,12 @@ func callOpenRouter(parent context.Context, sys string, history []chatTurn) (str
 			Message message `json:"message"`
 		} `json:"choices"`
 		Error *struct {
-			Message string `json:"message"`
+			Message  string `json:"message"`
+			Code     any    `json:"code"`
+			Metadata struct {
+				ProviderName string `json:"provider_name"`
+				Raw          any    `json:"raw"`
+			} `json:"metadata"`
 		} `json:"error,omitempty"`
 	}
 
@@ -1053,42 +1133,100 @@ func callOpenRouter(parent context.Context, sys string, history []chatTurn) (str
 	}
 	// Cap output so OpenRouter doesn't reserve the model's full 64K context for
 	// generation — bullet replies need ~500–800 tokens and pay-as-you-go
-	// credit balances tend to fall below the default reservation. Override via
-	// OPENROUTER_MAX_TOKENS if needed.
+	// credit balances tend to fall below the default reservation. Priority:
+	// UI-supplied maxTokens > OPENROUTER_MAX_TOKENS env > default. A low value
+	// lets near-empty balances still get a (short) reply.
 	maxTok := 1500
 	if v := os.Getenv("OPENROUTER_MAX_TOKENS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxTok = n
 		}
 	}
-	reqBody, _ := json.Marshal(request{Model: model, Messages: msgs, MaxTokens: maxTok})
+	if maxTokens > 0 {
+		maxTok = maxTokens
+	}
+	// attempt runs one chat-completion against a specific model. The bool return
+	// says whether it's worth falling back to another free model (true for
+	// rate-limit / provider-down / empty replies; false for auth/credit errors,
+	// where a different model with the same key won't help).
+	attempt := func(m string) (text string, status int, err error, retryable bool) {
+		reqBody, _ := json.Marshal(request{Model: m, Messages: msgs, MaxTokens: maxTok})
+		ctx, cancel := context.WithTimeout(parent, 60*time.Second)
+		defer cancel()
+		hreq, _ := http.NewRequestWithContext(ctx, "POST",
+			"https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(reqBody))
+		hreq.Header.Set("Content-Type", "application/json")
+		hreq.Header.Set("Authorization", "Bearer "+apiKey)
+		hreq.Header.Set("HTTP-Referer", "https://github.com/local/kubepulse-ui")
+		hreq.Header.Set("X-Title", "kubepulse-ui")
 
-	ctx, cancel := context.WithTimeout(parent, 60*time.Second)
-	defer cancel()
-	hreq, _ := http.NewRequestWithContext(ctx, "POST",
-		"https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(reqBody))
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Authorization", "Bearer "+apiKey)
-	hreq.Header.Set("HTTP-Referer", "https://github.com/local/kubepulse-ui")
-	hreq.Header.Set("X-Title", "kubepulse-ui")
+		resp, herr := http.DefaultClient.Do(hreq)
+		if herr != nil {
+			return "", 502, herr, true
+		}
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		var pr response
+		if jerr := json.Unmarshal(raw, &pr); jerr != nil {
+			return "", 502, fmt.Errorf("bad openrouter response: %w", jerr), false
+		}
+		if pr.Error != nil {
+			// Free models frequently bubble up a terse "Provider returned error".
+			// Surface the code, provider and raw upstream reason so it's
+			// actionable.
+			msg := strings.TrimSpace(pr.Error.Message)
+			if msg == "" {
+				msg = "OpenRouter error"
+			}
+			var extra []string
+			code := fmt.Sprintf("%v", pr.Error.Code)
+			if code != "" && code != "<nil>" {
+				extra = append(extra, "code "+code)
+			}
+			if p := pr.Error.Metadata.ProviderName; p != "" {
+				extra = append(extra, "provider "+p)
+			}
+			if pr.Error.Metadata.Raw != nil {
+				if rawStr := strings.TrimSpace(fmt.Sprintf("%v", pr.Error.Metadata.Raw)); rawStr != "" && rawStr != "<nil>" && rawStr != "map[]" {
+					extra = append(extra, "detail: "+rawStr)
+				}
+			}
+			full := msg
+			if len(extra) > 0 {
+				full += " (" + strings.Join(extra, "; ") + ")"
+			}
+			low := strings.ToLower(msg)
+			// Auth / credit / bad-key problems won't be fixed by another model.
+			nonRetryable := code == "401" || code == "402" || code == "403" ||
+				strings.Contains(low, "auth") || strings.Contains(low, "credit") ||
+				strings.Contains(low, "api key") || strings.Contains(low, "afford")
+			return "", 502, fmt.Errorf("%s", full), !nonRetryable
+		}
+		if len(pr.Choices) == 0 || strings.TrimSpace(pr.Choices[0].Message.Content) == "" {
+			return "", 502, fmt.Errorf("model %q returned no text", m), true
+		}
+		return strings.TrimSpace(pr.Choices[0].Message.Content), 200, nil, false
+	}
 
-	resp, err := http.DefaultClient.Do(hreq)
-	if err != nil {
-		return "", 502, err
+	var lastErr error
+	var lastStatus int
+	for _, m := range candidates {
+		text, status, err, retryable := attempt(m)
+		if err == nil {
+			return text, status, nil
+		}
+		lastErr, lastStatus = err, status
+		// Definitive failure (auth/credit/bad key) — another model won't help.
+		if !retryable {
+			return "", status, err
+		}
+		// else: retryable — fall through to the next free model
 	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	var pr response
-	if jerr := json.Unmarshal(raw, &pr); jerr != nil {
-		return "", 502, fmt.Errorf("bad openrouter response: %w", jerr)
+	// Exhausted the fallback list, every attempt was retryable-but-failed.
+	if len(candidates) > 1 {
+		return "", lastStatus, fmt.Errorf("all free models are busy right now — last: %v (free models are rate-limited; wait ~30s and retry, or pin a paid model in the model field)", lastErr)
 	}
-	if pr.Error != nil {
-		return "", 502, fmt.Errorf("%s", pr.Error.Message)
-	}
-	if len(pr.Choices) == 0 || strings.TrimSpace(pr.Choices[0].Message.Content) == "" {
-		return "", 502, fmt.Errorf("empty response from OpenRouter")
-	}
-	return strings.TrimSpace(pr.Choices[0].Message.Content), 200, nil
+	return "", lastStatus, lastErr
 }
 
 // readOnlyKubectlVerbs is the strict allowlist of kubectl subcommands the
@@ -1196,7 +1334,7 @@ const maxToolRounds = 3
 // Each round: ask the provider, parse EXEC: lines, run them under the
 // allowlist, feed results back as a synthetic user turn. Stops when the
 // model produces a non-EXEC reply (the final answer) or the round cap hits.
-func (s *server) chatLoop(parent context.Context, provider, sys string, history []chatTurn) (string, int, error) {
+func (s *server) chatLoop(parent context.Context, provider, apiKey, model string, maxTokens int, sys string, history []chatTurn) (string, int, error) {
 	h := append([]chatTurn(nil), history...)
 	for round := 0; round < maxToolRounds; round++ {
 		var (
@@ -1206,9 +1344,9 @@ func (s *server) chatLoop(parent context.Context, provider, sys string, history 
 		)
 		switch provider {
 		case "gemini":
-			text, status, err = callGemini(parent, sys, h)
+			text, status, err = callGemini(parent, apiKey, sys, h)
 		case "openrouter":
-			text, status, err = callOpenRouter(parent, sys, h)
+			text, status, err = callOpenRouter(parent, apiKey, model, maxTokens, sys, h)
 		default:
 			return "", 400, fmt.Errorf("unknown provider: %s", provider)
 		}

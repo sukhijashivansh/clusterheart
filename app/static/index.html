@@ -183,6 +183,16 @@
           <option value="openrouter">openrouter</option>
         </select>
         <span class="sep"></span>
+        <span class="filter-label">api key</span>
+        <input id="gemini-key" class="input key-input" type="password" placeholder="paste key — stored locally" autocomplete="off" spellcheck="false" />
+        <span id="gemini-key-status" class="dim"></span>
+        <span class="sep"></span>
+        <span class="filter-label">model</span>
+        <input id="gemini-model" class="input model-input" type="text" placeholder="meta-llama/llama-3.3-70b-instruct:free" autocomplete="off" spellcheck="false" title="OpenRouter model id — blank uses a free model (no credits needed)" />
+        <span class="sep"></span>
+        <span class="filter-label">max tokens</span>
+        <input id="gemini-maxtokens" class="input small" type="number" min="1" step="50" placeholder="1500" title="cap reply length — lower it if OpenRouter says you can't afford the tokens" />
+        <span class="sep"></span>
         <span id="gemini-ctx" class="dim">context: cluster</span>
         <span class="sep"></span>
         <button id="gemini-clear" class="btn">clear</button>

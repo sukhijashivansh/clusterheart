@@ -187,6 +187,9 @@ function buildMenu() {
         { role: 'quit' },
       ],
     },
+    // Without an Edit menu, macOS never registers the Cmd+C/V/X/A accelerators,
+    // so paste doesn't work in any input (e.g. pasting a long API key).
+    { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
   ];
@@ -197,7 +200,7 @@ function buildMenu() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1180, height: 780, minWidth: 900, minHeight: 620,
-    backgroundColor: '#070910', title: 'Clusterheart',
+    backgroundColor: '#ffffff', title: 'Clusterheart',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   win.loadFile('login.html');

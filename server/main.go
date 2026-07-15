@@ -257,6 +257,16 @@ func (a *app) pageSignup(w http.ResponseWriter, r *http.Request) {
 	render(w, signupTmpl, nil)
 }
 
+// pageHome serves the marketing landing page at "/". Because "/" is a catch-all
+// in http.ServeMux, redirect any other unmatched path to /login as before.
+func (a *app) pageHome(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	render(w, homeTmpl, nil)
+}
+
 func (a *app) pageAccount(w http.ResponseWriter, r *http.Request) {
 	u := a.sessionUser(r)
 	if u == nil {
@@ -365,9 +375,7 @@ func main() {
 	mux.HandleFunc("/api/logout", post(a.handleLogout))
 	mux.HandleFunc("/api/session", a.handleSession)
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-	})
+	mux.HandleFunc("/", a.pageHome)
 
 	log.Printf("clusterheart account server on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, logging(mux)))

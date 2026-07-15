@@ -7,8 +7,19 @@
   <title>Clusterheart</title>
   <style>
     :root{
-      --bg:#070910;--text:#e8ecf5;--muted:#8b95a9;--border:rgba(255,255,255,.08);
-      --accent:#2F6BEF;--accent2:#5b9dff;--green:#3ecf8e;--amber:#f5b544;--red:#f2555a;
+      --bg:#ffffff;
+      --panel:#f4f7fd;
+      --text:#0f172a;
+      --muted:#64748b;
+      --faint:#94a3b8;
+      --border:#e5e9f2;
+      --border-strong:#d6ddec;
+      --accent:#2F6BEF;
+      --accent2:#5b9dff;
+      --accent-ink:#1e4fd0;
+      --green:#0f9d63;
+      --amber:#c9880f;
+      --red:#e5484d;
     }
     *{box-sizing:border-box}
     html,body{margin:0;height:100%;-webkit-user-select:none;user-select:none}
@@ -16,55 +27,103 @@
       background:var(--bg);color:var(--text);
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
       -webkit-font-smoothing:antialiased;
-      background-image:
-        radial-gradient(600px 400px at 15% -5%,rgba(47,107,239,.22),transparent 60%),
-        radial-gradient(700px 500px at 110% 110%,rgba(91,157,255,.14),transparent 55%);
+      display:flex;min-height:100vh;
     }
-    .center{height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}
-    .card{
-      width:100%;max-width:400px;padding:40px 36px;
-      background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));
-      border:1px solid var(--border);border-radius:18px;
-      box-shadow:0 30px 80px -20px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.02) inset;
+
+    /* ---------- left hero ---------- */
+    .hero{
+      flex:1 1 auto;position:relative;overflow:hidden;
+      padding:48px 52px;display:flex;flex-direction:column;
+      background:
+        radial-gradient(720px 460px at 12% -8%,rgba(47,107,239,.12),transparent 60%),
+        radial-gradient(640px 520px at 108% 112%,rgba(91,157,255,.14),transparent 55%),
+        linear-gradient(160deg,#f7f9fe 0%,#eef3fc 100%);
+      border-right:1px solid var(--border);
     }
-    .brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
-    .brand svg{filter:drop-shadow(0 4px 10px rgba(47,107,239,.5))}
-    .wordmark{font-size:20px;font-weight:700;letter-spacing:-.4px}
-    .wordmark .a{color:var(--accent2)}
-    h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0 0 6px}
+    .hero-brand{display:flex;align-items:center;gap:11px}
+    .hero-brand .wordmark{font-size:19px;font-weight:700;letter-spacing:-.4px;color:var(--text)}
+    .hero-brand .wordmark .a{color:var(--accent)}
+    .hero-body{margin-top:auto;margin-bottom:auto;max-width:460px}
+    .eyebrow{
+      display:inline-flex;align-items:center;gap:7px;margin-bottom:20px;
+      padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.2px;
+      color:var(--accent-ink);background:rgba(47,107,239,.09);border:1px solid rgba(47,107,239,.16);
+    }
+    .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(47,107,239,.18)}
+    .hero h2{font-size:34px;line-height:1.14;font-weight:800;letter-spacing:-1px;margin:0 0 16px}
+    .hero h2 .grad{
+      background:linear-gradient(120deg,#2F6BEF,#5b9dff);
+      -webkit-background-clip:text;background-clip:text;color:transparent;
+    }
+    .hero p.lead{font-size:15px;line-height:1.6;color:var(--muted);margin:0 0 30px}
+    .features{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:15px}
+    .feature{display:flex;align-items:flex-start;gap:13px}
+    .feature .ic{
+      flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+      background:#fff;border:1px solid var(--border);box-shadow:0 4px 14px -8px rgba(47,107,239,.55);
+    }
+    .feature .ft{font-size:14px;font-weight:650;color:var(--text);margin:0}
+    .feature .fs{font-size:12.5px;color:var(--muted);margin:2px 0 0;line-height:1.45}
+    .hero-foot{margin-top:34px;font-size:12px;color:var(--faint);display:flex;align-items:center;gap:8px}
+    .hero-foot svg{opacity:.7}
+
+    /* ---------- right auth ---------- */
+    .auth{
+      flex:none;width:480px;display:flex;align-items:center;justify-content:center;
+      padding:40px;background:var(--bg);
+    }
+    .auth-inner{width:100%;max-width:360px}
+    .brand-sm{display:none;align-items:center;gap:10px;margin-bottom:28px}
+    .brand-sm .wordmark{font-size:18px;font-weight:700;letter-spacing:-.3px}
+    .brand-sm .wordmark .a{color:var(--accent)}
+
+    h1{font-size:25px;font-weight:750;letter-spacing:-.5px;margin:0 0 7px}
     .sub{color:var(--muted);font-size:13.5px;margin:0 0 26px;line-height:1.5}
-    label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:16px 0 7px}
+    label{display:block;font-size:12.5px;font-weight:600;color:var(--text);margin:18px 0 8px}
     input{
       width:100%;padding:12px 14px;font-size:14px;color:var(--text);
-      background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;outline:none;
+      background:#fff;border:1px solid var(--border-strong);border-radius:11px;outline:none;
       -webkit-user-select:text;user-select:text;transition:border-color .15s,box-shadow .15s;
     }
-    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,107,239,.22)}
-    input::placeholder{color:#586074}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(47,107,239,.14)}
+    input::placeholder{color:#aab4c5}
     .btn{
-      width:100%;margin-top:24px;padding:12px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;
-      background:linear-gradient(135deg,#3B74F0,#5b9dff);border:none;border-radius:10px;
-      box-shadow:0 8px 22px -6px rgba(47,107,239,.6);transition:transform .12s,box-shadow .12s,opacity .12s;
+      width:100%;margin-top:26px;padding:13px 16px;font-size:14px;font-weight:650;color:#fff;cursor:pointer;
+      background:linear-gradient(135deg,#3B74F0,#2F6BEF);border:none;border-radius:11px;
+      box-shadow:0 12px 24px -10px rgba(47,107,239,.7);transition:transform .12s,box-shadow .12s,opacity .12s;
     }
-    .btn:hover{transform:translateY(-1px)}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 16px 30px -12px rgba(47,107,239,.75)}
+    .btn:active{transform:translateY(0)}
     .btn:disabled{opacity:.55;cursor:default;transform:none;box-shadow:none}
-    .btn.secondary{background:linear-gradient(135deg,#39414f,#4a5464);box-shadow:none}
-    .alt{margin-top:20px;font-size:13px;color:var(--muted);text-align:center}
-    .link{color:var(--accent2);cursor:pointer}.link:hover{text-decoration:underline}
+    .btn.secondary{
+      margin-top:12px;background:#fff;color:var(--text);
+      border:1px solid var(--border-strong);box-shadow:none;
+    }
+    .btn.secondary:hover{background:#f7f9fc;transform:translateY(-1px)}
+    .alt{margin-top:22px;font-size:13px;color:var(--muted);text-align:center}
+    .link{color:var(--accent);font-weight:600;cursor:pointer}.link:hover{text-decoration:underline}
     .msg{min-height:20px;margin-top:16px;font-size:13px}
     .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
     .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:20px;font-size:12.5px;font-weight:600;margin-bottom:16px}
-    .pill.off{background:rgba(245,181,68,.14);color:var(--amber)}
+    .pill.off{background:rgba(201,136,15,.12);color:var(--amber);border:1px solid rgba(201,136,15,.2)}
     .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
     .hidden{display:none}
-    .spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--accent2);border-radius:50%;animation:r .8s linear infinite;margin:8px auto}
+    .spin{width:26px;height:26px;border:3px solid #e6ebf4;border-top-color:var(--accent);border-radius:50%;animation:r .8s linear infinite;margin:26px auto 8px}
     @keyframes r{to{transform:rotate(360deg)}}
+
+    /* narrow window: drop the hero, keep a clean centered card */
+    @media (max-width:860px){
+      .hero{display:none}
+      .auth{width:100%}
+      .brand-sm{display:flex}
+    }
   </style>
 </head>
 <body>
-  <div class="center"><div class="card">
-    <div class="brand">
-      <svg width="28" height="28" viewBox="0 0 100 100">
+  <!-- ===================== left hero ===================== -->
+  <aside class="hero">
+    <div class="hero-brand">
+      <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
         <circle cx="50" cy="18" r="9" fill="#7CA0F2"/><circle cx="22" cy="34" r="8" fill="#C3D4F7"/>
         <circle cx="78" cy="34" r="8" fill="#C3D4F7"/><circle cx="50" cy="50" r="13" fill="#2F6BEF"/>
         <circle cx="22" cy="66" r="8" fill="#3B74F0"/><circle cx="78" cy="66" r="8" fill="#3B74F0"/>
@@ -73,34 +132,81 @@
       <span class="wordmark">cluster<span class="a">heart</span></span>
     </div>
 
-    <!-- resume check -->
-    <div id="loading">
-      <div class="spin"></div>
-      <p class="sub" style="text-align:center;margin-top:14px">Checking your session…</p>
-    </div>
+    <div class="hero-body">
+      <span class="eyebrow"><span class="dot"></span>Kubernetes · EKS · FinOps</span>
+      <h2>Your cluster's health &amp; cost,<br><span class="grad">in one calm view.</span></h2>
+      <p class="lead">Live pod and node health, right-sizing insights, real AWS spend, and an AI copilot for kubectl — all reading your local kubeconfig, nothing leaving your machine.</p>
 
-    <!-- sign-in form -->
-    <div id="form" class="hidden">
-      <h1>Welcome back</h1>
-      <p class="sub">Sign in to open the dashboard.</p>
-      <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
-      <label for="pass">Password</label>
-      <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••" />
-      <button class="btn" id="go">Sign in</button>
-      <div id="msg" class="msg"></div>
-      <div class="alt">New here? <span class="link" id="signup">Create an account</span></div>
-    </div>
+      <ul class="features">
+        <li class="feature">
+          <span class="ic">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </span>
+          <div><p class="ft">Live cluster health</p><p class="fs">Pods, nodes, events and metrics as they happen.</p></div>
+        </li>
+        <li class="feature">
+          <span class="ic">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </span>
+          <div><p class="ft">FinOps cost insights</p><p class="fs">Real AWS daily spend and consolidation analysis.</p></div>
+        </li>
+        <li class="feature">
+          <span class="ic">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 1 5 5c0 1.5-.5 2-1 3l-1 1v2H9v-2l-1-1c-.5-1-1-1.5-1-3a5 5 0 0 1 5-5Z"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="21" x2="14" y2="21"/></svg>
+          </span>
+          <div><p class="ft">AI copilot for kubectl</p><p class="fs">Ask questions; it runs read-only kubectl for you.</p></div>
+        </li>
+      </ul>
 
-    <!-- pending approval -->
-    <div id="pending" class="hidden">
-      <span class="pill off"><span class="dot"></span>Pending approval</span>
-      <h1>Almost there</h1>
-      <p class="sub" id="pendingName">Your account is waiting for the owner to approve it. You'll get in as soon as they do.</p>
-      <button class="btn" id="recheck">Check again</button>
-      <button class="btn secondary" id="signout">Sign out</button>
+      <div class="hero-foot">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Secure local access — your cluster credentials never leave this machine.
+      </div>
     </div>
-  </div></div>
+  </aside>
+
+  <!-- ===================== right auth ===================== -->
+  <main class="auth">
+    <div class="auth-inner">
+      <div class="brand-sm">
+        <svg width="24" height="24" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="18" r="9" fill="#7CA0F2"/><circle cx="22" cy="34" r="8" fill="#C3D4F7"/>
+          <circle cx="78" cy="34" r="8" fill="#C3D4F7"/><circle cx="50" cy="50" r="13" fill="#2F6BEF"/>
+          <circle cx="22" cy="66" r="8" fill="#3B74F0"/><circle cx="78" cy="66" r="8" fill="#3B74F0"/>
+          <circle cx="50" cy="82" r="9" fill="#2F6BEF"/>
+        </svg>
+        <span class="wordmark">cluster<span class="a">heart</span></span>
+      </div>
+
+      <!-- resume check -->
+      <div id="loading">
+        <div class="spin"></div>
+        <p class="sub" style="text-align:center;margin-top:14px">Checking your session…</p>
+      </div>
+
+      <!-- sign-in form -->
+      <div id="form" class="hidden">
+        <h1>Welcome back</h1>
+        <p class="sub">Sign in to open your dashboard.</p>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
+        <label for="pass">Password</label>
+        <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••" />
+        <button class="btn" id="go">Sign in</button>
+        <div id="msg" class="msg"></div>
+        <div class="alt">New here? <span class="link" id="signup">Create an account</span></div>
+      </div>
+
+      <!-- pending approval -->
+      <div id="pending" class="hidden">
+        <span class="pill off"><span class="dot"></span>Pending approval</span>
+        <h1>Almost there</h1>
+        <p class="sub" id="pendingName">Your account is waiting for the owner to approve it. You'll get in as soon as they do.</p>
+        <button class="btn" id="recheck">Check again</button>
+        <button class="btn secondary" id="signout">Sign out</button>
+      </div>
+    </div>
+  </main>
 
   <script src="login.js"></script>
 </body>
