@@ -33,192 +33,259 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
 <title>Clusterheart</title>
 <style>
 :root{
-  --bg:#ffffff;--panel:#f4f7fd;--text:#0f172a;--muted:#64748b;--faint:#94a3b8;
-  --border:#e5e9f2;--border-strong:#d6ddec;
-  --accent:#2F6BEF;--accent2:#5b9dff;--accent-ink:#1e4fd0;
-  --green:#0f9d63;--amber:#c9880f;--red:#e5484d;
+  --bg:#07111e;--panel:#0d1b2f;--text:#cfe2f5;--muted:#6e8aaa;--faint:#354e66;
+  --border:rgba(255,255,255,.07);--border-strong:rgba(255,255,255,.13);
+  --accent:#38bdf8;--accent2:#7dd3fc;--accent-ink:#0ea5e9;
+  --green:#34d399;--amber:#fbbf24;--red:#f87171;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 html,body{margin:0;min-height:100%}
-#download{scroll-margin-top:78px}
+#download{scroll-margin-top:68px}
 body{
   background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
   -webkit-font-smoothing:antialiased;line-height:1.5;
   background-image:
-    radial-gradient(680px 440px at 12% -8%,rgba(47,107,239,.10),transparent 60%),
-    radial-gradient(720px 520px at 108% 112%,rgba(91,157,255,.12),transparent 55%);
+    radial-gradient(900px 600px at 85% -10%,rgba(56,189,248,.07),transparent 60%),
+    radial-gradient(600px 500px at 5% 110%,rgba(14,165,233,.05),transparent 60%);
   background-attachment:fixed;
 }
-a{color:var(--accent);text-decoration:none;font-weight:600}a:hover{text-decoration:underline}
+a{color:var(--accent);text-decoration:none;font-weight:600}
+a:hover{text-decoration:underline}
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}
 .card{
   width:100%;max-width:400px;padding:40px 36px;
-  background:#fff;
-  border:1px solid var(--border);border-radius:18px;
-  box-shadow:0 24px 60px -28px rgba(15,23,42,.22),0 2px 6px -2px rgba(15,23,42,.06);
+  background:var(--panel);border:1px solid var(--border-strong);border-radius:18px;
+  box-shadow:0 32px 80px -20px rgba(0,0,0,.7),0 2px 8px -2px rgba(0,0,0,.4);
 }
 .brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
-.brand svg{filter:drop-shadow(0 4px 10px rgba(47,107,239,.28))}
 .wordmark{font-size:20px;font-weight:700;letter-spacing:-.4px;color:var(--text)}
 .wordmark .a{color:var(--accent)}
-h1{font-size:23px;font-weight:750;letter-spacing:-.5px;margin:0 0 7px}
+h1{font-size:23px;font-weight:750;letter-spacing:-.5px;margin:0 0 7px;color:var(--text)}
 .sub{color:var(--muted);font-size:13.5px;margin:0 0 26px}
-label{display:block;font-size:12.5px;font-weight:600;color:var(--text);margin:18px 0 8px}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:18px 0 8px}
 input{
   width:100%;padding:12px 14px;font-size:14px;color:var(--text);
-  background:#fff;border:1px solid var(--border-strong);border-radius:11px;outline:none;
+  background:rgba(255,255,255,.05);border:1px solid var(--border-strong);border-radius:11px;outline:none;
   transition:border-color .15s,box-shadow .15s;
 }
-input:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(47,107,239,.14)}
-input::placeholder{color:#aab4c5}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.15)}
+input::placeholder{color:var(--faint)}
 .btn{
   width:100%;margin-top:26px;padding:13px 16px;font-size:14px;font-weight:650;color:#fff;cursor:pointer;
-  background:linear-gradient(135deg,#3B74F0,#2F6BEF);border:none;border-radius:11px;
-  box-shadow:0 12px 24px -10px rgba(47,107,239,.7);transition:transform .12s,box-shadow .12s,opacity .12s;
+  background:linear-gradient(135deg,#0ea5e9,#0284c7);border:none;border-radius:11px;
+  box-shadow:0 12px 28px -10px rgba(14,165,233,.5);transition:transform .12s,box-shadow .12s,opacity .12s;
 }
-.btn:hover{transform:translateY(-1px);box-shadow:0 16px 30px -12px rgba(47,107,239,.75)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 18px 34px -12px rgba(14,165,233,.6)}
 .btn:active{transform:translateY(0)}
-.btn:disabled{opacity:.55;cursor:default;transform:none;box-shadow:none}
-.btn.secondary{margin-top:12px;background:#fff;color:var(--text);border:1px solid var(--border-strong);box-shadow:none}
-.btn.secondary:hover{background:#f7f9fc;box-shadow:none}
+.btn:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
+.btn.secondary{margin-top:12px;background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--border-strong);box-shadow:none}
+.btn.secondary:hover{background:rgba(255,255,255,.1);box-shadow:none}
 .alt{margin-top:22px;font-size:13px;color:var(--muted);text-align:center}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600}
-.pill.on{background:rgba(15,157,99,.10);color:var(--green);border:1px solid rgba(15,157,99,.2)}
-.pill.off{background:rgba(201,136,15,.10);color:var(--amber);border:1px solid rgba(201,136,15,.2)}
+.pill.on{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.22)}
+.pill.off{background:rgba(251,191,36,.10);color:var(--amber);border:1px solid rgba(251,191,36,.2)}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 
 /* --- admin panel --- */
 .admin{max-width:880px;margin:0 auto;padding:52px 24px}
 .admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px}
 .admin-user{font-size:13px;color:var(--muted);white-space:nowrap}
-.count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:8px;border-radius:20px;background:rgba(201,136,15,.14);color:var(--amber);font-size:12px;font-weight:700;vertical-align:middle}
-.panel{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px -34px rgba(15,23,42,.22),0 2px 6px -2px rgba(15,23,42,.05)}
+.count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:8px;border-radius:20px;background:rgba(251,191,36,.14);color:var(--amber);font-size:12px;font-weight:700;vertical-align:middle}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)}
 table.users{width:100%;border-collapse:collapse}
-table.users th{text-align:left;padding:14px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;background:#f8fafc;border-bottom:1px solid var(--border)}
+table.users th{text-align:left;padding:14px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);font-weight:700;background:rgba(255,255,255,.03);border-bottom:1px solid var(--border)}
 table.users td{padding:15px 18px;vertical-align:middle}
 table.users tbody tr{border-top:1px solid var(--border);transition:background .12s}
-table.users tbody tr:hover{background:#f8fafc}
-.u-name{font-weight:650;font-size:14px}
+table.users tbody tr:hover{background:rgba(255,255,255,.03)}
+.u-name{font-weight:650;font-size:14px;color:var(--text)}
 .u-email{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--muted)}
 .cell-act{text-align:right;white-space:nowrap}
 .act{padding:7px 16px;border-radius:8px;font-size:12.5px;font-weight:650;cursor:pointer;transition:transform .12s,opacity .12s,box-shadow .12s,border-color .12s,color .12s,background .12s}
 .act:hover{transform:translateY(-1px)}
 .act:active{transform:translateY(0)}
-.act:disabled{opacity:.55;cursor:default;transform:none;box-shadow:none}
-.act.approve{border:none;color:#fff;background:linear-gradient(135deg,#0f9d63,#14b877);box-shadow:0 8px 20px -8px rgba(15,157,99,.55)}
-.act.revoke{border:1px solid var(--border-strong);background:#fff;color:var(--muted)}
-.act.revoke:hover{color:var(--red);border-color:rgba(229,72,77,.4);background:#fff5f5}
+.act:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
+.act.approve{border:none;color:#fff;background:linear-gradient(135deg,#0f9d63,#14b877);box-shadow:0 8px 20px -8px rgba(15,157,99,.5)}
+.act.revoke{border:1px solid var(--border-strong);background:rgba(255,255,255,.05);color:var(--muted)}
+.act.revoke:hover{color:var(--red);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.07)}
 .empty{padding:40px 18px;text-align:center;color:var(--muted)}
 
-/* --- landing page --- */
-.lp-nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;
-  padding:16px 32px;background:rgba(255,255,255,.8);backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--border)}
-.lp-nav .brand{margin:0}
-.lp-nav-actions{display:flex;align-items:center;gap:18px}
-.lp-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 18px;border-radius:10px;
-  font-size:13.5px;font-weight:650;cursor:pointer;transition:transform .12s,box-shadow .12s,background .12s;white-space:nowrap}
-.lp-btn.primary{color:#fff;background:linear-gradient(135deg,#3B74F0,#2F6BEF);box-shadow:0 10px 22px -10px rgba(47,107,239,.7)}
-.lp-btn.primary:hover{transform:translateY(-1px);box-shadow:0 16px 28px -12px rgba(47,107,239,.75);text-decoration:none}
-.lp-btn.ghost{color:var(--text);border:1px solid var(--border-strong);background:#fff}
-.lp-btn.ghost:hover{background:#f7f9fc;text-decoration:none;transform:translateY(-1px)}
-.lp-wrap{max-width:1080px;margin:0 auto;padding:0 32px}
-.lp-hero{text-align:center;padding:clamp(48px,8vw,88px) 0 20px}
-.eyebrow{display:inline-flex;align-items:center;gap:7px;margin-bottom:22px;padding:6px 14px;border-radius:999px;
-  font-size:12.5px;font-weight:650;letter-spacing:.2px;color:var(--accent-ink);background:rgba(47,107,239,.09);border:1px solid rgba(47,107,239,.16)}
-.eyebrow .dot{background:var(--accent);box-shadow:0 0 0 3px rgba(47,107,239,.18)}
-.lp-hero h1{font-size:clamp(30px,6.2vw,52px);line-height:1.08;font-weight:820;letter-spacing:-1.4px;margin:0 auto 20px;max-width:800px}
-.lp-hero h1 .grad{background:linear-gradient(120deg,#2F6BEF,#5b9dff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.lp-hero .lead{font-size:clamp(15px,2.2vw,17.5px);line-height:1.6;color:var(--muted);max-width:600px;margin:0 auto 34px}
-.lp-cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-.lp-cta .lp-btn{padding:13px 26px;font-size:15px}
-.lp-trust{margin-top:22px;font-size:12.5px;color:var(--faint);display:flex;align-items:center;justify-content:center;gap:8px}
-.lp-section{padding:56px 0}
-.lp-kicker{text-align:center;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
-.lp-h2{text-align:center;font-size:clamp(23px,4vw,30px);font-weight:780;letter-spacing:-.8px;margin:0 0 12px}
-.lp-sub2{text-align:center;color:var(--muted);font-size:15px;max-width:560px;margin:0 auto 40px}
-.lp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.fcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:26px 24px;
-  box-shadow:0 20px 50px -34px rgba(15,23,42,.2);transition:transform .16s,box-shadow .16s}
-.fcard:hover{transform:translateY(-3px);box-shadow:0 28px 60px -34px rgba(15,23,42,.28)}
-.fcard .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;margin-bottom:16px;
-  background:linear-gradient(135deg,rgba(47,107,239,.12),rgba(91,157,255,.10));border:1px solid rgba(47,107,239,.14)}
-.fcard h3{font-size:16px;font-weight:700;margin:0 0 7px;letter-spacing:-.2px}
-.fcard p{font-size:13.5px;line-height:1.55;color:var(--muted);margin:0}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:step}
-.step{position:relative;background:#f8fafc;border:1px solid var(--border);border-radius:16px;padding:26px 24px}
-.step::before{counter-increment:step;content:counter(step);display:grid;place-items:center;width:30px;height:30px;
-  border-radius:9px;background:linear-gradient(135deg,#3B74F0,#2F6BEF);color:#fff;font-size:14px;font-weight:750;margin-bottom:14px}
-.step h3{font-size:15.5px;font-weight:700;margin:0 0 6px}
-.step p{font-size:13.5px;line-height:1.55;color:var(--muted);margin:0}
-.lp-band{margin:56px 0 0;background:linear-gradient(135deg,#1e3a8a,#2F6BEF);border-radius:24px;padding:56px 40px;text-align:center;color:#fff}
-.lp-band h2{font-size:30px;font-weight:800;letter-spacing:-.8px;margin:0 0 12px}
-.lp-band p{font-size:15.5px;color:rgba(255,255,255,.86);max-width:520px;margin:0 auto 28px}
-.lp-band .lp-btn.primary{background:#fff;color:var(--accent-ink);box-shadow:0 14px 30px -12px rgba(0,0,0,.4)}
-.lp-band .lp-btn.primary:hover{background:#f2f6ff}
-.lp-foot{max-width:1080px;margin:0 auto;padding:32px;display:flex;align-items:center;justify-content:space-between;gap:16px;
-  border-top:1px solid var(--border);color:var(--muted);font-size:13px;flex-wrap:wrap;margin-top:40px}
-.lp-foot .brand{margin:0}.lp-foot .wordmark{font-size:16px}
-/* download cards */
-.dl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:820px;margin:0 auto}
-.dl-card{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
-  padding:26px 18px;background:#fff;border:1px solid var(--border);border-radius:16px;color:var(--text);
-  box-shadow:0 18px 44px -34px rgba(15,23,42,.2);transition:transform .16s,box-shadow .16s,border-color .16s}
-.dl-card:hover{transform:translateY(-4px);text-decoration:none;border-color:rgba(47,107,239,.4);
-  box-shadow:0 26px 54px -30px rgba(47,107,239,.35)}
-.dl-ic{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;margin-bottom:8px;color:var(--accent-ink);
-  background:linear-gradient(135deg,rgba(47,107,239,.12),rgba(91,157,255,.10));border:1px solid rgba(47,107,239,.14)}
-.dl-os{font-size:16px;font-weight:750;letter-spacing:-.2px}
-.dl-sub{font-size:12.5px;color:var(--muted)}.dl-sub b{color:var(--text);font-weight:650}
-.dl-note{text-align:center;color:var(--muted);font-size:12.5px;max-width:600px;margin:26px auto 0;line-height:1.6}
-.dl-note code{background:#f1f4f9;border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}
-/* install command block */
-.dl-install-rec{display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.2px;background:rgba(47,107,239,.10);color:var(--accent-ink);border:1px solid rgba(47,107,239,.18)}
-.dl-cmd-row{display:flex;align-items:center;background:#f8fafc;border:1px solid var(--border-strong);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px -4px rgba(15,23,42,.10)}
-.dl-cmd{flex:1;padding:13px 16px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:var(--text);user-select:all;white-space:nowrap;overflow:auto;text-align:left}
-.dl-copy{flex-shrink:0;padding:0 16px;height:46px;border:none;border-left:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
-.dl-copy:hover{background:#f1f4f9;color:var(--text)}
-/* macOS primary card */
-.dl-mac-card{max-width:620px;margin:0 auto 32px;background:#fff;border:1px solid var(--border);border-radius:18px;padding:28px 28px 22px;box-shadow:0 20px 50px -34px rgba(15,23,42,.18),0 2px 6px -2px rgba(15,23,42,.05)}
-.dl-mac-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.dl-mac-icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(47,107,239,.12),rgba(91,157,255,.10));border:1px solid rgba(47,107,239,.14);color:var(--accent-ink);flex-shrink:0}
-.dl-mac-title{font-size:17px;font-weight:750;letter-spacing:-.3px}
-.dl-mac-step{font-size:13.5px;color:var(--muted);margin:0 0 12px;line-height:1.5}
-.dl-mac-manual{margin:12px 0 0;font-size:12.5px;color:var(--muted)}
-/* Windows + Linux cards */
-.dl-other-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:420px;margin:0 auto}
-.dl-hint{font-size:11.5px;color:var(--faint);margin-top:2px}
-
-/* responsive: landing */
-@media (max-width:820px){
-  .lp-nav{padding:13px 18px}
-  .lp-wrap{padding:0 18px}
-  .lp-grid,.steps{grid-template-columns:1fr}
-  .lp-section{padding:44px 0}
-  .lp-band{padding:44px 22px}
-  .lp-foot{flex-direction:column;text-align:center;gap:10px}
+/* --- landing nav --- */
+.lp-nav{
+  position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;
+  padding:14px 40px;background:rgba(7,17,30,.88);backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid var(--border);
 }
-@media (max-width:820px){
-  .dl-mac-card{padding:22px 18px 18px}
+.lp-nav .brand{margin:0}
+.lp-nav-actions{display:flex;align-items:center;gap:22px}
+.lp-btn{
+  display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;border-radius:9px;
+  font-size:13.5px;font-weight:650;cursor:pointer;transition:transform .12s,box-shadow .12s,background .12s;white-space:nowrap;
+}
+.lp-btn.primary{color:#fff;background:linear-gradient(135deg,#0ea5e9,#0284c7);box-shadow:0 8px 22px -10px rgba(14,165,233,.55)}
+.lp-btn.primary:hover{transform:translateY(-1px);box-shadow:0 14px 28px -12px rgba(14,165,233,.7);text-decoration:none}
+.lp-btn.ghost{color:var(--text);border:1px solid var(--border-strong);background:rgba(255,255,255,.05)}
+.lp-btn.ghost:hover{background:rgba(255,255,255,.09);text-decoration:none;transform:translateY(-1px)}
+.lp-wrap{max-width:1100px;margin:0 auto;padding:0 40px}
+
+/* --- hero --- */
+.lp-hero{padding:clamp(60px,9vw,110px) 0 clamp(48px,7vw,88px)}
+.lp-hero-inner{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+.lp-hero-text .eyebrow{
+  display:inline-flex;align-items:center;gap:7px;margin-bottom:22px;padding:5px 13px;border-radius:999px;
+  font-size:11.5px;font-weight:650;letter-spacing:.3px;color:var(--accent);
+  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.2);
+}
+.lp-hero-text .eyebrow .dot{background:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.2)}
+.lp-hero h1{
+  font-size:clamp(34px,5vw,54px);line-height:1.06;font-weight:830;
+  letter-spacing:-1.8px;margin:0 0 20px;color:var(--text);
+}
+.lp-hero h1 .grad{
+  background:linear-gradient(110deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.lp-hero .lead{font-size:16.5px;line-height:1.7;color:var(--muted);margin:0 0 32px;max-width:460px}
+.lp-cta{display:flex;gap:12px;flex-wrap:wrap}
+.lp-cta .lp-btn{padding:12px 24px;font-size:15px}
+.lp-trust{margin-top:18px;font-size:12.5px;color:var(--faint);display:flex;align-items:center;gap:7px}
+
+/* --- terminal preview --- */
+.lp-preview{
+  background:#040d18;border:1px solid rgba(56,189,248,.14);border-radius:14px;
+  overflow:hidden;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  box-shadow:0 0 0 1px rgba(56,189,248,.06),0 40px 80px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.04);
+}
+.lp-preview-bar{
+  display:flex;align-items:center;gap:7px;padding:10px 16px;
+  background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06);
+}
+.lp-pv-dot{width:11px;height:11px;border-radius:50%}
+.lp-pv-title{margin-left:auto;font-size:11px;color:var(--faint)}
+.lp-preview-body{padding:16px 18px;display:flex;flex-direction:column;gap:7px}
+.lp-prow{display:flex;align-items:center;gap:8px;line-height:1.4}
+.lp-plabel{width:58px;font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--faint);flex-shrink:0}
+.lp-pok{color:var(--green);font-weight:600}
+.lp-pwarn{color:var(--amber);font-weight:600}
+.lp-pdim{color:var(--faint)}
+.lp-pdivider{border:none;border-top:1px solid rgba(255,255,255,.06);margin:6px 0}
+.lp-ppod{display:flex;align-items:center;gap:9px;padding:3px 0}
+.lp-pstatus{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.lp-pstatus.ok{background:var(--green);box-shadow:0 0 5px rgba(52,211,153,.6)}
+.lp-pstatus.warn{background:var(--amber);box-shadow:0 0 5px rgba(251,191,36,.5)}
+.lp-pname{color:var(--text);flex:1;font-weight:500}
+.lp-prep{color:var(--faint);font-size:11.5px}
+.lp-pcpu{color:var(--muted);margin-left:auto;font-size:11.5px}
+
+/* --- feature grid --- */
+.lp-section{padding:80px 0}
+.lp-kicker{text-align:center;font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.lp-h2{text-align:center;font-size:clamp(26px,4vw,34px);font-weight:800;letter-spacing:-1px;margin:0 0 10px;color:var(--text)}
+.lp-sub2{text-align:center;color:var(--muted);font-size:15.5px;max-width:520px;margin:0 auto 48px}
+.lp-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  background:var(--border);gap:1px;
+}
+.fcard{background:var(--bg);padding:30px 28px;transition:background .16s}
+.fcard:hover{background:rgba(56,189,248,.03)}
+.fcard .ic{
+  width:36px;height:36px;border-radius:9px;display:grid;place-items:center;margin-bottom:16px;
+  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.14);color:var(--accent);
+}
+.fcard h3{font-size:15px;font-weight:720;margin:0 0 7px;letter-spacing:-.2px;color:var(--text)}
+.fcard p{font-size:13.5px;line-height:1.6;color:var(--muted);margin:0}
+
+/* --- download section --- */
+.dl-install-rec{
+  display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;
+  font-size:11px;font-weight:700;letter-spacing:.2px;
+  background:rgba(56,189,248,.1);color:var(--accent);border:1px solid rgba(56,189,248,.2);
+}
+.dl-cmd-row{
+  display:flex;align-items:center;background:rgba(4,13,24,.8);
+  border:1px solid var(--border-strong);border-radius:11px;overflow:hidden;
+}
+.dl-cmd{
+  flex:1;padding:13px 16px;font-family:ui-monospace,SFMono-Regular,monospace;
+  font-size:13px;color:var(--accent2);user-select:all;white-space:nowrap;overflow:auto;
+}
+.dl-copy{
+  flex-shrink:0;padding:0 15px;height:46px;border:none;border-left:1px solid var(--border);
+  background:transparent;color:var(--faint);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s;
+}
+.dl-copy:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.dl-mac-card{
+  max-width:600px;margin:0 auto 28px;background:var(--panel);
+  border:1px solid var(--border-strong);border-radius:16px;padding:26px 26px 20px;
+  box-shadow:0 20px 50px -20px rgba(0,0,0,.5);
+}
+.dl-mac-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.dl-mac-icon{
+  width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.15);color:var(--accent);flex-shrink:0;
+}
+.dl-mac-title{font-size:16px;font-weight:750;letter-spacing:-.3px;color:var(--text)}
+.dl-mac-step{font-size:13.5px;color:var(--muted);margin:0 0 12px;line-height:1.55}
+.dl-mac-manual{margin:11px 0 0;font-size:12.5px;color:var(--muted)}
+.dl-other-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:420px;margin:0 auto}
+.dl-card{
+  display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;
+  padding:22px 16px;background:var(--panel);border:1px solid var(--border);border-radius:14px;color:var(--text);
+  transition:transform .15s,border-color .15s,box-shadow .15s;
+}
+.dl-card:hover{transform:translateY(-3px);text-decoration:none;border-color:rgba(56,189,248,.28);box-shadow:0 16px 36px -16px rgba(56,189,248,.2)}
+.dl-ic{
+  width:44px;height:44px;border-radius:12px;display:grid;place-items:center;margin-bottom:5px;color:var(--accent);
+  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.14);
+}
+.dl-os{font-size:15px;font-weight:750;letter-spacing:-.2px;color:var(--text)}
+.dl-sub{font-size:12.5px;color:var(--muted)}.dl-sub b{color:var(--text);font-weight:650}
+.dl-hint{font-size:11.5px;color:var(--faint);margin-top:2px}
+.dl-note{text-align:center;color:var(--muted);font-size:12.5px;max-width:600px;margin:26px auto 0;line-height:1.6}
+.dl-note code{background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}
+
+/* --- footer --- */
+.lp-foot{
+  max-width:1100px;margin:0 auto;padding:28px 40px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  border-top:1px solid var(--border);color:var(--faint);font-size:13px;flex-wrap:wrap;margin-top:72px;
+}
+.lp-foot .brand{margin:0}.lp-foot .wordmark{font-size:16px}
+
+/* --- responsive --- */
+@media(max-width:960px){
+  .lp-hero-inner{grid-template-columns:1fr;gap:44px}
+  .lp-preview{display:none}
+  .lp-hero{padding:64px 0 48px;text-align:center}
+  .lp-hero .lead{margin-left:auto;margin-right:auto}
+  .lp-cta{justify-content:center}
+  .lp-trust{justify-content:center}
+}
+@media(max-width:820px){
+  .lp-nav{padding:13px 20px}
+  .lp-wrap{padding:0 20px}
+  .lp-grid{grid-template-columns:1fr}
+  .lp-section{padding:56px 0}
+  .lp-foot{flex-direction:column;text-align:center;gap:10px;padding:28px 20px}
+  .dl-mac-card{padding:20px 18px 16px}
   .dl-other-grid{max-width:100%}
 }
-@media (max-width:560px){
+@media(max-width:560px){
   .lp-nav-actions{gap:12px}
-  .lp-nav-actions a:not(.lp-btn){display:none}   /* keep just the Download button */
+  .lp-nav-actions a:not(.lp-btn){display:none}
 }
-
-/* responsive: auth cards */
-@media (max-width:480px){
+@media(max-width:480px){
   .center{padding:20px}
   .card{padding:30px 22px;border-radius:16px}
   h1{font-size:20px}
 }
-/* responsive: admin table collapses into stacked cards */
-@media (max-width:640px){
+@media(max-width:640px){
   .admin{padding:28px 16px}
   .admin-head{flex-direction:column;align-items:flex-start;gap:6px}
   table.users thead{display:none}
@@ -229,17 +296,6 @@ table.users tbody tr:hover{background:#f8fafc}
   table.users td.cell-act{text-align:left;margin-top:12px}
   table.users td[data-label]::before{content:attr(data-label);display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px}
   .empty{padding:28px 0}
-}
-/* responsive: landing */
-@media (max-width:820px){
-  .lp-grid,.steps{grid-template-columns:1fr}
-  .lp-hero{padding:56px 0 16px}
-  .lp-hero h1{font-size:38px;letter-spacing:-1px}
-  .lp-hero .lead{font-size:16px}
-  .lp-nav{padding:14px 20px}
-  .lp-wrap{padding:0 20px}
-  .lp-band{padding:44px 24px}
-  .lp-foot{flex-direction:column;text-align:center}
 }
 </style></head><body>{{template "body" .}}
 <script>
@@ -256,10 +312,9 @@ async function _post(url,payload){
 }
 </script>
 {{block "script" .}}{{end}}
-<div style="position:fixed;bottom:6px;right:9px;font-size:10px;color:#c2cad8;user-select:none">build 6</div>
 </body></html>{{end}}`
 
-const logoSVG = `<svg width="28" height="28" viewBox="0 0 100 100"><circle cx="50" cy="18" r="9" fill="#7CA0F2"/><circle cx="22" cy="34" r="8" fill="#C3D4F7"/><circle cx="78" cy="34" r="8" fill="#C3D4F7"/><circle cx="50" cy="50" r="13" fill="#2F6BEF"/><circle cx="22" cy="66" r="8" fill="#3B74F0"/><circle cx="78" cy="66" r="8" fill="#3B74F0"/><circle cx="50" cy="82" r="9" fill="#2F6BEF"/></svg>`
+const logoSVG = `<svg width="28" height="28" viewBox="0 0 100 100"><circle cx="50" cy="18" r="9" fill="#7dd3fc"/><circle cx="22" cy="34" r="8" fill="#38bdf8" opacity=".6"/><circle cx="78" cy="34" r="8" fill="#38bdf8" opacity=".6"/><circle cx="50" cy="50" r="13" fill="#38bdf8"/><circle cx="22" cy="66" r="8" fill="#0ea5e9"/><circle cx="78" cy="66" r="8" fill="#0ea5e9"/><circle cx="50" cy="82" r="9" fill="#0284c7"/></svg>`
 
 // --- home / landing ------------------------------------------------------
 
@@ -267,109 +322,152 @@ const homeBody = `{{define "body"}}
 <nav class="lp-nav">
   <div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
   <div class="lp-nav-actions">
-    <a href="/login">Sign in</a>
+    <a href="/login" style="color:var(--muted);font-weight:500">Sign in</a>
     <a class="lp-btn primary" href="#download">Download</a>
   </div>
 </nav>
 
-<header class="lp-hero lp-wrap">
-  <span class="eyebrow"><span class="dot"></span>Kubernetes · EKS · FinOps · AI</span>
-  <h1>Your cluster's health &amp; cost,<br><span class="grad">in one calm view.</span></h1>
-  <p class="lead">Clusterheart is a desktop dashboard for your Kubernetes clusters — live health, real AWS spend, right-sizing insights, and an AI copilot for kubectl. It reads your local kubeconfig, so credentials never leave your machine.</p>
-  <div class="lp-cta">
-    <a class="lp-btn primary" href="#download">Download the app</a>
-    <a class="lp-btn ghost" href="/signup">Create account</a>
-  </div>
-  <div class="lp-trust">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    Local &amp; secure — your cluster credentials never leave this machine.
+<header class="lp-hero">
+  <div class="lp-wrap">
+    <div class="lp-hero-inner">
+      <div class="lp-hero-text">
+        <span class="eyebrow"><span class="dot"></span>Kubernetes · EKS · FinOps · AI</span>
+        <h1>Stop switching tabs.<br><span class="grad">See your whole cluster.</span></h1>
+        <p class="lead">Live pod health, real AWS costs, and an AI kubectl copilot — in one desktop app that reads your local kubeconfig. Nothing leaves your machine.</p>
+        <div class="lp-cta">
+          <a class="lp-btn primary" href="#download">Download free</a>
+          <a class="lp-btn ghost" href="/signup">Create account</a>
+        </div>
+        <div class="lp-trust">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Credentials never leave your machine.
+        </div>
+      </div>
+      <div class="lp-preview">
+        <div class="lp-preview-bar">
+          <span class="lp-pv-dot" style="background:#ff5f57"></span>
+          <span class="lp-pv-dot" style="background:#febc2e"></span>
+          <span class="lp-pv-dot" style="background:#28c840"></span>
+          <span class="lp-pv-title">clusterheart — production-eks</span>
+        </div>
+        <div class="lp-preview-body">
+          <div class="lp-prow">
+            <span class="lp-plabel">NODES</span>
+            <span class="lp-pok">3 / 3 Ready</span>
+            <span class="lp-pdim">&nbsp;· cpu <b style="color:#94a3b8">34%</b> · mem <b style="color:#94a3b8">61%</b></span>
+          </div>
+          <div class="lp-prow">
+            <span class="lp-plabel">PODS</span>
+            <span class="lp-pok">47 / 47 Running</span>
+          </div>
+          <div class="lp-prow">
+            <span class="lp-plabel">COST</span>
+            <span class="lp-pwarn">$847 today</span>
+            <span class="lp-pdim">&nbsp;· ↓12% vs yesterday</span>
+          </div>
+          <hr class="lp-pdivider">
+          <div class="lp-ppod">
+            <span class="lp-pstatus ok"></span>
+            <span class="lp-pname">api-server</span>
+            <span class="lp-prep">2 replicas</span>
+            <span class="lp-pcpu">cpu 12%</span>
+          </div>
+          <div class="lp-ppod">
+            <span class="lp-pstatus ok"></span>
+            <span class="lp-pname">frontend</span>
+            <span class="lp-prep">3 replicas</span>
+            <span class="lp-pcpu">cpu 8%</span>
+          </div>
+          <div class="lp-ppod">
+            <span class="lp-pstatus ok"></span>
+            <span class="lp-pname">worker</span>
+            <span class="lp-prep">5 replicas</span>
+            <span class="lp-pcpu">cpu 41%</span>
+          </div>
+          <div class="lp-ppod">
+            <span class="lp-pstatus warn"></span>
+            <span class="lp-pname">ml-pipeline</span>
+            <span class="lp-prep" style="color:var(--amber)">1 / 2 · Pending</span>
+            <span class="lp-pcpu" style="color:var(--amber)">OOMKill</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
 <section class="lp-section lp-wrap">
   <p class="lp-kicker">What it does</p>
-  <h2 class="lp-h2">Everything you need to run a cluster, in one place</h2>
-  <p class="lp-sub2">Health, cost and control — without juggling five terminals and three consoles.</p>
+  <h2 class="lp-h2">Everything in one window</h2>
+  <p class="lp-sub2">No context switching. No extra consoles. Just your cluster.</p>
   <div class="lp-grid">
     <div class="fcard">
-      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
       <h3>Live cluster health</h3>
-      <p>Pods, nodes, events and metrics updating in real time across your clusters.</p>
+      <p>Pods, nodes, events and metrics in real time across all your contexts.</p>
     </div>
     <div class="fcard">
-      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-      <h3>FinOps cost insights</h3>
-      <p>Real AWS daily spend from Cost Explorer, right beside your live usage.</p>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      <h3>AWS cost insights</h3>
+      <p>Real daily spend from Cost Explorer, right next to your live usage.</p>
     </div>
     <div class="fcard">
-      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
-      <h3>Right-sizing &amp; consolidation</h3>
-      <p>Spot phantom requests and see how many nodes you could actually drop.</p>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
+      <h3>Right-sizing</h3>
+      <p>Spot phantom resource requests and see exactly how many nodes you can drop.</p>
     </div>
     <div class="fcard">
-      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 1 5 5c0 1.5-.5 2-1 3l-1 1v2H9v-2l-1-1c-.5-1-1-1.5-1-3a5 5 0 0 1 5-5Z"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="21" x2="14" y2="21"/></svg></span>
-      <h3>AI copilot for kubectl</h3>
-      <p>Ask in plain English; it runs read-only kubectl and explains what it finds.</p>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 1 5 5c0 1.5-.5 2-1 3l-1 1v2H9v-2l-1-1c-.5-1-1-1.5-1-3a5 5 0 0 1 5-5Z"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="21" x2="14" y2="21"/></svg></span>
+      <h3>AI kubectl copilot</h3>
+      <p>Ask in plain English. It runs read-only kubectl and explains what it finds.</p>
     </div>
     <div class="fcard">
-      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
       <h3>Shell, logs &amp; port-forward</h3>
-      <p>Exec into containers, stream logs and forward ports without leaving the app.</p>
+      <p>Exec into containers, stream logs, forward ports — without leaving the app.</p>
     </div>
     <div class="fcard">
-      <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6BEF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
-      <h3>Local &amp; secure</h3>
-      <p>Reads your local kubeconfig — cluster credentials never leave your machine.</p>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <h3>Local &amp; private</h3>
+      <p>Reads your local kubeconfig. Cluster credentials never leave your machine.</p>
     </div>
-  </div>
-</section>
-
-<section class="lp-section lp-wrap">
-  <p class="lp-kicker">How it works</p>
-  <h2 class="lp-h2">Up and running in three steps</h2>
-  <div class="steps">
-    <div class="step"><h3>Create your account</h3><p>Sign up in seconds. New accounts wait for a quick owner approval.</p></div>
-    <div class="step"><h3>Get approved</h3><p>The owner approves you from the admin panel — you'll see it the moment they do.</p></div>
-    <div class="step"><h3>Open the desktop app</h3><p>Launch Clusterheart, sign in, and your dashboard boots against your cluster.</p></div>
   </div>
 </section>
 
 <section id="download" class="lp-section lp-wrap">
   <p class="lp-kicker">Download</p>
   <h2 class="lp-h2">Get the desktop app</h2>
-  <p class="lp-sub2">Free · runs on your machine · reads your local kubeconfig.</p>
+  <p class="lp-sub2">Free · runs locally · reads your kubeconfig.</p>
 
-  <!-- macOS: curl is the only step -->
   <div class="dl-mac-card">
     <div class="dl-mac-header">
-      <span class="dl-mac-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
+      <span class="dl-mac-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
       <span class="dl-mac-title">macOS</span>
       <span class="dl-install-rec">Apple Silicon &amp; Intel</span>
     </div>
-    <p class="dl-mac-step">Open Terminal and run this one command — it downloads, installs, and bypasses Gatekeeper automatically:</p>
+    <p class="dl-mac-step">Open Terminal and run — it downloads, installs, and handles Gatekeeper in one step:</p>
     <div class="dl-cmd-row">
       <code class="dl-cmd" id="install-cmd">curl -sL …/install.sh | bash</code>
-      <button class="dl-copy" id="dl-copy-btn" title="Copy to clipboard">
-        <svg id="dl-copy-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        <svg id="dl-check-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;color:#0f9d63"><polyline points="20 6 9 17 4 12"/></svg>
+      <button class="dl-copy" id="dl-copy-btn" title="Copy">
+        <svg id="dl-copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <svg id="dl-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;color:var(--green)"><polyline points="20 6 9 17 4 12"/></svg>
       </button>
     </div>
-    <p class="dl-mac-manual">Prefer to install manually? <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">Apple Silicon .dmg</a> · <a href="/downloads/Clusterheart-macOS-Intel.dmg">Intel .dmg</a> — then right-click → Open the first time.</p>
+    <p class="dl-mac-manual">Manual install: <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">Apple Silicon .dmg</a> · <a href="/downloads/Clusterheart-macOS-Intel.dmg">Intel .dmg</a> — right-click → Open the first time.</p>
   </div>
 
-  <!-- Windows + Linux download cards -->
   <div class="dl-other-grid">
     <a class="dl-card" href="/downloads/Clusterheart-Windows.exe">
-      <span class="dl-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zm8-13.9L21 3v8.5h-10V4.5zm0 15l10 1.5V12.5H11v6z"/></svg></span>
+      <span class="dl-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zm8-13.9L21 3v8.5h-10V4.5zm0 15l10 1.5V12.5H11v6z"/></svg></span>
       <span class="dl-os">Windows</span>
       <span class="dl-sub">64-bit · <b>.exe</b></span>
       <span class="dl-hint">More info → Run anyway</span>
     </a>
     <a class="dl-card" href="/downloads/Clusterheart-Linux.AppImage">
-      <span class="dl-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1.7 0-3 1.6-3 3.4 0 1.1.1 2-.5 3-.7 1-2.3 2.4-2.3 4.9 0 .9.3 1.7.7 2.4-.5.4-1 1-1 1.8 0 1.4 1.6 1.8 3.2 2.2 1 .3 1.4.9 2.9.9s1.9-.6 2.9-.9c1.6-.4 3.2-.8 3.2-2.2 0-.8-.5-1.4-1-1.8.4-.7.7-1.5.7-2.4 0-2.5-1.6-3.9-2.3-4.9-.6-1-.5-1.9-.5-3C15 3.6 13.7 2 12 2zm-1.4 3.1c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z"/></svg></span>
+      <span class="dl-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1.7 0-3 1.6-3 3.4 0 1.1.1 2-.5 3-.7 1-2.3 2.4-2.3 4.9 0 .9.3 1.7.7 2.4-.5.4-1 1-1 1.8 0 1.4 1.6 1.8 3.2 2.2 1 .3 1.4.9 2.9.9s1.9-.6 2.9-.9c1.6-.4 3.2-.8 3.2-2.2 0-.8-.5-1.4-1-1.8.4-.7.7-1.5.7-2.4 0-2.5-1.6-3.9-2.3-4.9-.6-1-.5-1.9-.5-3C15 3.6 13.7 2 12 2zm-1.4 3.1c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z"/></svg></span>
       <span class="dl-os">Linux</span>
       <span class="dl-sub">x86-64 · <b>.AppImage</b></span>
-      <span class="dl-hint"><a href="/downloads/">More builds (.deb, ARM) →</a></span>
+      <span class="dl-hint"><a href="/downloads/">More builds →</a></span>
     </a>
   </div>
 
@@ -377,33 +475,23 @@ const homeBody = `{{define "body"}}
   (function(){
     var cmd=document.getElementById('install-cmd');
     var btn=document.getElementById('dl-copy-btn');
-    var copyIcon=document.getElementById('dl-copy-icon');
-    var checkIcon=document.getElementById('dl-check-icon');
+    var ci=document.getElementById('dl-copy-icon'),ck=document.getElementById('dl-check-icon');
     var text='curl -sL '+window.location.origin+'/install.sh | bash';
     if(cmd) cmd.textContent=text;
     if(btn) btn.addEventListener('click',function(){
       navigator.clipboard.writeText(text).then(function(){
-        copyIcon.style.display='none';
-        checkIcon.style.display='';
-        setTimeout(function(){copyIcon.style.display='';checkIcon.style.display='none';},2000);
+        ci.style.display='none';ck.style.display='';
+        setTimeout(function(){ci.style.display='';ck.style.display='none';},2000);
       });
     });
   })();
   </script>
 </section>
 
-<section class="lp-wrap">
-  <div class="lp-band">
-    <h2>Ready to see your cluster clearly?</h2>
-    <p>Create your account and connect your cluster in minutes. No agents to install — it runs on your machine.</p>
-    <a class="lp-btn primary" href="/signup">Get started free</a>
-  </div>
-</section>
-
 <footer class="lp-foot">
   <div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
-  <div>Kubernetes health, cost &amp; control — on your machine.</div>
-  <div><a href="/login">Sign in</a> · <a href="/signup">Create account</a></div>
+  <span>Kubernetes health, cost &amp; control — on your machine.</span>
+  <span><a href="/login">Sign in</a> · <a href="/signup">Sign up</a></span>
 </footer>
 {{end}}`
 
@@ -487,7 +575,7 @@ document.getElementById('logout').addEventListener('click',async function(){
 
 const adminBody = `{{define "body"}}<div class="admin">
 <div class="admin-head">
-  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span> <span style="color:var(--muted);font-weight:500">· admin</span></span></div>
+  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span> <span style="color:var(--faint);font-weight:500">· admin</span></span></div>
   <div class="admin-user">{{.Me}} · <a href="#" id="logout">log out</a></div>
 </div>
 <p class="sub" style="margin:0 0 22px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval — approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
