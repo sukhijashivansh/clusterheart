@@ -372,6 +372,9 @@ rm /tmp/clusterheart-install.dmg
 echo "Removing macOS security quarantine..."
 xattr -dr com.apple.quarantine /Applications/Clusterheart.app 2>/dev/null || true
 
+echo "Signing app (bypasses Gatekeeper without an Apple Developer account)..."
+codesign --force --deep --sign - /Applications/Clusterheart.app 2>/dev/null || true
+
 echo ""
 echo "Done! Open Clusterheart from /Applications or Spotlight (Cmd+Space)."
 echo "Sign in at: %s/login"
