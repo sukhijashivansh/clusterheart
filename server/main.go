@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -344,6 +345,38 @@ func logging(next http.Handler) http.Handler {
 	})
 }
 
+const installScript = `#!/bin/bash
+set -e
+BASE="%s"
+
+arch=$(uname -m)
+if [ "$arch" = "arm64" ]; then
+  FILE="Clusterheart-macOS-AppleSilicon.dmg"
+else
+  FILE="Clusterheart-macOS-Intel.dmg"
+fi
+
+echo "Downloading Clusterheart ($arch)..."
+curl -# -L "$BASE/downloads/$FILE" -o /tmp/clusterheart-install.dmg
+
+echo "Mounting installer..."
+hdiutil attach /tmp/clusterheart-install.dmg -mountpoint /Volumes/ClusterheartInstall -quiet
+
+echo "Installing to /Applications..."
+rm -rf /Applications/Clusterheart.app
+cp -r "/Volumes/ClusterheartInstall/Clusterheart.app" /Applications/
+
+hdiutil detach /Volumes/ClusterheartInstall -quiet
+rm /tmp/clusterheart-install.dmg
+
+echo "Removing macOS security quarantine..."
+xattr -dr com.apple.quarantine /Applications/Clusterheart.app 2>/dev/null || true
+
+echo ""
+echo "Done! Open Clusterheart from /Applications or Spotlight (Cmd+Space)."
+echo "Sign in at: %s/login"
+`
+
 func main() {
 	loadDotEnv(".env")
 
@@ -385,6 +418,18 @@ func main() {
 	}
 	mux.Handle("/downloads/", http.StripPrefix("/downloads/",
 		http.FileServer(http.Dir(downloadsDir))))
+
+	mux.HandleFunc("/install.sh", func(w http.ResponseWriter, r *http.Request) {
+		scheme := "https"
+		if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
+			scheme = p
+		} else if r.TLS == nil {
+			scheme = "http"
+		}
+		base := scheme + "://" + r.Host
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, installScript, base, base)
+	})
 
 	mux.HandleFunc("/", a.pageHome)
 

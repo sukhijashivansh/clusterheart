@@ -176,6 +176,22 @@ table.users tbody tr:hover{background:#f8fafc}
 .dl-sub{font-size:12.5px;color:var(--muted)}.dl-sub b{color:var(--text);font-weight:650}
 .dl-note{text-align:center;color:var(--muted);font-size:12.5px;max-width:600px;margin:26px auto 0;line-height:1.6}
 .dl-note code{background:#f1f4f9;border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}
+/* install command block */
+.dl-install-rec{display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.2px;background:rgba(47,107,239,.10);color:var(--accent-ink);border:1px solid rgba(47,107,239,.18)}
+.dl-cmd-row{display:flex;align-items:center;background:#f8fafc;border:1px solid var(--border-strong);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px -4px rgba(15,23,42,.10)}
+.dl-cmd{flex:1;padding:13px 16px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;color:var(--text);user-select:all;white-space:nowrap;overflow:auto;text-align:left}
+.dl-copy{flex-shrink:0;padding:0 16px;height:46px;border:none;border-left:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.dl-copy:hover{background:#f1f4f9;color:var(--text)}
+/* macOS primary card */
+.dl-mac-card{max-width:620px;margin:0 auto 32px;background:#fff;border:1px solid var(--border);border-radius:18px;padding:28px 28px 22px;box-shadow:0 20px 50px -34px rgba(15,23,42,.18),0 2px 6px -2px rgba(15,23,42,.05)}
+.dl-mac-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.dl-mac-icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(47,107,239,.12),rgba(91,157,255,.10));border:1px solid rgba(47,107,239,.14);color:var(--accent-ink);flex-shrink:0}
+.dl-mac-title{font-size:17px;font-weight:750;letter-spacing:-.3px}
+.dl-mac-step{font-size:13.5px;color:var(--muted);margin:0 0 12px;line-height:1.5}
+.dl-mac-manual{margin:12px 0 0;font-size:12.5px;color:var(--muted)}
+/* Windows + Linux cards */
+.dl-other-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:420px;margin:0 auto}
+.dl-hint{font-size:11.5px;color:var(--faint);margin-top:2px}
 
 /* responsive: landing */
 @media (max-width:820px){
@@ -187,7 +203,8 @@ table.users tbody tr:hover{background:#f8fafc}
   .lp-foot{flex-direction:column;text-align:center;gap:10px}
 }
 @media (max-width:820px){
-  .dl-grid{grid-template-columns:repeat(2,1fr)}
+  .dl-mac-card{padding:22px 18px 18px}
+  .dl-other-grid{max-width:100%}
 }
 @media (max-width:560px){
   .lp-nav-actions{gap:12px}
@@ -320,30 +337,59 @@ const homeBody = `{{define "body"}}
 <section id="download" class="lp-section lp-wrap">
   <p class="lp-kicker">Download</p>
   <h2 class="lp-h2">Get the desktop app</h2>
-  <p class="lp-sub2">Free · runs on your machine · reads your local kubeconfig. Pick your platform:</p>
-  <div class="dl-grid">
-    <a class="dl-card" href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">
-      <span class="dl-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
-      <span class="dl-os">macOS</span>
-      <span class="dl-sub">Apple Silicon · <b>.dmg</b></span>
-    </a>
-    <a class="dl-card" href="/downloads/Clusterheart-macOS-Intel.dmg">
-      <span class="dl-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
-      <span class="dl-os">macOS</span>
-      <span class="dl-sub">Intel · <b>.dmg</b></span>
-    </a>
+  <p class="lp-sub2">Free · runs on your machine · reads your local kubeconfig.</p>
+
+  <!-- macOS: curl is the only step -->
+  <div class="dl-mac-card">
+    <div class="dl-mac-header">
+      <span class="dl-mac-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1 8.3.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.3zM14.3 6.6c.6-.7 1-1.7.9-2.6-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.5.9.1 1.8-.5 2.5-1.2z"/></svg></span>
+      <span class="dl-mac-title">macOS</span>
+      <span class="dl-install-rec">Apple Silicon &amp; Intel</span>
+    </div>
+    <p class="dl-mac-step">Open Terminal and run this one command — it downloads, installs, and bypasses Gatekeeper automatically:</p>
+    <div class="dl-cmd-row">
+      <code class="dl-cmd" id="install-cmd">curl -sL …/install.sh | bash</code>
+      <button class="dl-copy" id="dl-copy-btn" title="Copy to clipboard">
+        <svg id="dl-copy-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <svg id="dl-check-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;color:#0f9d63"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+    </div>
+    <p class="dl-mac-manual">Prefer to install manually? <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">Apple Silicon .dmg</a> · <a href="/downloads/Clusterheart-macOS-Intel.dmg">Intel .dmg</a> — then right-click → Open the first time.</p>
+  </div>
+
+  <!-- Windows + Linux download cards -->
+  <div class="dl-other-grid">
     <a class="dl-card" href="/downloads/Clusterheart-Windows.exe">
       <span class="dl-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.6l7.2-1v6.9H3V5.6zm0 12.8l7.2 1v-6.8H3v5.8zm8-13.9L21 3v8.5h-10V4.5zm0 15l10 1.5V12.5H11v6z"/></svg></span>
       <span class="dl-os">Windows</span>
       <span class="dl-sub">64-bit · <b>.exe</b></span>
+      <span class="dl-hint">More info → Run anyway</span>
     </a>
     <a class="dl-card" href="/downloads/Clusterheart-Linux.AppImage">
       <span class="dl-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-1.7 0-3 1.6-3 3.4 0 1.1.1 2-.5 3-.7 1-2.3 2.4-2.3 4.9 0 .9.3 1.7.7 2.4-.5.4-1 1-1 1.8 0 1.4 1.6 1.8 3.2 2.2 1 .3 1.4.9 2.9.9s1.9-.6 2.9-.9c1.6-.4 3.2-.8 3.2-2.2 0-.8-.5-1.4-1-1.8.4-.7.7-1.5.7-2.4 0-2.5-1.6-3.9-2.3-4.9-.6-1-.5-1.9-.5-3C15 3.6 13.7 2 12 2zm-1.4 3.1c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z"/></svg></span>
       <span class="dl-os">Linux</span>
       <span class="dl-sub">x86-64 · <b>.AppImage</b></span>
+      <span class="dl-hint"><a href="/downloads/">More builds (.deb, ARM) →</a></span>
     </a>
   </div>
-  <p class="dl-note">Builds are unsigned — on macOS <b>right-click → Open</b> the first time; on Windows choose <b>More info → Run anyway</b>. Need Intel Mac, Linux ARM or a <code>.deb</code>? <a href="/downloads/">Browse all builds →</a></p>
+
+  <script>
+  (function(){
+    var cmd=document.getElementById('install-cmd');
+    var btn=document.getElementById('dl-copy-btn');
+    var copyIcon=document.getElementById('dl-copy-icon');
+    var checkIcon=document.getElementById('dl-check-icon');
+    var text='curl -sL '+window.location.origin+'/install.sh | bash';
+    if(cmd) cmd.textContent=text;
+    if(btn) btn.addEventListener('click',function(){
+      navigator.clipboard.writeText(text).then(function(){
+        copyIcon.style.display='none';
+        checkIcon.style.display='';
+        setTimeout(function(){copyIcon.style.display='';checkIcon.style.display='none';},2000);
+      });
+    });
+  })();
+  </script>
 </section>
 
 <section class="lp-wrap">
