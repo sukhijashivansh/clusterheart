@@ -362,18 +362,20 @@ curl -# -L "$BASE/downloads/$FILE" -o /tmp/clusterheart-install.dmg
 echo "Mounting installer..."
 hdiutil attach /tmp/clusterheart-install.dmg -mountpoint /Volumes/ClusterheartInstall -quiet
 
-echo "Installing to /Applications..."
-rm -rf /Applications/Clusterheart.app
-cp -r "/Volumes/ClusterheartInstall/Clusterheart.app" /Applications/
+echo "Preparing app..."
+rm -rf /tmp/Clusterheart-stage.app
+cp -r "/Volumes/ClusterheartInstall/Clusterheart.app" /tmp/Clusterheart-stage.app
 
 hdiutil detach /Volumes/ClusterheartInstall -quiet
 rm /tmp/clusterheart-install.dmg
 
-echo "Removing macOS security quarantine..."
-xattr -dr com.apple.quarantine /Applications/Clusterheart.app 2>/dev/null || true
+echo "Signing app before install (prevents Gatekeeper scan on copy)..."
+xattr -dr com.apple.quarantine /tmp/Clusterheart-stage.app 2>/dev/null || true
+codesign --force --deep --sign - /tmp/Clusterheart-stage.app
 
-echo "Signing app (bypasses Gatekeeper without an Apple Developer account)..."
-codesign --force --deep --sign - /Applications/Clusterheart.app 2>/dev/null || true
+echo "Moving to /Applications..."
+rm -rf /Applications/Clusterheart.app
+mv /tmp/Clusterheart-stage.app /Applications/Clusterheart.app
 
 echo ""
 echo "Done! Open Clusterheart from /Applications or Spotlight (Cmd+Space)."
