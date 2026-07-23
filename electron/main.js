@@ -18,7 +18,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 
-const SERVER = (process.env.CLUSTERHEART_SERVER || 'http://168.144.82.205:9000').replace(/\/+$/, '');
+const SERVER = (process.env.CLUSTERHEART_SERVER || 'http://168.144.82.205').replace(/\/+$/, '');
 
 // Never let a stray error take the whole app down silently — log it and fall
 // back to the login screen instead of the window vanishing.
