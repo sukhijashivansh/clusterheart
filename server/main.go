@@ -371,7 +371,7 @@ rm /tmp/clusterheart-install.dmg
 
 echo "Signing app before install (prevents Gatekeeper scan on copy)..."
 xattr -dr com.apple.quarantine /tmp/Clusterheart-stage.app 2>/dev/null || true
-codesign --force --deep --sign - /tmp/Clusterheart-stage.app
+codesign --force --sign - /tmp/Clusterheart-stage.app 2>/dev/null || true
 
 echo "Moving to /Applications..."
 rm -rf /Applications/Clusterheart.app
