@@ -111,22 +111,18 @@
                 </li>
                 <li class="flex gap-3">
                     <i class="fa-solid fa-check text-black mt-1.5 text-sm"></i>
-                    <span>Runs on your <strong class="text-black">local</strong> kubeconfig; credentials never leave your machine</span>
+                    <span>Runs on your <strong class="text-black">local</strong> kubeconfig, credentials never leave your machine</span>
                 </li>
             </ul>
 
             <div class="flex flex-col sm:flex-row justify-center gap-3">
                 <a href="#download" class="px-7 py-3.5 bg-black text-white font-semibold hover:bg-neutral-800 transition-colors">
-                    Download for Mac / Windows
+                    Download for Mac
                 </a>
                 <a href="#features" class="px-7 py-3.5 bg-white text-black border border-neutral-300 font-semibold hover:border-black transition-colors">
                     See features
                 </a>
             </div>
-
-            <p class="mono text-xs text-neutral-400 mt-8">
-                No agents to deploy · runs against your existing kubeconfig
-            </p>
         </div>
     </section>
 
@@ -286,21 +282,21 @@
                     <h2 class="text-4xl font-bold tracking-tight mb-10">Ask questions from AI</h2>
                     <ul class="space-y-8">
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-robot"></i></div>
+                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center text-lg">🤖</div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Cluster-aware copilot</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Chat that understands your workloads, metrics, events, and cost context.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-glasses"></i></div>
+                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center text-lg">🔍</div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Reads your live cluster</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Runs allowlisted, read-only kubectl (get / describe / logs / top / events…) to answer with real data.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center text-lg">🛡️</div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Safe &amp; flexible</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Every mutating command is refused. Bring your own key: Gemini or OpenRouter, free models work out of the box.</p>
@@ -315,21 +311,21 @@
                     <h2 class="text-4xl font-bold tracking-tight mb-10">Recommend &amp; apply</h2>
                     <ul class="space-y-8">
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center text-lg">📊</div>
                             <div>
                                 <h4 class="font-bold mb-1.5">History, not a guess</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Samples CPU/memory every 30s over a full window (6h default), sizing to p95 + peak so spiky apps aren't shrunk.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-gauge-high"></i></div>
+                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center text-lg">🎯</div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Clear verdicts</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">OK / UPSIZE CPU / UPSIZE MEM / DOWNSIZE, each with a concrete suggested request.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center text-lg">✨</div>
                             <div>
                                 <h4 class="font-bold mb-1.5">One-click apply</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Patch the new resource request straight to the owning workload, right from the UI.</p>
@@ -381,18 +377,12 @@
         <div class="max-w-3xl mx-auto px-6 text-center reveal">
             <h2 class="text-4xl font-bold text-black tracking-tight mb-4">Get Clusterheart</h2>
             <p class="text-lg text-neutral-600 mb-10">Install the desktop app and point it at your kubeconfig. That's the whole setup.</p>
-            <div class="flex flex-col sm:flex-row flex-wrap justify-center gap-3">
+            <div class="flex justify-center">
                 <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg" class="px-6 py-3.5 bg-black text-white font-semibold hover:bg-neutral-800 transition-colors">
                     <i class="fa-brands fa-apple mr-2"></i>macOS (Apple Silicon)
                 </a>
-                <a href="/downloads/Clusterheart-macOS-Intel.dmg" class="px-6 py-3.5 bg-white text-black border border-neutral-300 font-semibold hover:border-black transition-colors">
-                    <i class="fa-brands fa-apple mr-2"></i>macOS (Intel)
-                </a>
-                <a href="/downloads/Clusterheart-Windows.exe" class="px-6 py-3.5 bg-white text-black border border-neutral-300 font-semibold hover:border-black transition-colors">
-                    <i class="fa-brands fa-windows mr-2"></i>Windows
-                </a>
             </div>
-            <p class="mono text-xs text-neutral-400 mt-6">Also available: <a href="/downloads/Clusterheart-Linux.AppImage" class="underline hover:text-black">Linux AppImage</a> · <a href="/downloads/" class="underline hover:text-black">browse all builds</a></p>
+            <p class="mono text-xs text-neutral-400 mt-6">Requires an Apple Silicon Mac (M1 or later)</p>
         </div>
     </section>
 
