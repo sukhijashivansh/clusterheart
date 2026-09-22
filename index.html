@@ -384,6 +384,71 @@
         </div>
     </section>
 
+    <!-- ===== FAQ ===== -->
+    <section id="faq" class="py-24 bg-black text-white">
+        <div class="max-w-4xl mx-auto px-6">
+            <p class="mono text-xs font-medium tracking-[0.2em] text-neutral-500 uppercase mb-4">06 / FAQ</p>
+            <h2 class="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.05] mb-14">Questions, before<br>you ask them.</h2>
+
+            <div class="reveal border-t border-neutral-800">
+                <div class="faq-item border-b border-neutral-800">
+                    <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
+                        <span class="text-lg font-medium">What is Clusterheart?</span>
+                        <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
+                    </button>
+                    <div class="faq-a hidden pb-6 -mt-1">
+                        <p class="text-neutral-400 leading-relaxed">A desktop Kubernetes dashboard. It reads your local kubeconfig and does inspection, cost (FinOps), AI Q&amp;A, and resource right-sizing in one app — with nothing running inside your cluster.</p>
+                    </div>
+                </div>
+                <div class="faq-item border-b border-neutral-800">
+                    <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
+                        <span class="text-lg font-medium">What problem does it actually solve?</span>
+                        <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
+                    </button>
+                    <div class="faq-a hidden pb-6 -mt-1">
+                        <p class="text-neutral-400 leading-relaxed">Clusters quietly overpay: pods request far more CPU and memory than they use, forcing AWS to keep bigger, under-utilized nodes. Clusterheart finds that waste, tells you exactly what's reclaimable, and patches requests so the autoscaler can safely drop to a smaller instance tier.</p>
+                    </div>
+                </div>
+                <div class="faq-item border-b border-neutral-800">
+                    <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
+                        <span class="text-lg font-medium">What do I need installed?</span>
+                        <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
+                    </button>
+                    <div class="faq-a hidden pb-6 -mt-1">
+                        <p class="text-neutral-400 leading-relaxed">Just the desktop app and a working kubeconfig. For cost data, an AWS profile with Cost Explorer read access. No agents, no operators, no Helm charts to deploy.</p>
+                    </div>
+                </div>
+                <div class="faq-item border-b border-neutral-800">
+                    <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
+                        <span class="text-lg font-medium">Does it work on a cluster that already exists?</span>
+                        <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
+                    </button>
+                    <div class="faq-a hidden pb-6 -mt-1">
+                        <p class="text-neutral-400 leading-relaxed">Yes. Point it at any existing kubeconfig context and it reads live state read-only. It never assumes it provisioned anything, so multi-namespace production clusters are fair game.</p>
+                    </div>
+                </div>
+                <div class="faq-item border-b border-neutral-800">
+                    <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
+                        <span class="text-lg font-medium">What will it refuse to do?</span>
+                        <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
+                    </button>
+                    <div class="faq-a hidden pb-6 -mt-1">
+                        <p class="text-neutral-400 leading-relaxed">Every mutating kubectl command from the AI is refused — reads only. The single write path is the explicit right-sizing <strong class="text-white">Patch</strong> button, which only runs when you click it.</p>
+                    </div>
+                </div>
+                <div class="faq-item border-b border-neutral-800">
+                    <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
+                        <span class="text-lg font-medium">Will it right-size my whole cluster at once?</span>
+                        <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
+                    </button>
+                    <div class="faq-a hidden pb-6 -mt-1">
+                        <p class="text-neutral-400 leading-relaxed">No. Right-sizing is per-workload and opt-in. It suggests a request from real p95 + peak usage and only patches the workload you choose, so spiky apps aren't shrunk. In one production cluster this took nodes from t3.large to t3.medium — about a <strong class="text-white">26% cut (~₹40K/mo)</strong> with no performance hit.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- ===== DOWNLOAD CTA ===== -->
     <section id="download" class="py-24 bg-neutral-50 border-t border-neutral-200">
         <div class="max-w-3xl mx-auto px-6 text-center reveal">
@@ -416,6 +481,7 @@
                     <a href="#features" class="text-neutral-500 hover:text-black">Features</a>
                     <a href="#finops" class="text-neutral-500 hover:text-black">FinOps</a>
                     <a href="#ai" class="text-neutral-500 hover:text-black">AI</a>
+                    <a href="#faq" class="text-neutral-500 hover:text-black">FAQ</a>
                     <a href="#download" class="text-neutral-500 hover:text-black">Download</a>
                 </div>
             </div>
@@ -448,6 +514,18 @@
             });
         }, { threshold: 0.12 });
         document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // FAQ accordion
+        document.querySelectorAll('.faq-q').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const answer = btn.nextElementSibling;
+                const icon = btn.querySelector('.faq-icon');
+                const isOpen = !answer.classList.contains('hidden');
+                answer.classList.toggle('hidden');
+                icon.classList.toggle('rotate-45', !isOpen);
+                icon.classList.toggle('text-white', !isOpen);
+            });
+        });
     </script>
 </body>
 </html>
