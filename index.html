@@ -193,7 +193,7 @@
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Health &amp; role:</strong> Ready status and node role (control-plane / worker) at a glance.</span>
+                            <span><strong class="text-black">Health and role:</strong> Ready status and node role (control plane or worker) at a glance.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
@@ -378,7 +378,7 @@
                         <i class="fa-solid fa-lock"></i>
                     </div>
                     <h4 class="text-lg font-bold text-black mb-2">Private by design</h4>
-                    <p class="text-sm text-neutral-600 leading-relaxed">Cluster and AWS calls stay local; the server only gates <em>who's allowed in</em>.</p>
+                    <p class="text-sm text-neutral-600 leading-relaxed">Cluster and AWS calls stay local. The server only gates <em>who's allowed in</em>.</p>
                 </div>
             </div>
         </div>
@@ -399,7 +399,7 @@
                         <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-neutral-400 leading-relaxed">A desktop Kubernetes dashboard. It reads your local kubeconfig and does inspection, cost (FinOps), AI Q&amp;A, and resource right-sizing in one app — with nothing running inside your cluster.</p>
+                        <p class="text-neutral-400 leading-relaxed">It's a desktop app for your Kubernetes cluster. It reads your local kubeconfig and brings inspection, cost tracking (FinOps), an AI copilot, and resource right sizing together in one place. Nothing ever runs inside your cluster.</p>
                     </div>
                 </div>
                 <div class="faq-item border-b border-neutral-800">
@@ -408,7 +408,7 @@
                         <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-neutral-400 leading-relaxed">Clusters quietly overpay: pods request far more CPU and memory than they use, forcing AWS to keep bigger, under-utilized nodes. Clusterheart finds that waste, tells you exactly what's reclaimable, and patches requests so the autoscaler can safely drop to a smaller instance tier.</p>
+                        <p class="text-neutral-400 leading-relaxed">Most clusters quietly overpay. Pods ask for far more CPU and memory than they actually use, so AWS keeps bigger nodes than you need. Clusterheart shows you that waste in plain language, tells you exactly what you can reclaim, and patches the requests so your cluster can safely move down to a smaller, cheaper instance.</p>
                     </div>
                 </div>
                 <div class="faq-item border-b border-neutral-800">
@@ -417,7 +417,7 @@
                         <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-neutral-400 leading-relaxed">Just the desktop app and a working kubeconfig. For cost data, an AWS profile with Cost Explorer read access. No agents, no operators, no Helm charts to deploy.</p>
+                        <p class="text-neutral-400 leading-relaxed">Just the desktop app and a working kubeconfig. If you want cost data, it reuses the AWS profile you already have. There are no agents, operators, or Helm charts to deploy.</p>
                     </div>
                 </div>
                 <div class="faq-item border-b border-neutral-800">
@@ -426,7 +426,7 @@
                         <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-neutral-400 leading-relaxed">Yes. Point it at any existing kubeconfig context and it reads live state read-only. It never assumes it provisioned anything, so multi-namespace production clusters are fair game.</p>
+                        <p class="text-neutral-400 leading-relaxed">Yes. Point it at any kubeconfig context you already have and it reads the live state without changing anything. It never assumes it set the cluster up, so busy production clusters with many namespaces work perfectly.</p>
                     </div>
                 </div>
                 <div class="faq-item border-b border-neutral-800">
@@ -435,16 +435,16 @@
                         <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-neutral-400 leading-relaxed">Every mutating kubectl command from the AI is refused — reads only. The single write path is the explicit right-sizing <strong class="text-white">Patch</strong> button, which only runs when you click it.</p>
+                        <p class="text-neutral-400 leading-relaxed">The AI copilot can only read. Any command that would change your cluster is refused. The one time Clusterheart writes anything is when you press the right sizing <strong class="text-white">Patch</strong> button yourself.</p>
                     </div>
                 </div>
                 <div class="faq-item border-b border-neutral-800">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
-                        <span class="text-lg font-medium">Will it right-size my whole cluster at once?</span>
+                        <span class="text-lg font-medium">Will it resize my whole cluster at once?</span>
                         <i class="faq-icon fa-solid fa-plus text-neutral-500 transition-transform duration-200 shrink-0"></i>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-neutral-400 leading-relaxed">No. Right-sizing is per-workload and opt-in. It analyzes your real usage history and sizes to peak demand so spiky apps aren't throttled, then patches only the workload you choose — letting the cluster pack tighter and drop to a smaller, cheaper instance tier.</p>
+                        <p class="text-neutral-400 leading-relaxed">No. It works on one workload at a time and only when you ask. It looks at your real usage history and sizes to your peak load so busy apps never get starved, then patches only the workload you picked. Over time everything packs tighter and your cluster can run on smaller, cheaper machines.</p>
                     </div>
                 </div>
             </div>
