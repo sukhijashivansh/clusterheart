@@ -524,7 +524,7 @@ email.addEventListener('keydown',function(e){if(e.key==='Enter')pass.focus();});
 
 const signupBody = `{{define "body"}}<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
-<h1>Create your account</h1><p class="sub">Sign up to request access. An admin approves new accounts.</p>
+<h1>Create your account</h1><p class="sub">Sign up to request access.</p>
 <label for="name">Name</label>
 <input id="name" type="text" autocomplete="name" placeholder="Jane Doe">
 <label for="email">Work email</label>
