@@ -43,8 +43,7 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
           ]
         }
       ],
@@ -52,10 +51,6 @@
         {
           "from": "resources/clusterheart-darwin-arm64",
           "to": "clusterheart-darwin-arm64"
-        },
-        {
-          "from": "resources/clusterheart-darwin-amd64",
-          "to": "clusterheart-darwin-amd64"
         }
       ]
     },
