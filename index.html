@@ -46,15 +46,17 @@
     <!-- ===== NAV ===== -->
     <nav class="fixed w-full z-50 bg-white/90 backdrop-blur border-b border-neutral-200" id="navbar">
         <div class="max-w-6xl mx-auto px-6">
-            <div class="flex justify-between items-center h-16">
-                <a href="#top" class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 flex items-center justify-center text-black">
-                        <svg viewBox="0 0 100 100" class="w-7 h-7" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="50" cy="50" r="15"/><circle cx="50" cy="15" r="10.5"/><circle cx="80.3" cy="32.5" r="10.5"/><circle cx="80.3" cy="67.5" r="10.5"/><circle cx="50" cy="85" r="10.5"/><circle cx="19.7" cy="67.5" r="10.5"/><circle cx="19.7" cy="32.5" r="10.5"/>
-                        </svg>
-                    </div>
-                    <span class="font-bold text-lg tracking-tight text-black">Clusterheart</span>
-                </a>
+            <div class="flex items-center h-16">
+                <div class="flex-1 flex items-center">
+                    <a href="#top" class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 flex items-center justify-center text-black">
+                            <svg viewBox="0 0 100 100" class="w-7 h-7" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="50" cy="50" r="15"/><circle cx="50" cy="15" r="10.5"/><circle cx="80.3" cy="32.5" r="10.5"/><circle cx="80.3" cy="67.5" r="10.5"/><circle cx="50" cy="85" r="10.5"/><circle cx="19.7" cy="67.5" r="10.5"/><circle cx="19.7" cy="32.5" r="10.5"/>
+                            </svg>
+                        </div>
+                        <span class="font-bold text-lg tracking-tight text-black">Clusterheart</span>
+                    </a>
+                </div>
 
                 <div class="hidden md:flex items-center gap-8 text-sm">
                     <a href="#features" class="text-neutral-500 hover:text-black font-medium transition-colors">Features</a>
@@ -63,18 +65,20 @@
                     <a href="#why" class="text-neutral-500 hover:text-black font-medium transition-colors">Why us</a>
                 </div>
 
-                <div class="hidden md:flex items-center gap-4">
-                    <a href="/login" class="text-sm font-medium text-neutral-600 hover:text-black transition-colors">Sign in</a>
-                    <a href="https://cal.com/shivansh-sukhija/30min" target="_blank" rel="noopener" class="inline-flex items-center h-9 px-4 text-sm font-medium border border-neutral-300 text-black hover:border-black transition-colors">Let's talk</a>
-                    <a href="/signup" class="inline-flex items-stretch h-9 bg-black hover:bg-neutral-800 text-white text-sm font-medium transition-colors">
-                        <span class="px-5 flex items-center">Sign up</span>
-                        <span class="px-3 flex items-center border-l border-white/25"><i class="fa-solid fa-arrow-right text-xs"></i></span>
-                    </a>
-                </div>
+                <div class="flex-1 flex items-center justify-end">
+                    <div class="hidden md:flex items-center gap-4">
+                        <a href="/login" class="text-sm font-medium text-neutral-600 hover:text-black transition-colors">Sign in</a>
+                        <a href="https://cal.com/shivansh-sukhija/30min" target="_blank" rel="noopener" class="inline-flex items-center h-9 px-4 text-sm font-medium border border-neutral-300 text-black hover:border-black transition-colors">Let's talk</a>
+                        <a href="/signup" class="inline-flex items-stretch h-9 bg-black hover:bg-neutral-800 text-white text-sm font-medium transition-colors">
+                            <span class="px-5 flex items-center">Sign up</span>
+                            <span class="px-3 flex items-center border-l border-white/25"><i class="fa-solid fa-arrow-right text-xs"></i></span>
+                        </a>
+                    </div>
 
-                <button id="mobile-menu-btn" class="md:hidden text-neutral-600 hover:text-black p-2 -mr-2" aria-label="Menu">
-                    <i class="fa-solid fa-bars text-xl"></i>
-                </button>
+                    <button id="mobile-menu-btn" class="md:hidden text-neutral-600 hover:text-black p-2 -mr-2" aria-label="Menu">
+                        <i class="fa-solid fa-bars text-xl"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
