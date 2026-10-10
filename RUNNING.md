@@ -75,6 +75,28 @@ CSS/JS edit doesn't show up until you rebuild).
 > `http://127.0.0.1:8088` in a browser. Good for iterating on the UI without the
 > desktop app.
 
+### Rightsizing history (MongoDB)
+
+The **rightsizing** tab bases its downsize/upsize verdicts on usage history, not
+a single snapshot. The dashboard samples per-workload CPU/memory every 30s into
+MongoDB and, once it has collected the analysis window (**6h by default**),
+recommends a new request sized to the p95 + peak. Start MongoDB with Docker
+before launching:
+
+```bash
+docker compose up -d      # MongoDB on localhost:27017 (persistent volume)
+```
+
+If MongoDB isn't reachable the dashboard still runs — the rightsizing tab just
+reports that history is unavailable. Overrides (env vars on the dashboard
+binary):
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `MONGO_URI` | `mongodb://localhost:27017` | history store |
+| `RIGHTSIZE_MIN_WINDOW` | `6h` | history required before advising (e.g. `1m` to demo) |
+| `SAMPLE_INTERVAL` | `30s` | how often usage is recorded |
+
 ## 3. Start the desktop app
 
 ```bash

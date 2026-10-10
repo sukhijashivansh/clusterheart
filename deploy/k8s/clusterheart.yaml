@@ -1,0 +1,144 @@
+# Clusterheart, deployed inside the cluster it monitors.
+#
+# It reads the cluster through the ServiceAccount + RBAC below (in-cluster
+# config) — no kubeconfig, no credentials leave anywhere. Apply with:
+#
+#   kubectl apply -f deploy/k8s/clusterheart.yaml
+#
+# Then reach the UI (no auth — keep it private / behind a VPN):
+#
+#   kubectl -n clusterheart port-forward svc/clusterheart 8088:80
+#   open http://localhost:8088
+#
+# For a real URL, switch the Service to type: LoadBalancer (see the note there)
+# or put an Ingress in front of it.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clusterheart
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clusterheart
+  namespace: clusterheart
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clusterheart
+rules:
+  # Read the cluster state the dashboard renders.
+  - apiGroups: [""]
+    resources: [pods, nodes, namespaces, services, endpoints, events, configmaps,
+                persistentvolumeclaims, persistentvolumes, replicationcontrollers]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  # Node filesystem stats (ephemeral-storage gauges) come via the kubelet proxy.
+  - apiGroups: [""]
+    resources: [nodes/proxy, nodes/stats]
+    verbs: [get]
+  # Shell / port-forward / load-test features tunnel into pods.
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [create, get]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+  # --- Mutating actions the UI exposes: delete a pod, "cleanse" a namespace,
+  #     and rightsizing/scale patches. Delete this whole block for a strictly
+  #     read-only deployment (those buttons will then return 403). ---
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete, deletecollection]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, replicasets, daemonsets]
+    verbs: [patch, update]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clusterheart
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: clusterheart
+subjects:
+  - kind: ServiceAccount
+    name: clusterheart
+    namespace: clusterheart
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clusterheart
+  namespace: clusterheart
+  labels: { app: clusterheart }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: clusterheart }
+  template:
+    metadata:
+      labels: { app: clusterheart }
+    spec:
+      serviceAccountName: clusterheart
+      containers:
+        - name: clusterheart
+          # Build & push this first: `docker build -t <registry>/clusterheart:latest app/`
+          # then set the image here. `clusterheart:latest` works as-is on a local
+          # cluster (kind/minikube) after loading the image into it.
+          image: clusterheart:latest
+          imagePullPolicy: IfNotPresent
+          args: ["-addr", "0.0.0.0:8088"]
+          ports:
+            - name: http
+              containerPort: 8088
+          env:
+            # Rightsizing history store. Points at the optional Mongo in
+            # deploy/k8s/mongo.yaml; if that isn't deployed the app still runs and
+            # the rightsizing tab just reports history is unavailable.
+            - name: MONGO_URI
+              value: mongodb://clusterheart-mongo:27017
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clusterheart
+  namespace: clusterheart
+  labels: { app: clusterheart }
+spec:
+  # ClusterIP keeps it private — reach it with `kubectl port-forward` (above).
+  # For a cloud LoadBalancer URL, change to:  type: LoadBalancer
+  type: ClusterIP
+  selector: { app: clusterheart }
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

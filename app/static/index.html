@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>clusterheart</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 <header id="topbar">
-  <div class="brand">clusterheart</div>
+  <div class="brand"><span class="pulse"></span>clusterheart</div>
   <div class="ctx-switcher" title="kubeconfig context">
     <span class="k">context</span>
     <select id="ctx-select" class="sel"></select>
@@ -30,10 +33,11 @@
 <div id="layout">
   <nav id="sidebar">
     <a href="#" class="nav" data-view="pods">pods</a>
+    <a href="#" class="nav" data-view="jobs">jobs</a>
     <a href="#" class="nav" data-view="nodes">nodes</a>
-    <a href="#" class="nav" data-view="resources">resources</a>
+    <a href="#" class="nav" data-view="rightsizing">rightsizing</a>
     <a href="#" class="nav" data-view="finops">finops</a>
-    <a href="#" class="nav" data-view="load">load</a>
+    <a href="#" class="nav" data-view="load">traffic</a>
     <a href="#" class="nav" data-view="gemini">AI</a>
 
     <div id="row-help" class="hint">
@@ -54,14 +58,14 @@
       <div id="pf-bar" class="pf-bar hidden"></div>
       <div class="toolbar">
         <span class="filter-label">namespace</span>
-        <select id="ns-select" class="sel"><option value="ALL">ALL</option></select>
+        <div id="ns-ms"></div>
         <input id="search" class="input" placeholder="search pod/namespace/node" />
         <span class="sep"></span>
         <span class="sort-group">
-          <button class="btn sort" data-sort="default">default</button>
-          <button class="btn sort" data-sort="cpu">cpu</button>
-          <button class="btn sort" data-sort="mem">mem</button>
-          <button class="btn sort" data-sort="restarts">restarts</button>
+          <button class="btn sort" data-sort="default">Default</button>
+          <button class="btn sort" data-sort="cpu">CPU</button>
+          <button class="btn sort" data-sort="mem">Memory</button>
+          <button class="btn sort" data-sort="restarts">Restarts</button>
         </span>
         <span class="sep"></span>
         <label class="chk"><input type="checkbox" id="issues-only" /> issues only</label>
@@ -78,7 +82,7 @@
               <th class="c-name">POD</th>
               <th class="c-ready">READY</th>
               <th class="c-status">STATUS</th>
-              <th class="c-rest">↻</th>
+              <th class="c-rest">RESTARTS</th>
               <th class="c-cpu">CPU</th>
               <th class="c-mem">MEM</th>
               <th class="c-age">AGE</th>
@@ -91,6 +95,39 @@
       </div>
     </section>
 
+    <!-- JOBS VIEW -->
+    <section id="view-jobs" class="view">
+      <div class="toolbar">
+        <span class="filter-label">namespace</span>
+        <div id="job-ns-ms"></div>
+        <input id="job-search" class="input" placeholder="search job / namespace" />
+        <span class="sep"></span>
+        <label class="chk"><input type="checkbox" id="job-all-runs" /> all runs</label>
+        <label class="chk"><input type="checkbox" id="job-failed-only" /> failed only</label>
+        <span class="sep"></span>
+        <span id="job-count" class="dim">0 jobs</span>
+      </div>
+
+      <div class="table-wrap">
+        <table id="job-table">
+          <thead>
+            <tr>
+              <th class="c-ns">NAMESPACE</th>
+              <th class="c-name">JOB</th>
+              <th class="c-ready">COMPLETIONS</th>
+              <th class="c-status">STATUS</th>
+              <th class="c-age">DURATION</th>
+              <th class="c-age" title="time budget allocated to the job (activeDeadlineSeconds)">DEADLINE</th>
+              <th class="c-age">AGE</th>
+              <th class="c-node">OWNER</th>
+              <th class="c-msg">MESSAGE</th>
+            </tr>
+          </thead>
+          <tbody id="job-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- NODES VIEW -->
     <section id="view-nodes" class="view">
       <div class="toolbar">
@@ -99,39 +136,36 @@
         <span id="node-summary" class="dim"></span>
       </div>
       <div class="scroll-y">
-        <div id="consolidation-card" class="consolidation-card"></div>
+        <div id="node-stats" class="node-stats"></div>
         <div id="node-list" class="node-list"></div>
-        <div id="top-consumers" class="consumers"></div>
+        <div id="consolidation-card" class="consolidation-card"></div>
       </div>
     </section>
 
-    <!-- RESOURCES VIEW -->
-    <section id="view-resources" class="view">
+    <!-- RIGHTSIZING VIEW (history-backed) -->
+    <section id="view-rightsizing" class="view">
       <div class="toolbar">
         <span class="filter-label">namespace</span>
-        <select id="res-ns-select" class="sel"><option value="ALL">ALL</option></select>
-        <input id="res-search" class="input" placeholder="filter pod / verdict" />
+        <select id="rs-ns-select" class="sel"><option value="ALL">ALL</option></select>
+        <input id="rs-search" class="input" placeholder="filter workload / verdict" />
         <span class="sep"></span>
-        <button class="btn" id="res-sort-name">sort: name</button>
-        <button class="btn" id="res-sort-cpu">cpu%</button>
-        <button class="btn" id="res-sort-mem">mem%</button>
-        <button class="btn" id="res-sort-verdict">verdict</button>
-        <span class="sep"></span>
-        <label class="chk"><input type="checkbox" id="res-issues-only" /> issues only</label>
+        <label class="chk"><input type="checkbox" id="rs-issues-only" /> issues only</label>
+        <span class="grow"></span>
+        <span id="rs-window" class="dim"></span>
       </div>
-      <div id="res-summary" class="panel"></div>
+      <div id="rs-summary" class="panel"></div>
       <div class="table-wrap">
-        <table id="res-table">
+        <table id="rs-table">
           <thead>
             <tr>
-              <th>NAMESPACE</th><th>POD</th>
-              <th class="num">CPU REQ</th><th class="num">CPU LIM</th><th class="num">CPU USE</th><th class="num">CPU%</th>
-              <th class="num">MEM REQ</th><th class="num">MEM LIM</th><th class="num">MEM USE</th><th class="num">MEM%</th>
+              <th>NAMESPACE</th><th>WORKLOAD</th>
+              <th class="num">CPU REQ</th><th class="num">CPU P95</th><th class="num">CPU PEAK</th>
+              <th class="num">MEM REQ</th><th class="num">MEM P95</th><th class="num">MEM PEAK</th>
               <th class="vrd">VERDICT</th>
               <th class="act"></th>
             </tr>
           </thead>
-          <tbody id="res-tbody"></tbody>
+          <tbody id="rs-tbody"></tbody>
         </table>
       </div>
     </section>
@@ -149,69 +183,124 @@
           <div id="cost-chart" class="card-body"></div>
         </div>
 
-        <div class="finops-card">
+        <div class="finops-card collapsible" id="cost-services-card">
           <div class="card-head">
-            <span class="title">cluster right-sizing</span>
+            <span class="card-collapse" role="button" tabindex="0" aria-expanded="true" title="collapse / expand">
+              <span class="chev" aria-hidden="true">▾</span>
+              <span class="title">cost by service</span>
+            </span>
             <span class="grow"></span>
-            <span class="dim">headroom %</span>
-            <input id="headroom" type="number" min="0" max="100" value="20" class="input small" />
-          </div>
-          <div id="finops-projection" class="card-body"></div>
-        </div>
-
-        <div class="finops-card">
-          <div class="card-head">
-            <span class="title">right-sizing candidates</span>
-            <span class="grow"></span>
-            <span class="filter-label">namespace</span>
-            <select id="cand-ns-select" class="sel"><option value="ALL">ALL</option></select>
+            <span id="cost-services-meta" class="dim"></span>
             <span class="sep"></span>
-            <span id="candidates-meta" class="dim"></span>
+            <span class="filter-label">month</span>
+            <select id="cost-month" class="sel"></select>
           </div>
-          <div id="finops-candidates" class="card-body"></div>
+          <div id="cost-services" class="card-body"></div>
         </div>
       </div>
     </section>
 
     <!-- LOAD VIEW (JMeter) -->
     <section id="view-load" class="view">
+      <div class="scroll-y">
       <div class="toolbar">
-        <span class="title">load test</span>
+        <span class="title">traffic</span>
         <span class="sep"></span>
-        <span class="dim">JMeter · load runs from this machine — target a public URL or a port-forwarded service</span>
+        <span class="dim">port-forward to a Deployment pod, then measure its latency or drive load at it — no ingress needed</span>
       </div>
       <div class="lt-form">
+        <div class="lt-row tf-mode-row">
+          <div class="sort-group tf-mode" role="tablist" aria-label="traffic mode">
+            <button class="btn sort active" data-mode="latency" role="tab" aria-selected="true">Latency</button>
+            <button class="btn sort" data-mode="load" role="tab" aria-selected="false">Load test</button>
+          </div>
+          <span class="grow"></span>
+          <span id="tf-target-hint" class="dim tf-target-hint"></span>
+        </div>
+
         <div class="lt-row">
           <label class="lt-field grow">
-            <span>target URL</span>
-            <input id="lt-url" class="input" placeholder="http://127.0.0.1:8080/health" />
+            <span>namespace</span>
+            <select id="pb-ns" class="sel"></select>
           </label>
-          <label class="lt-field">
-            <span>method</span>
-            <select id="lt-method" class="sel">
-              <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>HEAD</option>
-            </select>
+          <label class="lt-field grow">
+            <span>pod</span>
+            <select id="pb-pod" class="sel"></select>
+          </label>
+          <label class="lt-field grow">
+            <span>endpoint <span class="dim" style="text-transform:none;letter-spacing:0">(auto-discovered)</span></span>
+            <select id="pb-endpoint" class="sel"></select>
           </label>
         </div>
+
         <div class="lt-row">
           <label class="lt-field">
-            <span>threads (users)</span>
-            <input id="lt-threads" class="input small" type="number" min="1" max="500" value="20" />
+            <span>scheme</span>
+            <select id="pb-scheme" class="sel">
+              <option value="http">http</option><option value="https">https</option>
+            </select>
           </label>
           <label class="lt-field">
-            <span>ramp-up (s)</span>
-            <input id="lt-ramp" class="input small" type="number" min="0" max="300" value="5" />
+            <span>pod port</span>
+            <input id="pb-port" class="input small" type="number" min="1" max="65535" placeholder="8080" />
           </label>
+          <label class="lt-field grow">
+            <span>path</span>
+            <input id="pb-path" class="input" placeholder="/healthz" value="/" />
+          </label>
+        </div>
+
+        <!-- latency mode -->
+        <div class="lt-row tf-latency">
           <label class="lt-field">
-            <span>duration (s)</span>
-            <input id="lt-duration" class="input small" type="number" min="1" max="300" value="30" />
+            <span>samples</span>
+            <input id="pb-samples" class="input small" type="number" min="1" max="20" value="5" />
           </label>
           <span class="grow"></span>
-          <button id="lt-run" class="btn primary">Run test</button>
+          <button id="pb-run" class="btn primary">Measure</button>
         </div>
-        <div id="lt-status" class="dim"></div>
+
+        <!-- load-test mode -->
+        <div class="tf-load" hidden>
+          <div class="lt-row">
+            <label class="lt-field">
+              <span>method</span>
+              <select id="lt-method" class="sel">
+                <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>HEAD</option>
+              </select>
+            </label>
+            <label class="lt-field">
+              <span>threads (users)</span>
+              <input id="lt-threads" class="input small" type="number" min="1" max="500" value="20" />
+            </label>
+            <label class="lt-field">
+              <span>ramp-up (s)</span>
+              <input id="lt-ramp" class="input small" type="number" min="0" max="300" value="5" />
+            </label>
+            <label class="lt-field">
+              <span>duration (s)</span>
+              <input id="lt-duration" class="input small" type="number" min="1" max="300" value="30" />
+            </label>
+            <span class="grow"></span>
+            <button id="lt-run" class="btn primary">Run test</button>
+          </div>
+          <div class="lt-row" id="lt-body-row" style="display:none">
+            <label class="lt-field grow">
+              <span>request body</span>
+              <textarea id="lt-body" class="input lt-body-input" placeholder='{"key": "value"}' rows="3"></textarea>
+            </label>
+            <label class="lt-field">
+              <span>content-type</span>
+              <input id="lt-content-type" class="input" value="application/json" style="width:160px" />
+            </label>
+          </div>
+        </div>
+
+        <div id="tf-status" class="dim"></div>
       </div>
-      <div id="lt-results"></div>
+      <div id="pb-results"></div>
+      <div id="lt-results" hidden></div>
+      </div>
     </section>
 
     <!-- GEMINI VIEW -->
@@ -221,7 +310,6 @@
         <span class="sep"></span>
         <span class="filter-label">provider</span>
         <select id="gemini-provider" class="sel">
-          <option value="gemini">gemini</option>
           <option value="openrouter">openrouter</option>
         </select>
         <span class="sep"></span>
@@ -230,7 +318,7 @@
         <span id="gemini-key-status" class="dim"></span>
         <span class="sep"></span>
         <span class="filter-label">model</span>
-        <input id="gemini-model" class="input model-input" type="text" placeholder="meta-llama/llama-3.3-70b-instruct:free" autocomplete="off" spellcheck="false" title="OpenRouter model id — blank uses a free model (no credits needed)" />
+        <input id="gemini-model" class="input model-input" type="text" placeholder="blank = auto-pick a free model" autocomplete="off" spellcheck="false" title="OpenRouter model id — leave blank to auto-pick from free models (no credits needed), or paste an id like anthropic/claude-sonnet-4.5" />
         <span class="sep"></span>
         <span class="filter-label">max tokens</span>
         <input id="gemini-maxtokens" class="input small" type="number" min="1" step="50" placeholder="1500" title="cap reply length — lower it if OpenRouter says you can't afford the tokens" />

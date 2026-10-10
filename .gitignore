@@ -24,3 +24,5 @@ node_modules/
 
 # --- served installers (built by CI, scp-ed to the server) ---
 server/downloads/
+.vercel
+.env*

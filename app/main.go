@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"embed"
 	"encoding/csv"
 	"encoding/json"
@@ -16,7 +17,7 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/url"
+	"net/http/httptrace"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,9 +28,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -71,6 +74,27 @@ type Pod struct {
 	OwnerName string `json:"ownerName"`
 }
 
+// Job mirrors a row of `kubectl get jobs` plus enough detail for the UI to
+// colour the status and show why a job failed. Completions is the "1/1"
+// succeeded/desired string; Duration is start→completion (or start→now while
+// still running).
+type Job struct {
+	Namespace   string `json:"namespace"`
+	Name        string `json:"name"`
+	Completions string `json:"completions"`
+	Succeeded   int32  `json:"succeeded"`
+	Failed      int32  `json:"failed"`
+	Active      int32  `json:"active"`
+	Status      string `json:"status"`
+	Duration    string `json:"duration"`
+	Age         string `json:"age"`
+	Created     int64  `json:"created"`  // unix seconds; used to pick the latest run per job
+	Deadline    int64  `json:"deadline"` // activeDeadlineSeconds — time budget allocated, 0 if unset
+	OwnerKind   string `json:"ownerKind"`
+	OwnerName   string `json:"ownerName"`
+	Message     string `json:"message"`
+}
+
 type Stats struct {
 	TotalCpuUsage int64 `json:"totalCpuUsage"`
 	TotalMemUsage int64 `json:"totalMemUsage"`
@@ -101,6 +125,51 @@ type CostPoint struct {
 	USD  float64 `json:"usd"`
 }
 
+type ServiceCost struct {
+	Service string  `json:"service"`
+	USD     float64 `json:"usd"`
+}
+
+// HPAMetric is one metric an HPA scales on (cpu/memory/…), with its current
+// reading and target rendered the way `kubectl get hpa` shows them (e.g.
+// "31%" / "80%"). CurrentPct/TargetPct are the numeric utilisation percentages
+// for the frontend to colour a gauge; -1 means "not a utilisation metric" or
+// "no reading yet" (a freshly-scaled pod hasn't reported metrics).
+type HPAMetric struct {
+	Name       string `json:"name"`
+	Current    string `json:"current"`
+	Target     string `json:"target"`
+	CurrentPct int32  `json:"currentPct"`
+	TargetPct  int32  `json:"targetPct"`
+}
+
+// HPACond mirrors an HPA status condition (AbleToScale/ScalingActive/
+// ScalingLimited) — the "why isn't it scaling" story lives here.
+type HPACond struct {
+	Type    string `json:"type"`
+	Status  string `json:"status"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+}
+
+// HPA is a HorizontalPodAutoscaler flattened for the UI: the scale target, the
+// min/max/current/desired replica counts, the per-metric current-vs-target
+// readings, and the status conditions that explain scaling decisions.
+type HPA struct {
+	Namespace       string      `json:"namespace"`
+	Name            string      `json:"name"`
+	RefKind         string      `json:"refKind"`
+	RefName         string      `json:"refName"`
+	MinReplicas     int32       `json:"minReplicas"`
+	MaxReplicas     int32       `json:"maxReplicas"`
+	CurrentReplicas int32       `json:"currentReplicas"`
+	DesiredReplicas int32       `json:"desiredReplicas"`
+	Metrics         []HPAMetric `json:"metrics"`
+	Conditions      []HPACond   `json:"conditions"`
+	Age             string      `json:"age"`
+	LastScale       string      `json:"lastScale"`
+}
+
 type server struct {
 	// clientsMu guards k8s/metrics/restCfg/currentCtx so the context-switch
 	// endpoint can atomically swap them while handlers are reading.
@@ -113,6 +182,9 @@ type server struct {
 
 	pfMu sync.Mutex
 	pfs  map[string]*pfEntry
+
+	// hist is the MongoDB-backed usage sampler; nil when Mongo is unreachable.
+	hist *history
 }
 
 // clients returns a consistent snapshot of the current kube/metrics clients
@@ -174,10 +246,30 @@ func main() {
 		configPath = os.Getenv("KUBECONFIG")
 	}
 
-	cfg, err := clientcmd.BuildConfigFromFlags("", configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "kubeconfig error: %v\n", err)
-		os.Exit(1)
+	// Two ways to reach a cluster:
+	//   - Local/desktop: read a kubeconfig file (the laptop's ~/.kube/config).
+	//   - In-cluster (the hosted web deploy): no kubeconfig file exists, so fall
+	//     back to the pod's ServiceAccount via rest.InClusterConfig(). We clear
+	//     configPath in that case so the context-switch / AWS-profile code paths
+	//     (which read a kubeconfig file) degrade gracefully instead of erroring.
+	var (
+		cfg *rest.Config
+		err error
+	)
+	if configPath != "" && fileExists(configPath) {
+		cfg, err = clientcmd.BuildConfigFromFlags("", configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "kubeconfig error: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		cfg, err = rest.InClusterConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "no kubeconfig at %q and not running in a cluster: %v\n", configPath, err)
+			os.Exit(1)
+		}
+		configPath = "" // no file to read contexts / AWS profile from
+		fmt.Println("using in-cluster ServiceAccount config")
 	}
 	k8sClient, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
@@ -206,16 +298,22 @@ func main() {
 		currentCtx: currentCtx,
 		pfs:        map[string]*pfEntry{},
 	}
+	s.initHistory()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/pods", s.handlePods)
+	mux.HandleFunc("/api/jobs", s.handleJobs)
 	mux.HandleFunc("/api/nodes", s.handleNodes)
+	mux.HandleFunc("/api/hpas", s.handleHPAs)
+	mux.HandleFunc("/api/rightsizing", s.handleRightsizing)
 	mux.HandleFunc("/api/stats", s.handleStats)
 	mux.HandleFunc("/api/namespaces", s.handleNamespaces)
 	mux.HandleFunc("/api/pod/", s.handlePod)
 	mux.HandleFunc("/api/namespace/", s.handleNamespaceOps)
 	mux.HandleFunc("/api/costs", s.handleCosts)
+	mux.HandleFunc("/api/costs/services", s.handleCostsByService)
 	mux.HandleFunc("/api/loadtest", s.handleLoadTest)
+	mux.HandleFunc("/api/probe", s.handleProbe)
 	mux.HandleFunc("/api/gemini", s.handleGemini)
 	mux.HandleFunc("/api/shell", s.handleShell)
 	mux.HandleFunc("/api/portforward", s.handlePortForwardCollection)
@@ -241,7 +339,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "static fs error: %v\n", err)
 			os.Exit(1)
 		}
-		mux.Handle("/", http.FileServer(http.FS(sub)))
+		// Embedded files have a zero modtime, so http.FileServer emits no
+		// Last-Modified/ETag and the Electron/Chromium renderer caches them
+		// indefinitely — a rebuilt binary would still show the old UI. Force
+		// no-cache so a relaunch always serves the current frontend.
+		mux.Handle("/", noCache(http.FileServer(http.FS(sub))))
 	}
 
 	fmt.Printf("clusterheart listening on http://%s\n", *addr)
@@ -249,6 +351,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // noCache disables browser caching so live-edited frontend files always reload.
@@ -480,6 +587,112 @@ func isBarePhaseMsg(m string) bool {
 	return false
 }
 
+// --- /api/jobs ---
+// Lists Jobs across all namespaces (the batch/v1 objects behind
+// `kubectl get jobs`), including completed ones that linger until their owning
+// CronJob / TTL garbage-collects them. This is the history the pods view can't
+// show once the job's pods are gone.
+func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	jList, err := s.k8s.BatchV1().Jobs("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+
+	out := make([]Job, 0, len(jList.Items))
+	for _, j := range jList.Items {
+		desired := int32(1)
+		if j.Spec.Completions != nil {
+			desired = *j.Spec.Completions
+		}
+		completions := fmt.Sprintf("%d/%d", j.Status.Succeeded, desired)
+
+		// Derive a single status from the job conditions, falling back to the
+		// active/succeeded/failed counters when no terminal condition is set yet.
+		status, msg := "", ""
+		for _, c := range j.Status.Conditions {
+			if c.Status != corev1.ConditionTrue {
+				continue
+			}
+			switch c.Type {
+			case batchv1.JobComplete:
+				status = "Complete"
+			case batchv1.JobFailed:
+				status = "Failed"
+			}
+			if status != "" {
+				if c.Message != "" {
+					msg = c.Reason + ": " + firstLine(c.Message)
+				} else if c.Reason != "" {
+					msg = c.Reason
+				}
+				break
+			}
+		}
+		if status == "" {
+			switch {
+			case j.Status.Active > 0:
+				status = "Running"
+			case j.Status.Succeeded >= desired:
+				status = "Complete"
+			default:
+				status = "Pending"
+			}
+		}
+
+		// Duration = start → completion, or start → now while still running.
+		duration := "-"
+		if j.Status.StartTime != nil {
+			end := time.Now()
+			if j.Status.CompletionTime != nil {
+				end = j.Status.CompletionTime.Time
+			}
+			duration = shortAge(end.Sub(j.Status.StartTime.Time))
+		}
+
+		var ownerKind, ownerName string
+		for _, ref := range j.OwnerReferences {
+			if ref.Controller != nil && *ref.Controller {
+				ownerKind, ownerName = ref.Kind, ref.Name
+				break
+			}
+		}
+
+		var deadline int64
+		if j.Spec.ActiveDeadlineSeconds != nil {
+			deadline = *j.Spec.ActiveDeadlineSeconds
+		}
+
+		out = append(out, Job{
+			Namespace:   j.Namespace,
+			Name:        j.Name,
+			Completions: completions,
+			Succeeded:   j.Status.Succeeded,
+			Failed:      j.Status.Failed,
+			Active:      j.Status.Active,
+			Status:      status,
+			Duration:    duration,
+			Age:         shortAge(time.Since(j.CreationTimestamp.Time)),
+			Created:     j.CreationTimestamp.Unix(),
+			Deadline:    deadline,
+			OwnerKind:   ownerKind,
+			OwnerName:   ownerName,
+			Message:     msg,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Namespace != out[j].Namespace {
+			return out[i].Namespace < out[j].Namespace
+		}
+		return out[i].Name < out[j].Name
+	})
+	writeJSON(w, 200, out)
+}
+
 // --- /api/nodes ---
 func (s *server) handleNodes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -564,6 +777,107 @@ func (s *server) handleNodes(w http.ResponseWriter, r *http.Request) {
 		out = append(out, ni)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	writeJSON(w, 200, out)
+}
+
+// --- /api/hpas ---
+// Lists HorizontalPodAutoscalers, optionally scoped to ?ns=<namespace>
+// (ns=ALL or empty = all namespaces). Flattens each HPA's spec targets against
+// its live status readings so the UI can show "cpu: 31%/80%" the way kubectl
+// does, plus the status conditions that explain why it is (or isn't) scaling.
+func (s *server) handleHPAs(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	ns := r.URL.Query().Get("ns")
+	if ns == "ALL" {
+		ns = ""
+	}
+	list, err := s.k8s.AutoscalingV2().HorizontalPodAutoscalers(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+
+	out := make([]HPA, 0, len(list.Items))
+	for _, h := range list.Items {
+		hi := HPA{
+			Namespace:       h.Namespace,
+			Name:            h.Name,
+			RefKind:         h.Spec.ScaleTargetRef.Kind,
+			RefName:         h.Spec.ScaleTargetRef.Name,
+			MaxReplicas:     h.Spec.MaxReplicas,
+			CurrentReplicas: h.Status.CurrentReplicas,
+			DesiredReplicas: h.Status.DesiredReplicas,
+			Age:             shortAge(time.Since(h.CreationTimestamp.Time)),
+		}
+		if h.Spec.MinReplicas != nil {
+			hi.MinReplicas = *h.Spec.MinReplicas
+		}
+		if h.Status.LastScaleTime != nil {
+			hi.LastScale = shortAge(time.Since(h.Status.LastScaleTime.Time))
+		}
+
+		// Index the live readings by resource name so we can line each spec
+		// target up with its current value.
+		curPct := map[corev1.ResourceName]int32{}
+		curRaw := map[corev1.ResourceName]string{}
+		for _, cm := range h.Status.CurrentMetrics {
+			if cm.Resource == nil {
+				continue
+			}
+			if v := cm.Resource.Current.AverageUtilization; v != nil {
+				curPct[cm.Resource.Name] = *v
+			}
+			if v := cm.Resource.Current.AverageValue; v != nil && !v.IsZero() {
+				curRaw[cm.Resource.Name] = v.String()
+			}
+		}
+
+		for _, m := range h.Spec.Metrics {
+			// Only resource metrics (cpu/memory) carry a utilisation %; surface
+			// anything else by its type name so the row still shows up.
+			if m.Resource == nil {
+				hi.Metrics = append(hi.Metrics, HPAMetric{
+					Name: strings.ToLower(string(m.Type)), CurrentPct: -1, TargetPct: -1,
+				})
+				continue
+			}
+			met := HPAMetric{Name: string(m.Resource.Name), CurrentPct: -1, TargetPct: -1}
+			if v := m.Resource.Target.AverageUtilization; v != nil {
+				met.TargetPct = *v
+				met.Target = fmt.Sprintf("%d%%", *v)
+			} else if v := m.Resource.Target.AverageValue; v != nil && !v.IsZero() {
+				met.Target = v.String()
+			}
+			if p, ok := curPct[m.Resource.Name]; ok {
+				met.CurrentPct = p
+				met.Current = fmt.Sprintf("%d%%", p)
+			} else if raw, ok := curRaw[m.Resource.Name]; ok {
+				met.Current = raw
+			} else {
+				met.Current = "—"
+			}
+			hi.Metrics = append(hi.Metrics, met)
+		}
+
+		for _, c := range h.Status.Conditions {
+			hi.Conditions = append(hi.Conditions, HPACond{
+				Type:    string(c.Type),
+				Status:  string(c.Status),
+				Reason:  c.Reason,
+				Message: c.Message,
+			})
+		}
+		out = append(out, hi)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Namespace != out[j].Namespace {
+			return out[i].Namespace < out[j].Namespace
+		}
+		return out[i].Name < out[j].Name
+	})
 	writeJSON(w, 200, out)
 }
 
@@ -676,6 +990,15 @@ func (s *server) handlePod(w http.ResponseWriter, r *http.Request) {
 
 	case "owner":
 		s.handlePodOwner(w, r.WithContext(ctx), ns, name)
+		return
+
+	case "endpoints":
+		eps, err := s.discoverEndpoints(ctx, ns, name)
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"endpoints": eps})
 		return
 
 	case "diagnose":
@@ -871,6 +1194,105 @@ func (s *server) handleCosts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, points)
 }
 
+// friendlyAwsErr maps the raw aws CLI failure to an actionable message.
+func friendlyAwsErr(stderr string, err error) string {
+	msg := strings.TrimSpace(stderr)
+	if msg == "" {
+		msg = err.Error()
+	}
+	if strings.Contains(msg, "executable file not found") {
+		return "aws CLI not found on PATH"
+	}
+	if strings.Contains(msg, "NoCredentials") || strings.Contains(msg, "Unable to locate credentials") {
+		return "no AWS credentials for the active cluster's profile — run `aws sso login` (or `aws configure`) for it, then retry"
+	}
+	return msg
+}
+
+// costMonthWindow returns the [start, end) date range for a "YYYY-MM" month.
+// A blank/invalid month means the current month. The current (ongoing) month is
+// capped at today so we ask Cost Explorer for month-to-date, not the future.
+func costMonthWindow(month string) (time.Time, time.Time) {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	var start time.Time
+	if t, err := time.Parse("2006-01", month); err == nil {
+		start = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	}
+	end := start.AddDate(0, 1, 0) // first of next month, exclusive
+	if end.After(today) {
+		end = today // ongoing month → month-to-date
+	}
+	if !end.After(start) {
+		end = start.AddDate(0, 0, 1) // month just started; give CE a 1-day window
+	}
+	return start, end
+}
+
+// --- /api/costs/services?month=YYYY-MM  (AWS Cost Explorer, grouped by SERVICE)
+// The spend for one month broken down per AWS service (EKS, EC2, EBS, DynamoDB,
+// …) so the FinOps view can show where the money actually goes.
+func (s *server) handleCostsByService(w http.ResponseWriter, r *http.Request) {
+	start, end := costMonthWindow(r.URL.Query().Get("month"))
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "aws", "ce", "get-cost-and-usage",
+		"--time-period", fmt.Sprintf("Start=%s,End=%s",
+			start.Format("2006-01-02"), end.Format("2006-01-02")),
+		"--granularity", "MONTHLY",
+		"--metrics", "UnblendedCost",
+		"--group-by", "Type=DIMENSION,Key=SERVICE",
+		"--output", "json")
+	cmd.Env = append(os.Environ(), s.awsEnvFromKubeContext()...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		writeErr(w, 500, friendlyAwsErr(stderr.String(), err))
+		return
+	}
+	var resp struct {
+		ResultsByTime []struct {
+			Groups []struct {
+				Keys    []string `json:"Keys"`
+				Metrics struct {
+					UnblendedCost struct {
+						Amount string `json:"Amount"`
+					} `json:"UnblendedCost"`
+				} `json:"Metrics"`
+			} `json:"Groups"`
+		} `json:"ResultsByTime"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+		writeErr(w, 500, "parse error: "+err.Error())
+		return
+	}
+	// Sum each service across the (up to two) monthly buckets in the window.
+	totals := map[string]float64{}
+	for _, rt := range resp.ResultsByTime {
+		for _, g := range rt.Groups {
+			name := "unknown"
+			if len(g.Keys) > 0 && g.Keys[0] != "" {
+				name = g.Keys[0]
+			}
+			amt, _ := strconv.ParseFloat(g.Metrics.UnblendedCost.Amount, 64)
+			totals[name] += amt
+		}
+	}
+	out := make([]ServiceCost, 0, len(totals))
+	for name, usd := range totals {
+		if usd <= 0.005 {
+			continue // drop rounding-dust / $0 services to keep the list tight
+		}
+		out = append(out, ServiceCost{Service: name, USD: usd})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].USD > out[j].USD })
+	writeJSON(w, 200, out)
+}
+
 // --- /api/loadtest  (JMeter, non-GUI, local CLI) -------------------------
 // POST {url, method, threads, rampSeconds, durationSeconds}. Generates a
 // minimal JMeter test plan, runs `jmeter -n`, parses the JTL results, and
@@ -883,25 +1305,42 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		URL             string `json:"url"`
+		Namespace       string `json:"namespace"`
+		Pod             string `json:"pod"`
+		Port            int    `json:"port"`
+		Scheme          string `json:"scheme"`
+		Path            string `json:"path"`
 		Method          string `json:"method"`
 		Threads         int    `json:"threads"`
 		RampSeconds     int    `json:"rampSeconds"`
 		DurationSeconds int    `json:"durationSeconds"`
+		Body            string `json:"body"`
+		ContentType     string `json:"contentType"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "bad body: "+err.Error())
 		return
 	}
-
-	target, err := url.Parse(strings.TrimSpace(body.URL))
-	if err != nil || target.Scheme == "" || target.Host == "" {
-		writeErr(w, 400, "enter a full target URL, e.g. http://127.0.0.1:8080/health")
+	ns := strings.TrimSpace(body.Namespace)
+	pod := strings.TrimSpace(body.Pod)
+	if ns == "" || pod == "" {
+		writeErr(w, 400, "namespace and pod required")
 		return
 	}
-	if target.Scheme != "http" && target.Scheme != "https" {
-		writeErr(w, 400, "only http/https targets are supported")
+	if body.Port <= 0 || body.Port > 65535 {
+		writeErr(w, 400, "a valid pod port is required")
 		return
+	}
+	scheme := strings.ToLower(strings.TrimSpace(body.Scheme))
+	if scheme != "https" {
+		scheme = "http"
+	}
+	reqPath := strings.TrimSpace(body.Path)
+	if reqPath == "" {
+		reqPath = "/"
+	}
+	if !strings.HasPrefix(reqPath, "/") {
+		reqPath = "/" + reqPath
 	}
 	method := strings.ToUpper(strings.TrimSpace(body.Method))
 	if method == "" {
@@ -916,18 +1355,55 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "JMeter not found on PATH — install it with `brew install jmeter` (needs Java, which is present), then retry")
 		return
 	}
-
-	scheme := target.Scheme
-	host := target.Hostname()
-	port := target.Port()
-	if port == "" {
-		if scheme == "https" {
-			port = "443"
-		} else {
-			port = "80"
-		}
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		writeErr(w, 400, "kubectl not found on PATH — needed to reach the pod")
+		return
 	}
-	path := target.RequestURI() // path + query
+
+	// The load run and its port-forward share one deadline: the test duration
+	// plus generous headroom for JVM startup and end-of-test flushing.
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(duration+90)*time.Second)
+	defer cancel()
+
+	// Ephemeral port-forward to the pod; JMeter hammers the local relay, torn
+	// down as soon as the run finishes. (Load hits this one pod through the
+	// tunnel, not the Service — it measures single-pod capacity.)
+	local, err := freePort()
+	if err != nil {
+		writeErr(w, 500, "alloc local port: "+err.Error())
+		return
+	}
+	pf := exec.CommandContext(ctx, "kubectl", "port-forward",
+		"--address", "127.0.0.1",
+		"-n", ns, pod,
+		fmt.Sprintf("%d:%d", local, body.Port))
+	if kc := s.kubeconfigPath(); kc != "" {
+		pf.Env = append(os.Environ(), "KUBECONFIG="+kc)
+	}
+	var pfErr bytes.Buffer
+	pf.Stderr = &pfErr
+	if err := pf.Start(); err != nil {
+		writeErr(w, 500, "port-forward: "+err.Error())
+		return
+	}
+	defer func() {
+		if pf.Process != nil {
+			_ = pf.Process.Kill()
+		}
+		_ = pf.Wait()
+	}()
+	if err := waitLocalPort(ctx, local, 10*time.Second); err != nil {
+		msg := strings.TrimSpace(pfErr.String())
+		if msg == "" {
+			msg = "port-forward did not become ready"
+		}
+		writeErr(w, 502, "cannot reach pod: "+lastLine(msg))
+		return
+	}
+
+	host := "127.0.0.1"
+	port := strconv.Itoa(local)
+	path := reqPath
 
 	dir, err := os.MkdirTemp("", "clusterheart-jmeter-")
 	if err != nil {
@@ -935,6 +1411,40 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.RemoveAll(dir)
+
+	// Build the optional post-body and header-manager XML fragments.
+	postBody := strings.TrimSpace(body.Body)
+	contentType := strings.TrimSpace(body.ContentType)
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	hasBody := postBody != "" && (method == "POST" || method == "PUT" || method == "PATCH")
+
+	bodySection := `<elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments"/>
+          </elementProp>`
+	headerSection := ""
+	if hasBody {
+		bodySection = `<boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">` + xmlEscape(postBody) + `</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>`
+		headerSection = `<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Headers" enabled="true">
+          <collectionProp name="HeaderManager.headers">
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Content-Type</stringProp>
+              <stringProp name="Header.value">` + xmlEscape(contentType) + `</stringProp>
+            </elementProp>
+          </collectionProp>
+        </HeaderManager>
+        <hashTree/>`
+	}
 
 	plan := jmxTemplate
 	repl := strings.NewReplacer(
@@ -946,6 +1456,8 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 		"{{PORT}}", port,
 		"{{PATH}}", xmlEscape(path),
 		"{{METHOD}}", method,
+		"{{BODY_SECTION}}", bodySection,
+		"{{HEADER_SECTION}}", headerSection,
 	)
 	plan = repl.Replace(plan)
 
@@ -956,10 +1468,6 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Give JMeter the test duration plus generous headroom for JVM startup and
-	// end-of-test flushing before we cut it off.
-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(duration+60)*time.Second)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, "jmeter", "-n",
 		"-t", jmxPath,
 		"-l", jtlPath,
@@ -984,7 +1492,7 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "parse results: "+err.Error())
 		return
 	}
-	res.Target = method + " " + target.String()
+	res.Target = fmt.Sprintf("%s %s://%s.%s:%d%s", method, scheme, pod, ns, body.Port, path)
 	res.Threads = threads
 	writeJSON(w, 200, res)
 }
@@ -1015,6 +1523,450 @@ func lastLine(s string) string {
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
+// Endpoint is one HTTP(S) address the probe UI can pre-fill — discovered from
+// a pod's spec so the user doesn't have to know the port/path by heart.
+type Endpoint struct {
+	Scheme    string `json:"scheme"`
+	Port      int    `json:"port"`
+	Path      string `json:"path"`
+	Label     string `json:"label"`  // human hint, e.g. "readiness probe", "metrics"
+	Source    string `json:"source"` // where it came from
+	Container string `json:"container,omitempty"`
+}
+
+// discoverEndpoints derives the HTTP endpoints a pod plausibly serves, ordered
+// most-useful first: health-check probes (authoritative paths), Prometheus
+// scrape annotations, raw container ports, then Services that select the pod.
+// Duplicates (same scheme+port+path) are collapsed.
+func (s *server) discoverEndpoints(ctx context.Context, ns, name string) ([]Endpoint, error) {
+	k8s, _, _ := s.clients()
+	pod, err := k8s.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var out []Endpoint
+	seen := map[string]bool{}
+	add := func(e Endpoint) {
+		if e.Port <= 0 || e.Port > 65535 {
+			return
+		}
+		if e.Path == "" {
+			e.Path = "/"
+		}
+		if e.Scheme == "" {
+			e.Scheme = "http"
+		}
+		key := fmt.Sprintf("%s|%d|%s", e.Scheme, e.Port, e.Path)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, e)
+	}
+
+	// Named container ports let us resolve probe/service targetPorts given by
+	// name rather than number.
+	portByName := map[string]int32{}
+	for _, c := range pod.Spec.Containers {
+		for _, p := range c.Ports {
+			if p.Name != "" {
+				portByName[p.Name] = p.ContainerPort
+			}
+		}
+	}
+	resolve := func(p intstr.IntOrString) int {
+		if p.Type == intstr.String {
+			if v, ok := portByName[p.StrVal]; ok {
+				return int(v)
+			}
+			return 0
+		}
+		return p.IntValue()
+	}
+
+	// 1. HTTP health-check probes — the paths the app definitely answers.
+	for _, c := range pod.Spec.Containers {
+		probes := []struct {
+			kind  string
+			probe *corev1.Probe
+		}{
+			{"readiness", c.ReadinessProbe},
+			{"liveness", c.LivenessProbe},
+			{"startup", c.StartupProbe},
+		}
+		for _, pr := range probes {
+			if pr.probe == nil || pr.probe.HTTPGet == nil {
+				continue
+			}
+			h := pr.probe.HTTPGet
+			add(Endpoint{
+				Scheme:    strings.ToLower(string(h.Scheme)),
+				Port:      resolve(h.Port),
+				Path:      h.Path,
+				Source:    pr.kind + "Probe",
+				Container: c.Name,
+				Label:     pr.kind + " probe",
+			})
+		}
+	}
+
+	// 2. Prometheus scrape annotations — the metrics endpoint.
+	if ann := pod.Annotations; ann != nil {
+		if p := ann["prometheus.io/port"]; p != "" {
+			port, _ := strconv.Atoi(p)
+			path := ann["prometheus.io/path"]
+			if path == "" {
+				path = "/metrics"
+			}
+			scheme := ann["prometheus.io/scheme"]
+			add(Endpoint{Scheme: scheme, Port: port, Path: path, Source: "prometheus", Label: "metrics"})
+		}
+	}
+
+	// 3. Raw container ports at "/" — a catch-all when there's no probe.
+	for _, c := range pod.Spec.Containers {
+		for _, p := range c.Ports {
+			scheme := "http"
+			if p.ContainerPort == 443 || strings.Contains(strings.ToLower(p.Name), "https") {
+				scheme = "https"
+			}
+			label := p.Name
+			if label == "" {
+				label = fmt.Sprintf("port %d", p.ContainerPort)
+			}
+			add(Endpoint{Scheme: scheme, Port: int(p.ContainerPort), Path: "/", Source: "containerPort", Container: c.Name, Label: label})
+		}
+	}
+
+	// 4. Services that select this pod — their targetPorts.
+	if svcs, err := k8s.CoreV1().Services(ns).List(ctx, metav1.ListOptions{}); err == nil {
+		for _, sv := range svcs.Items {
+			if len(sv.Spec.Selector) == 0 || !selectorMatches(sv.Spec.Selector, pod.Labels) {
+				continue
+			}
+			for _, sp := range sv.Spec.Ports {
+				if sp.Protocol != "" && sp.Protocol != corev1.ProtocolTCP {
+					continue
+				}
+				tp := resolve(sp.TargetPort)
+				if tp == 0 {
+					tp = int(sp.Port)
+				}
+				scheme := "http"
+				if sp.Port == 443 || strings.Contains(strings.ToLower(sp.Name), "https") {
+					scheme = "https"
+				}
+				add(Endpoint{Scheme: scheme, Port: tp, Path: "/", Source: "service", Label: "svc " + sv.Name})
+			}
+		}
+	}
+
+	return out, nil
+}
+
+// selectorMatches reports whether every label in a Service selector is present
+// with the same value on the pod (equality-based selector semantics).
+func selectorMatches(sel, labels map[string]string) bool {
+	for k, v := range sel {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// --- /api/probe  (connection timing breakdown) ---------------------------
+// POST {namespace, pod, port, scheme, path, samples}. Opens an ephemeral
+// kubectl port-forward to the pod, then times one or more HTTP requests
+// through it with net/http/httptrace — breaking each request into the same
+// phases `curl -w` reports: DNS, TCP connect, TLS handshake, server-wait
+// (time to first byte), and content transfer. Returns per-sample rows plus
+// min/avg/max for each phase, then tears the port-forward down.
+//
+// Timings run through the port-forward tunnel (a local TCP relay over the API
+// server), so TCP-connect is to the local relay while TLS + server-wait carry
+// the real round trip to the pod. Read absolute numbers as tunnel-inclusive;
+// the relative phase split is what's diagnostic.
+type ProbeSample struct {
+	DNSms      float64 `json:"dnsMs"`
+	ConnectMs  float64 `json:"connectMs"`  // TCP handshake
+	TLSms      float64 `json:"tlsMs"`      // TLS handshake (0 for plain http)
+	WaitMs     float64 `json:"waitMs"`     // request sent -> first byte (server think + return)
+	TransferMs float64 `json:"transferMs"` // first byte -> last byte
+	TotalMs    float64 `json:"totalMs"`
+	Status     int     `json:"status"`
+	Bytes      int64   `json:"bytes"`
+	Err        string  `json:"err,omitempty"`
+}
+
+// ProbeStat is min/avg/max of one phase across the successful samples.
+type ProbeStat struct {
+	Min float64 `json:"min"`
+	Avg float64 `json:"avg"`
+	Max float64 `json:"max"`
+}
+
+type ProbeResult struct {
+	Target   string        `json:"target"`
+	Proto    string        `json:"proto"`
+	OKCount  int           `json:"okCount"`
+	Count    int           `json:"count"`
+	Samples  []ProbeSample `json:"samples"`
+	DNS      ProbeStat     `json:"dns"`
+	Connect  ProbeStat     `json:"connect"`
+	TLS      ProbeStat     `json:"tls"`
+	Wait     ProbeStat     `json:"wait"`
+	Transfer ProbeStat     `json:"transfer"`
+	Total    ProbeStat     `json:"total"`
+}
+
+func (s *server) handleProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, 405, "POST required")
+		return
+	}
+	var body struct {
+		Namespace string `json:"namespace"`
+		Pod       string `json:"pod"`
+		Port      int    `json:"port"`
+		Scheme    string `json:"scheme"`
+		Path      string `json:"path"`
+		Samples   int    `json:"samples"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, "bad body: "+err.Error())
+		return
+	}
+	ns := strings.TrimSpace(body.Namespace)
+	pod := strings.TrimSpace(body.Pod)
+	if ns == "" || pod == "" {
+		writeErr(w, 400, "namespace and pod required")
+		return
+	}
+	if body.Port <= 0 || body.Port > 65535 {
+		writeErr(w, 400, "a valid pod port is required")
+		return
+	}
+	scheme := strings.ToLower(strings.TrimSpace(body.Scheme))
+	if scheme != "https" {
+		scheme = "http"
+	}
+	reqPath := strings.TrimSpace(body.Path)
+	if reqPath == "" {
+		reqPath = "/"
+	}
+	if !strings.HasPrefix(reqPath, "/") {
+		reqPath = "/" + reqPath
+	}
+	samples := clampInt(body.Samples, 1, 20)
+
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		writeErr(w, 400, "kubectl not found on PATH — needed to reach the pod")
+		return
+	}
+
+	// Ephemeral port-forward: a local relay we tear down as soon as we're done.
+	local, err := freePort()
+	if err != nil {
+		writeErr(w, 500, "alloc local port: "+err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	pf := exec.CommandContext(ctx, "kubectl", "port-forward",
+		"--address", "127.0.0.1",
+		"-n", ns, pod,
+		fmt.Sprintf("%d:%d", local, body.Port))
+	if kc := s.kubeconfigPath(); kc != "" {
+		pf.Env = append(os.Environ(), "KUBECONFIG="+kc)
+	}
+	var pfErr bytes.Buffer
+	pf.Stderr = &pfErr
+	if err := pf.Start(); err != nil {
+		writeErr(w, 500, "port-forward: "+err.Error())
+		return
+	}
+	defer func() {
+		if pf.Process != nil {
+			_ = pf.Process.Kill()
+		}
+		_ = pf.Wait()
+	}()
+
+	if err := waitLocalPort(ctx, local, 10*time.Second); err != nil {
+		msg := strings.TrimSpace(pfErr.String())
+		if msg == "" {
+			msg = "port-forward did not become ready"
+		}
+		writeErr(w, 502, "cannot reach pod: "+lastLine(msg))
+		return
+	}
+
+	target := fmt.Sprintf("%s://127.0.0.1:%d%s", scheme, local, reqPath)
+	res := &ProbeResult{
+		Target: fmt.Sprintf("%s://%s.%s:%d%s", scheme, pod, ns, body.Port, reqPath),
+		Count:  samples,
+	}
+	for i := 0; i < samples; i++ {
+		sm, proto := probeOnce(ctx, target)
+		if proto != "" && res.Proto == "" {
+			res.Proto = proto
+		}
+		res.Samples = append(res.Samples, sm)
+	}
+
+	// Aggregate only the samples that actually completed a request.
+	var dns, conn, tlsD, wait, xfer, total []float64
+	for _, sm := range res.Samples {
+		if sm.Err != "" {
+			continue
+		}
+		res.OKCount++
+		dns = append(dns, sm.DNSms)
+		conn = append(conn, sm.ConnectMs)
+		tlsD = append(tlsD, sm.TLSms)
+		wait = append(wait, sm.WaitMs)
+		xfer = append(xfer, sm.TransferMs)
+		total = append(total, sm.TotalMs)
+	}
+	res.DNS = stat(dns)
+	res.Connect = stat(conn)
+	res.TLS = stat(tlsD)
+	res.Wait = stat(wait)
+	res.Transfer = stat(xfer)
+	res.Total = stat(total)
+
+	if res.OKCount == 0 {
+		msg := "all probes failed"
+		if len(res.Samples) > 0 && res.Samples[0].Err != "" {
+			msg = res.Samples[0].Err
+		}
+		writeErr(w, 502, msg)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+// probeOnce runs one HTTP GET against target with a fresh connection (keep-
+// alive disabled so every sample re-times DNS/TCP/TLS) and returns the phase
+// breakdown plus the negotiated HTTP proto.
+func probeOnce(ctx context.Context, target string) (ProbeSample, string) {
+	var sm ProbeSample
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		sm.Err = err.Error()
+		return sm, ""
+	}
+
+	var dnsStart, connStart, tlsStart, firstByte time.Time
+	var dnsDur, connDur, tlsDur time.Duration
+	trace := &httptrace.ClientTrace{
+		DNSStart:             func(httptrace.DNSStartInfo) { dnsStart = time.Now() },
+		DNSDone:              func(httptrace.DNSDoneInfo) { dnsDur = time.Since(dnsStart) },
+		ConnectStart:         func(_, _ string) { connStart = time.Now() },
+		ConnectDone:          func(_, _ string, _ error) { connDur = time.Since(connStart) },
+		TLSHandshakeStart:    func() { tlsStart = time.Now() },
+		TLSHandshakeDone:     func(tls.ConnectionState, error) { tlsDur = time.Since(tlsStart) },
+		GotFirstResponseByte: func() { firstByte = time.Now() },
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+	tr := &http.Transport{
+		DisableKeepAlives: true,
+		// The port-forward relay serves the pod's own cert (or none); we're
+		// timing the handshake, not verifying a chain, so skip verification.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr, Timeout: 20 * time.Second}
+
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		sm.Err = cleanProbeErr(err)
+		sm.TotalMs = msSince(start)
+		return sm, ""
+	}
+	proto := resp.Proto
+	n, _ := io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	total := time.Since(start)
+
+	sm.DNSms = round2(ms(dnsDur))
+	sm.ConnectMs = round2(ms(connDur))
+	sm.TLSms = round2(ms(tlsDur))
+	sm.TotalMs = round2(ms(total))
+	sm.Status = resp.StatusCode
+	sm.Bytes = n
+	if !firstByte.IsZero() {
+		ttfb := ms(firstByte.Sub(start))
+		// server-wait = time-to-first-byte minus the connection setup phases.
+		wait := ttfb - sm.DNSms - sm.ConnectMs - sm.TLSms
+		if wait < 0 {
+			wait = 0
+		}
+		sm.WaitMs = round2(wait)
+		sm.TransferMs = round2(sm.TotalMs - ttfb)
+		if sm.TransferMs < 0 {
+			sm.TransferMs = 0
+		}
+	}
+	return sm, proto
+}
+
+// waitLocalPort blocks until a TCP connection to 127.0.0.1:port succeeds or the
+// timeout / context elapses — i.e. the port-forward relay is accepting.
+func waitLocalPort(ctx context.Context, port int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
+		if err == nil {
+			c.Close()
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for 127.0.0.1:%d", port)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+}
+
+// stat reduces a phase's samples to min/avg/max, all rounded to 0.01ms.
+func stat(v []float64) ProbeStat {
+	if len(v) == 0 {
+		return ProbeStat{}
+	}
+	min, max, sum := v[0], v[0], 0.0
+	for _, x := range v {
+		if x < min {
+			min = x
+		}
+		if x > max {
+			max = x
+		}
+		sum += x
+	}
+	return ProbeStat{Min: round2(min), Avg: round2(sum / float64(len(v))), Max: round2(max)}
+}
+
+func ms(d time.Duration) float64  { return float64(d.Microseconds()) / 1000.0 }
+func msSince(t time.Time) float64 { return round2(ms(time.Since(t))) }
+func round2(f float64) float64    { return math.Round(f*100) / 100 }
+
+// cleanProbeErr strips net/http's verbose `Get "url": ` wrapper so the UI shows
+// just the underlying cause (connection refused, EOF, timeout, …).
+func cleanProbeErr(err error) string {
+	s := err.Error()
+	if i := strings.LastIndex(s, ": "); i >= 0 && strings.HasPrefix(s, "Get ") {
+		return strings.TrimSpace(s[i+2:])
+	}
+	return s
+}
+
 // LoadResult is the aggregate report returned to the UI.
 type LoadResult struct {
 	Target     string       `json:"target"`
@@ -1031,6 +1983,10 @@ type LoadResult struct {
 	P90Ms      int64        `json:"p90Ms"`
 	P95Ms      int64        `json:"p95Ms"`
 	P99Ms      int64        `json:"p99Ms"`
+	StdDev     float64      `json:"stdDev"`
+	PeakRPS    int          `json:"peakRps"`
+	PeakAvgMs  float64      `json:"peakAvgMs"`
+	Histogram  []HistBucket `json:"histogram"`
 	Series     []LoadBucket `json:"series"`
 }
 
@@ -1041,6 +1997,13 @@ type LoadBucket struct {
 	Count  int     `json:"count"`
 	AvgMs  float64 `json:"avgMs"`
 	Errors int     `json:"errors"`
+}
+
+// HistBucket is one response-time distribution band (e.g. "100–250ms").
+type HistBucket struct {
+	Label string  `json:"label"`
+	Count int     `json:"count"`
+	Pct   float64 `json:"pct"`
 }
 
 // parseJTL reads JMeter's default CSV results file in a single pass. Relevant
@@ -1123,6 +2086,34 @@ func parseJTL(path string) (*LoadResult, error) {
 	res.P95Ms = percentile(sorted, 95)
 	res.P99Ms = percentile(sorted, 99)
 
+	// Standard deviation over the sorted elapsed-ms slice.
+	var sumSq float64
+	for _, el := range sorted {
+		d := float64(el) - res.AvgMs
+		sumSq += d * d
+	}
+	res.StdDev = math.Round(math.Sqrt(sumSq/float64(n))*10) / 10
+
+	// Response-time distribution histogram (6 bands).
+	hBounds := []int64{100, 250, 500, 1000, 2000, 1 << 62}
+	hLabels := []string{"<100ms", "100–250", "250–500", "500–1s", "1–2s", ">2s"}
+	hist := make([]HistBucket, len(hBounds))
+	for i, l := range hLabels {
+		hist[i].Label = l
+	}
+	for _, el := range sorted {
+		for i, bound := range hBounds {
+			if el < bound {
+				hist[i].Count++
+				break
+			}
+		}
+	}
+	for i := range hist {
+		hist[i].Pct = math.Round(float64(hist[i].Count)/float64(n)*1000) / 10
+	}
+	res.Histogram = hist
+
 	wall := float64(maxEnd-minTS) / 1000.0
 	if wall <= 0 {
 		wall = 1
@@ -1155,6 +2146,18 @@ func parseJTL(path string) (*LoadResult, error) {
 	}
 	sort.Slice(series, func(i, j int) bool { return series[i].T < series[j].T })
 	res.Series = series
+
+	// Peak RPS and peak average latency derived from the per-second series.
+	for _, b := range res.Series {
+		if b.Count > res.PeakRPS {
+			res.PeakRPS = b.Count
+		}
+		if b.AvgMs > res.PeakAvgMs {
+			res.PeakAvgMs = b.AvgMs
+		}
+	}
+	res.PeakAvgMs = math.Round(res.PeakAvgMs*10) / 10
+
 	return res, nil
 }
 
@@ -1199,9 +2202,7 @@ const jmxTemplate = `<?xml version="1.0" encoding="UTF-8"?>
       </ThreadGroup>
       <hashTree>
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request" enabled="true">
-          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
-            <collectionProp name="Arguments.arguments"/>
-          </elementProp>
+          {{BODY_SECTION}}
           <stringProp name="HTTPSampler.domain">{{HOST}}</stringProp>
           <stringProp name="HTTPSampler.port">{{PORT}}</stringProp>
           <stringProp name="HTTPSampler.protocol">{{SCHEME}}</stringProp>
@@ -1210,7 +2211,9 @@ const jmxTemplate = `<?xml version="1.0" encoding="UTF-8"?>
           <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
-        <hashTree/>
+        <hashTree>
+          {{HEADER_SECTION}}
+        </hashTree>
       </hashTree>
     </hashTree>
   </hashTree>
@@ -1262,9 +2265,9 @@ func (s *server) handleGemini(w http.ResponseWriter, r *http.Request) {
 
 	provider := strings.ToLower(strings.TrimSpace(body.Provider))
 	if provider == "" {
-		provider = "gemini"
+		provider = "openrouter"
 	}
-	if provider != "gemini" && provider != "openrouter" {
+	if provider != "openrouter" {
 		writeErr(w, 400, "unknown provider: "+provider)
 		return
 	}
@@ -1442,9 +2445,10 @@ func callOpenRouter(parent context.Context, apiKey, model string, maxTokens int,
 		candidates = []string{model} // explicit choice — respect it, no fallback
 	} else {
 		candidates = []string{
-			"meta-llama/llama-3.3-70b-instruct:free",
-			"qwen/qwen3-next-80b-a3b-instruct:free",
-			"openai/gpt-oss-20b:free",
+			"nex-agi/nex-n2.5-pro:free",
+			"nvidia/nemotron-3-super-120b-a12b:free",
+			"nvidia/nemotron-3-ultra-550b-a55b:free",
+			"google/gemma-4-26b-a4b-it:free",
 			"google/gemma-4-31b-it:free",
 		}
 	}
@@ -1757,19 +2761,40 @@ func (s *server) buildPodContext(ctx context.Context, ns, name string) string {
 		b.WriteString("(none)\n")
 	}
 
-	b.WriteString("\nLast log lines:\n")
-	tail := int64(50)
-	req := s.k8s.CoreV1().Pods(ns).GetLogs(name, &corev1.PodLogOptions{TailLines: &tail})
-	stream, err := req.Stream(ctx)
-	if err != nil {
-		b.WriteString("(unable to fetch logs: " + err.Error() + ")\n")
-	} else {
-		defer stream.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, stream)
-		b.WriteString(buf.String())
+	// Current logs — a generous, byte-capped tail. These lines are the primary
+	// signal the chat model reasons over, so give it real content.
+	b.WriteString("\nRecent logs (current container, last ~120 lines):\n")
+	b.WriteString(s.fetchPodLogs(ctx, ns, name, false))
+
+	// A restarted pod's crash cause lives in the *previous* container's logs,
+	// which the current stream no longer shows — surface them so the model can
+	// actually diagnose the failure instead of just seeing a healthy restart.
+	if restarts > 0 {
+		b.WriteString("\nPrevious container logs (before the last restart):\n")
+		b.WriteString(s.fetchPodLogs(ctx, ns, name, true))
 	}
 	return b.String()
+}
+
+// fetchPodLogs streams a byte-capped tail of a pod's logs (optionally the
+// previous, pre-restart container) for the chat context. Returns a human-
+// readable note on failure rather than an error so the snapshot always renders.
+func (s *server) fetchPodLogs(ctx context.Context, ns, name string, previous bool) string {
+	tail := int64(120)
+	limit := int64(12000)
+	opts := &corev1.PodLogOptions{TailLines: &tail, LimitBytes: &limit, Timestamps: true, Previous: previous}
+	stream, err := s.k8s.CoreV1().Pods(ns).GetLogs(name, opts).Stream(ctx)
+	if err != nil {
+		return "(unable to fetch logs: " + err.Error() + ")\n"
+	}
+	defer stream.Close()
+	var buf bytes.Buffer
+	io.Copy(&buf, stream)
+	out := strings.TrimRight(buf.String(), "\n")
+	if strings.TrimSpace(out) == "" {
+		return "(no log output)\n"
+	}
+	return out + "\n"
 }
 
 func (s *server) buildClusterContext(ctx context.Context) string {

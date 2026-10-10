@@ -7,11 +7,27 @@ const state = {
   view: "pods",
   pods: [],
   filtered: [],
+  jobs: [],
+  jobNsSel: null,       // array of namespaces, or null = all
+  jobSearch: "",
+  jobFailedOnly: false,
+  jobAllRuns: false,    // false = latest run per job; true = full history
   nodes: [],
   stats: null,
   namespaces: ["ALL"],
-  currentNs: "ALL",
-  resNs: "ALL",
+  nsSelected: null,     // array of namespaces, or null = all
+  podNsMs: null,        // pods namespace multi-select controller
+  jobNsMs: null,        // jobs namespace multi-select controller
+  rs: null,           // /api/rightsizing payload {ready, windowMins, rows}
+  rsNs: "ALL",
+  rsSearch: "",
+  rsIssuesOnly: false,
+  rsLoading: false,
+  hpas: [],
+  hpaIndex: null,
+  hpaNs: "ALL",
+  hpaSearch: "",
+  hpaLoading: false,
   search: "",
   sort: "default",
   issuesOnly: false,
@@ -22,15 +38,18 @@ const state = {
   candNs: "ALL",
   selected: -1,
   costs: null,
+  costServices: null,
   costsLoading: false,
   headroom: 20,
-  gemini: { history: [], busy: false, pod: null, provider: "gemini" },
+  gemini: { history: [], busy: false, pod: null, provider: "openrouter" },
   pfs: [],
   shell: null,
   contexts: [],
   currentCtx: "",
   ctxSwitching: false,
   consolidationCollapsed: false,
+  capReady: false,    // capacity analysis revealed after its cool-down settles
+  capTimer: null,
 };
 
 // Pods in Succeeded/Failed don't hold cluster capacity — the scheduler frees
@@ -56,6 +75,41 @@ function pct(n, d) {
   if (!d || d <= 0) return null;
   return (n / d) * 100;
 }
+// fmtDuration turns a span of seconds into a compact label (e.g. 90 -> "1.5m",
+// 3600 -> "1h"). Returns "—" when unset so an empty deadline reads cleanly.
+function fmtDuration(s) {
+  if (!s || s <= 0) return "—";
+  const trim = v => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+  if (s < 60) return s + "s";
+  if (s < 3600) return trim(s / 60) + "m";
+  if (s < 86400) return trim(s / 3600) + "h";
+  return trim(s / 86400) + "d";
+}
+// Kubernetes-reserved system namespaces (kube-system, kube-node-lease,
+// kube-public, …). Their workloads are managed by the platform/add-ons and a
+// live-object patch either gets reverted or risks cluster-wide breakage, so we
+// don't offer to patch them from the UI.
+function isSystemNamespace(ns) {
+  return /^kube-/.test(ns); // kube-system, kube-node-lease, kube-public, …
+}
+
+// isInfraNamespace is a broader check than isSystemNamespace: it also excludes
+// common platform / observability add-on namespaces (monitoring, ingress,
+// service mesh, autoscaling, cert-manager, etc.) so views like the latency
+// probe can show *application* pods only. Kept separate from isSystemNamespace
+// so it doesn't affect the resources "managed" tag.
+const INFRA_NAMESPACES = new Set([
+  "monitoring", "observability", "logging", "prometheus", "grafana",
+  "cert-manager", "ingress-nginx", "istio-system", "linkerd", "karpenter",
+  "amazon-cloudwatch", "aws-observability", "external-dns", "metrics-server",
+  "kubecost", "velero", "argocd", "argo", "flux-system", "gatekeeper-system",
+  "kyverno", "calico-system", "calico-apiserver", "tigera-operator",
+  "gpu-operator", "opentelemetry", "cattle-system", "longhorn-system", "openebs",
+]);
+function isInfraNamespace(ns) {
+  return isSystemNamespace(ns) || INFRA_NAMESPACES.has(ns);
+}
+
 function statusClass(p) {
   if (p.status === "Succeeded") return "status-done";
   if (p.status === "Pending") return "status-pending";
@@ -81,22 +135,28 @@ async function jget(url) {
 async function refresh() {
   $("#refresh-meta").textContent = "refresh: loading";
   try {
-    const [pods, stats, nodes, namespaces] = await Promise.all([
+    const [pods, stats, nodes, namespaces, jobs, hpas] = await Promise.all([
       jget("/api/pods"),
       jget("/api/stats").catch(() => null),
       jget("/api/nodes").catch(() => []),
       jget("/api/namespaces").catch(() => []),
+      jget("/api/jobs").catch(() => []),
+      jget("/api/hpas").catch(() => []),
     ]);
     state.pods = pods || [];
     state.stats = stats;
     state.nodes = nodes || [];
     state.namespaces = ["ALL", ...(namespaces || [])];
+    state.jobs = jobs || [];
+    state.hpas = hpas || [];
+    rebuildHpaIndex();
     renderNamespaceSelects();
     renderStats();
     renderPodTable();
+    renderJobTable();
     renderNodes();
-    renderResources();
-    renderFinOps();
+    renderRightsizing();
+    if (state.view === "rightsizing") loadRightsizing();
     $("#refresh-meta").textContent = `refresh: ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     $("#refresh-meta").textContent = "refresh: error";
@@ -126,7 +186,7 @@ function pctClass(p) {
 }
 
 function renderNamespaceSelects() {
-  for (const id of ["#ns-select", "#res-ns-select", "#cand-ns-select"]) {
+  for (const id of ["#rs-ns-select"]) {
     const sel = $(id);
     if (!sel) continue;
     const cur = sel.value || "ALL";
@@ -139,12 +199,91 @@ function renderNamespaceSelects() {
     }
     sel.value = state.namespaces.includes(cur) ? cur : "ALL";
   }
+  // Feed the real namespaces (minus the "ALL" sentinel) to the multi-selects.
+  const real = state.namespaces.filter(n => n !== "ALL");
+  if (state.podNsMs) state.podNsMs.setOptions(real);
+  if (state.jobNsMs) state.jobNsMs.setOptions(real);
+}
+
+// createMultiSelect turns an empty <div> into a checkbox dropdown for picking
+// several namespaces at once. onChange gets an array of selected values, or
+// null when "all" is active (nothing checked). Returns { setOptions, get }.
+function createMultiSelect(root, placeholder, onChange) {
+  root.className = "ms";
+  root.innerHTML = `
+    <button type="button" class="btn ms-btn">
+      <span class="ms-label">${placeholder}</span><span class="ms-caret">▾</span>
+    </button>
+    <div class="ms-panel hidden">
+      <input class="input ms-search" placeholder="filter namespaces" spellcheck="false" />
+      <label class="ms-opt ms-all"><input type="checkbox" class="ms-all-cb" checked> all namespaces</label>
+      <div class="ms-list"></div>
+    </div>`;
+  const btn = $(".ms-btn", root);
+  const label = $(".ms-label", root);
+  const panel = $(".ms-panel", root);
+  const search = $(".ms-search", root);
+  const allCb = $(".ms-all-cb", root);
+  const list = $(".ms-list", root);
+  const selected = new Set();
+  let options = [];
+
+  const value = () => (selected.size ? [...selected] : null);
+  function sync() {
+    label.textContent = selected.size === 0 ? placeholder
+      : selected.size === 1 ? [...selected][0]
+      : `${selected.size} namespaces`;
+    allCb.checked = selected.size === 0;
+  }
+  function renderList() {
+    const q = search.value.toLowerCase();
+    list.innerHTML = "";
+    for (const o of options) {
+      if (q && !o.toLowerCase().includes(q)) continue;
+      const lab = document.createElement("label");
+      lab.className = "ms-opt";
+      lab.innerHTML = `<input type="checkbox"> <span>${o}</span>`;
+      const cb = lab.firstChild;
+      cb.checked = selected.has(o);
+      cb.addEventListener("change", () => {
+        cb.checked ? selected.add(o) : selected.delete(o);
+        sync();
+        onChange(value());
+      });
+      list.appendChild(lab);
+    }
+  }
+  btn.addEventListener("click", () => {
+    const opening = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden");
+    if (opening) { renderList(); search.focus(); }
+  });
+  search.addEventListener("input", renderList);
+  allCb.addEventListener("change", () => {
+    selected.clear();
+    sync();
+    renderList();
+    onChange(value());
+  });
+  document.addEventListener("click", e => { if (!root.contains(e.target)) panel.classList.add("hidden"); });
+
+  sync();
+  return {
+    setOptions(opts) {
+      options = opts.slice();
+      for (const s of [...selected]) if (!options.includes(s)) selected.delete(s);
+      sync();
+      if (!panel.classList.contains("hidden")) renderList();
+    },
+    clear() { selected.clear(); sync(); },
+    get: value,
+  };
 }
 
 // ---------- pod table ----------
 function applyFilter() {
   let pods = state.pods.slice();
-  if (state.currentNs !== "ALL") pods = pods.filter(p => p.namespace === state.currentNs);
+  if (state.nsSelected) pods = pods.filter(p => state.nsSelected.includes(p.namespace));
   if (state.issuesOnly) pods = pods.filter(p => !(p.isReady && p.status === "Running"));
   if (state.hideCron) pods = pods.filter(p => p.ownerKind !== "CronJob");
   if (state.search) {
@@ -202,6 +341,178 @@ function renderPodTable() {
   $$(".sort").forEach(b => b.classList.toggle("active", b.dataset.sort === state.sort));
 }
 
+// ---------- jobs table ----------
+function jobStatusClass(j) {
+  if (j.status === "Complete") return "status-done";
+  if (j.status === "Failed") return "status-err";
+  if (j.status === "Running") return "status-ok";
+  return "status-pending";
+}
+
+// latestRuns collapses a job list to one row per job — the most recent run.
+// CronJob executions share an owner (the CronJob), so they group by owner;
+// standalone jobs group by their own name. This is what tells you at a glance
+// whether each job's *last* run succeeded.
+function latestRuns(jobs) {
+  const groups = new Map();
+  for (const j of jobs) {
+    const key = j.namespace + "/" + (j.ownerName || j.name);
+    const cur = groups.get(key);
+    if (!cur || (j.created || 0) > (cur.created || 0)) groups.set(key, j);
+  }
+  return [...groups.values()];
+}
+
+function renderJobTable() {
+  let jobs = state.jobs.slice();
+  if (state.jobNsSel) jobs = jobs.filter(j => state.jobNsSel.includes(j.namespace));
+  // Default view: only each job's latest run. "all runs" shows full history.
+  if (!state.jobAllRuns) jobs = latestRuns(jobs);
+  if (state.jobFailedOnly) jobs = jobs.filter(j => j.status === "Failed");
+  if (state.jobSearch) {
+    const q = state.jobSearch.toLowerCase();
+    jobs = jobs.filter(j =>
+      j.name.toLowerCase().includes(q) ||
+      j.namespace.toLowerCase().includes(q) ||
+      (j.ownerName || "").toLowerCase().includes(q));
+  }
+  // Newest first — most recent runs are what you came to see.
+  jobs.sort((a, b) => a.namespace === b.namespace
+    ? a.name.localeCompare(b.name)
+    : a.namespace.localeCompare(b.namespace));
+
+  const mode = state.jobAllRuns ? "all runs" : "latest run per job";
+  $("#job-count").textContent = `${jobs.length} job${jobs.length === 1 ? "" : "s"} · ${mode}`;
+  const tbody = $("#job-tbody");
+  tbody.innerHTML = "";
+  jobs.forEach(j => {
+    const owner = j.ownerName ? `${j.ownerKind || ""} ${j.ownerName}`.trim() : "-";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="c-ns" title="${j.namespace}">${j.namespace}</td>
+      <td class="c-name" title="${j.name}">${j.name}</td>
+      <td class="c-ready">${j.completions}</td>
+      <td class="c-status"><span class="status ${jobStatusClass(j)}">${j.status}</span></td>
+      <td class="c-age">${j.duration}</td>
+      <td class="c-age" title="${j.deadline ? "time budget: " + fmtDuration(j.deadline) : "no deadline set"}">${fmtDuration(j.deadline)}</td>
+      <td class="c-age">${j.age}</td>
+      <td class="c-node" title="${owner}">${owner}</td>
+      <td class="c-msg" title="${j.message || ""}">${j.message || ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------- resizable columns ----------
+// Drag a header's right edge to resize a column; double-click the edge to
+// auto-fit it to the widest value. Widths are driven by a <colgroup> (the
+// reliable way to size table-layout:fixed columns), frozen to pixels on first
+// interaction, and persisted per table — so long pod/job names can be read in
+// full (the table grows and the wrapper scrolls rather than truncating).
+function makeResizable(table) {
+  if (!table || !table.tHead) return;
+  const ths = Array.from(table.tHead.rows[0].cells);
+
+  let cg = table.querySelector("colgroup");
+  if (!cg) {
+    cg = document.createElement("colgroup");
+    ths.forEach(() => cg.appendChild(document.createElement("col")));
+    table.insertBefore(cg, table.firstChild);
+  }
+  const cols = Array.from(cg.children);
+
+  const saved = readCols(table.id);
+  if (saved && saved.length === cols.length) {
+    cols.forEach((c, i) => { c.style.width = saved[i] + "px"; });
+    table.dataset.frozen = "1";
+    setTableWidth(table, cols);
+  }
+
+  ths.forEach((th, i) => {
+    const grip = document.createElement("span");
+    grip.className = "col-resizer";
+    grip.addEventListener("mousedown", e => startColResize(e, table, cols, i, grip));
+    grip.addEventListener("dblclick", e => { e.preventDefault(); autoFitCol(table, cols, i); });
+    th.appendChild(grip);
+  });
+}
+
+function freezeCols(table, cols) {
+  if (table.dataset.frozen) return;
+  const ths = table.tHead.rows[0].cells;
+  cols.forEach((c, i) => { c.style.width = ths[i].offsetWidth + "px"; });
+  table.dataset.frozen = "1";
+  setTableWidth(table, cols);
+}
+
+function setTableWidth(table, cols) {
+  let total = 0;
+  cols.forEach(c => { total += parseFloat(c.style.width) || 0; });
+  if (total) table.style.width = total + "px";
+}
+
+function startColResize(e, table, cols, i, grip) {
+  e.preventDefault();
+  freezeCols(table, cols);
+  const startX = e.clientX;
+  const startW = parseFloat(cols[i].style.width) || table.tHead.rows[0].cells[i].offsetWidth;
+  document.body.classList.add("col-resizing");
+  grip.classList.add("dragging");
+  const move = ev => {
+    cols[i].style.width = Math.max(48, startW + (ev.clientX - startX)) + "px";
+    setTableWidth(table, cols);
+  };
+  const up = () => {
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
+    document.body.classList.remove("col-resizing");
+    grip.classList.remove("dragging");
+    saveCols(table, cols);
+  };
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
+}
+
+// Measure a column's widest content with canvas text metrics — robust against
+// the fixed-layout clipping that makes scrollWidth unreliable here.
+function cssFont(el) {
+  const cs = getComputedStyle(el);
+  // The `font` shorthand comes back empty when set via longhands, so assemble
+  // a valid canvas font string ourselves.
+  return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+}
+
+function measureCol(table, i) {
+  const th = table.tHead.rows[0].cells[i];
+  const ctx = measureCol._ctx || (measureCol._ctx = document.createElement("canvas").getContext("2d"));
+  let max = 0;
+  ctx.font = cssFont(th);
+  max = Math.max(max, ctx.measureText(th.textContent.trim()).width);
+  const rows = table.tBodies[0] ? table.tBodies[0].rows : [];
+  if (rows.length) ctx.font = cssFont(rows[0].cells[i] || th);
+  for (const r of rows) {
+    const cell = r.cells[i];
+    if (cell) max = Math.max(max, ctx.measureText(cell.textContent.trim()).width);
+  }
+  return Math.ceil(max) + 22; // cell padding (20) + small buffer
+}
+
+function autoFitCol(table, cols, i) {
+  freezeCols(table, cols);
+  cols[i].style.width = measureCol(table, i) + "px";
+  setTableWidth(table, cols);
+  saveCols(table, cols);
+}
+
+function readCols(id) {
+  try { return JSON.parse(localStorage.getItem("clusterheart:cols:" + id) || "null"); }
+  catch (_) { return null; }
+}
+function saveCols(table, cols) {
+  const ws = cols.map(c => Math.round(parseFloat(c.style.width) || 0));
+  try { localStorage.setItem("clusterheart:cols:" + table.id, JSON.stringify(ws)); } catch (_) {}
+}
+
 // ---------- nodes ----------
 function nodeBar(p) {
   const cls = p == null ? "" : p > 80 ? " hot" : p > 50 ? " warn" : "";
@@ -209,25 +520,50 @@ function nodeBar(p) {
   return `<span class="bar${cls}"><i style="width:${w}%"></i></span>`;
 }
 
+// Control-plane / master nodes carry a node-role.kubernetes.io/{master,
+// control-plane} label, surfaced by the backend as the node's role. Managed
+// control planes (EKS/GKE) hide these, so there may be none.
+function isControlPlane(n) { return /master|control-plane/i.test(n.role || ""); }
+
 function renderNodes() {
   const wrap = $("#node-list");
   wrap.innerHTML = "";
-  let tCpuCap = 0, tCpuUse = 0, tMemCap = 0, tMemUse = 0;
-  state.nodes.forEach(n => {
+
+  // Cluster totals for the summary row.
+  let tCpuCap = 0, tCpuUse = 0, tMemCap = 0, tMemUse = 0, tPods = 0, tPodLimit = 0;
+  let tEphCap = 0, tEphUse = 0, ephKnown = false, readyCount = 0, cpCount = 0;
+  for (const n of state.nodes) {
     tCpuCap += n.cpuCap; tCpuUse += n.cpuUsed;
     tMemCap += n.memCap; tMemUse += n.memUsed;
+    tPods += n.podCount; tPodLimit += n.podLimit;
+    tEphCap += n.ephCap;
+    if (n.ephHasUsed) { tEphUse += n.ephUsed; ephKnown = true; }
+    if (n.ready) readyCount++;
+    if (isControlPlane(n)) cpCount++;
+  }
+  renderNodeStats({ tCpuCap, tCpuUse, tMemCap, tMemUse, tPods, tPodLimit, tEphCap, tEphUse, ephKnown, readyCount, cpCount });
+
+  // Control-plane nodes first, then by name — so the master is easy to spot.
+  const ordered = state.nodes.slice().sort((a, b) =>
+    (isControlPlane(b) - isControlPlane(a)) || a.name.localeCompare(b.name));
+
+  ordered.forEach(n => {
     const cpuP = pct(n.cpuUsed, n.cpuCap);
     const memP = pct(n.memUsed, n.memCap);
     const ephP = n.ephHasUsed ? pct(n.ephUsed, n.ephUsed + n.ephAvail) : null;
     const ready = n.ready
       ? `<span class="status-ok">Ready</span>`
       : `<span class="status-err">NotReady</span>`;
+    const cp = isControlPlane(n);
+    const roleBadge = cp
+      ? `<span class="role-cp" title="control-plane node">◆ ${n.role}</span>`
+      : `<span>${n.role}</span>`;
     const box = document.createElement("div");
-    box.className = "node";
+    box.className = cp ? "node node-cp" : "node";
     box.innerHTML = `
       <div class="head">
         <div class="name" title="${n.name}">${n.name}</div>
-        <div class="badges"><span>${n.role}</span><span>${ready}</span><span>${n.age}</span><span>${n.podCount}/${n.podLimit} pods</span></div>
+        <div class="badges">${roleBadge}<span>${ready}</span><span>${n.age}</span><span>${n.podCount}/${n.podLimit} pods</span></div>
       </div>
       <div class="row">
         <span class="lbl">CPU</span>
@@ -255,7 +591,57 @@ function renderNodes() {
     : "no nodes";
 
   renderConsolidation();
-  renderTopConsumers();
+}
+
+// usageClass maps a utilisation percent to a severity color for the stat tiles.
+function usageClass(p) {
+  if (p === null) return "";
+  if (p > 85) return "hot";
+  if (p > 65) return "warn";
+  return "ok";
+}
+
+function renderNodeStats(t) {
+  const el = $("#node-stats");
+  if (!el) return;
+  if (!state.nodes.length) { el.innerHTML = ""; return; }
+  const cpuP = pct(t.tCpuUse, t.tCpuCap);
+  const memP = pct(t.tMemUse, t.tMemCap);
+  const ephP = t.ephKnown ? pct(t.tEphUse, t.tEphCap) : null;
+  const nodeSub = t.cpCount
+    ? `${t.readyCount}/${state.nodes.length} ready · ${t.cpCount} control-plane`
+    : `${t.readyCount}/${state.nodes.length} ready`;
+  const tile = (val, unit, label, sub, cls = "") => `
+    <div class="nstat">
+      <div class="nstat-v ${cls}">${val}${unit ? `<span class="u">${unit}</span>` : ""}</div>
+      <div class="nstat-l">${label}</div>
+      <div class="nstat-sub">${sub}</div>
+    </div>`;
+  el.innerHTML =
+    tile(state.nodes.length, "", "nodes", nodeSub) +
+    tile(cpuP !== null ? cpuP.toFixed(0) : "—", "%", "cpu used",
+      `${fmtCpu(t.tCpuUse)} / ${fmtCpu(t.tCpuCap)}`, usageClass(cpuP)) +
+    tile(memP !== null ? memP.toFixed(0) : "—", "%", "memory used",
+      `${fmtBytes(t.tMemUse)} / ${fmtBytes(t.tMemCap)}`, usageClass(memP)) +
+    tile(t.tPods, "", "pods", `${t.tPods} / ${t.tPodLimit} slots`) +
+    (t.ephKnown
+      ? tile(ephP !== null ? ephP.toFixed(0) : "—", "%", "storage used",
+          `${fmtBytes(t.tEphUse)} / ${fmtBytes(t.tEphCap)}`, usageClass(ephP))
+      : tile(fmtBytes(t.tEphCap), "", "storage", "capacity"));
+}
+
+// Capacity analysis settles for a short cool-down before it reveals, so it
+// eases in rather than snapping up the instant the nodes view opens. Re-armed
+// on every entry to the nodes view (see switchView).
+const CAP_COOLDOWN_MS = 2500;
+function armCapacityCooldown() {
+  state.capReady = false;
+  clearTimeout(state.capTimer);
+  renderConsolidation(); // show the "analyzing…" placeholder now
+  state.capTimer = setTimeout(() => {
+    state.capReady = true;
+    renderConsolidation(); // reveal the real analysis
+  }, CAP_COOLDOWN_MS);
 }
 
 function renderConsolidation() {
@@ -266,12 +652,26 @@ function renderConsolidation() {
   const active = state.pods.filter(isActive);
   if (!active.length) { el.innerHTML = ""; return; }
 
+  // During the cool-down, hold an unobtrusive placeholder instead of the card.
+  if (!state.capReady) {
+    el.innerHTML = `
+      <div class="card-head">
+        <span class="title">capacity analysis</span>
+        <span class="grow"></span>
+        <span class="dim">analyzing…</span>
+      </div>
+      <div class="card-body">
+        <div class="cap-wait"><span class="lt-spin"></span> analyzing capacity across ${state.nodes.length} node${state.nodes.length === 1 ? "" : "s"} and ${active.length} pods…</div>
+      </div>`;
+    return;
+  }
+
   // Collapsible header. Clicking it toggles state.consolidationCollapsed, which
   // survives the 5s node re-render so the card stays where the user left it.
   const head = (badge) => `
     <div class="card-head" role="button" tabindex="0" aria-expanded="${!state.consolidationCollapsed}">
       <span class="chev" aria-hidden="true">▾</span>
-      <span class="title">consolidation analysis</span>
+      <span class="title">capacity analysis</span>
       <span class="grow"></span>
       ${badge}
     </div>`;
@@ -320,18 +720,8 @@ function renderConsolidation() {
   const minNodesReq = Math.max(minCpuReq, minMemReq, minPods);
 
   const current = state.nodes.length;
-  const couldRemove = current - minNodes;
-
-  // already at floor — nothing to say
-  if (couldRemove <= 0) {
-    el.innerHTML = `
-      ${head(`<span class="badge-tag ok">at floor (${current} node${current === 1 ? "" : "s"} = min)</span>`)}
-      <div class="card-body">
-        <div class="dim" style="font-size: 12px">cluster is already running at the minimum node count its workloads can fit on. nothing to consolidate.</div>
-      </div>`;
-    wireCollapse();
-    return;
-  }
+  const removableNow = current - minNodesReq;    // drainable given current requests
+  const removableIdeal = current - minNodes;     // reachable after right-sizing
 
   // What's the binding dimension for the live-usage minimum?
   const liveBinding = [];
@@ -345,527 +735,352 @@ function renderConsolidation() {
   if (minMemReq === minNodesReq) reqBinding.push("mem");
   if (minPods   === minNodesReq) reqBinding.push("pod-count");
 
+  // Phantom = capacity the scheduler reserves for these pods that they aren't
+  // actually using. Because kube-scheduler places by requests (not live usage),
+  // this is what pins extra nodes in place.
+  const phantomCpu = Math.max(0, totalCpuReq - totalCpuUse);
+  const phantomMem = Math.max(0, totalMemReq - totalMemUse);
+
   const peak = Math.max(current, minNodesReq, minNodes, 1);
-  const row = (label, val, klass, note) => `
+  const bar = (label, val, klass, note) => `
     <div class="proj-row">
       <span class="lbl">${label}</span>
-      <span class="track"><span class="fill ${klass}" style="width:${(val/peak*100).toFixed(1)}%"></span></span>
+      <span class="track"><span class="fill ${klass}" style="width:${(val / peak * 100).toFixed(1)}%"></span></span>
       <span class="val">${val}</span>
       ${note ? `<span class="note dim">${note}</span>` : ""}
     </div>`;
 
-  // Phantom = how much capacity the scheduler is holding for these pods that
-  // they're not actually using. This is what triggers new nodes to be spun up.
-  const phantomCpu = Math.max(0, totalCpuReq - totalCpuUse);
-  const phantomMem = Math.max(0, totalMemReq - totalMemUse);
-  const phantomCpuPct = totalCpuReq > 0 ? (phantomCpu / totalCpuReq) * 100 : 0;
-  const phantomMemPct = totalMemReq > 0 ? (phantomMem / totalMemReq) * 100 : 0;
+  // Already at the floor on both requests and live usage — nothing to do.
+  if (removableNow <= 0 && removableIdeal <= 0) {
+    el.innerHTML = `
+      ${head(`<span class="badge-tag ok">at floor</span>`)}
+      <div class="card-body">
+        <div class="proj">
+          ${bar("current", current, "ok")}
+          ${bar("needed", minNodesReq, "ok", `binding: ${reqBinding.join(" + ")}`)}
+        </div>
+        <div class="cap-note">Running at the minimum node count these workloads fit on — nothing to consolidate.</div>
+      </div>`;
+    wireCollapse();
+    return;
+  }
 
-  // Top offenders — rank by combined phantom load. Weight CPU and MEM equally
-  // by normalising against per-node capacity, so a pod hoarding 500m phantom
-  // CPU and one hoarding 2Gi phantom MEM both surface.
-  const offenders = active
-    .filter(p => p.cpuRequest > 0 || p.memRequest > 0)
-    .map(p => {
-      const pCpu = Math.max(0, p.cpuRequest - p.rawCpu);
-      const pMem = Math.max(0, p.memRequest - p.rawMem);
-      const score = (pCpu / nodeCpu) + (pMem / nodeMem);
-      return { p, pCpu, pMem, score };
-    })
-    .filter(o => o.score > 0.01)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+  const badge = removableNow > 0
+    ? `<span class="badge-tag">${removableNow} node${removableNow === 1 ? "" : "s"} removable</span>`
+    : `<span class="badge-tag ok">right-size to shrink</span>`;
 
-  const inflationRows = offenders.map((o, i) => {
-    const cpuP = o.p.cpuRequest > 0 ? (o.p.rawCpu / o.p.cpuRequest) * 100 : null;
-    const memP = o.p.memRequest > 0 ? (o.p.rawMem / o.p.memRequest) * 100 : null;
-    return `<tr data-off="${i}">
-      <td>${o.p.namespace}</td>
-      <td title="${o.p.name}">${o.p.name}</td>
-      <td class="num">${fmtCpu(o.p.cpuRequest)}</td>
-      <td class="num">${fmtCpu(o.p.rawCpu)}</td>
-      <td class="num">${cpuP !== null ? cpuP.toFixed(0) + "%" : "-"}</td>
-      <td class="num">${fmtBytes(o.p.memRequest)}</td>
-      <td class="num">${fmtBytes(o.p.rawMem)}</td>
-      <td class="num">${memP !== null ? memP.toFixed(0) + "%" : "-"}</td>
-      <td class="num save">${o.pCpu > 0 ? fmtCpu(o.pCpu) : "-"} / ${o.pMem > 0 ? fmtBytes(o.pMem) : "-"}</td>
-      <td class="act"><button class="patch-btn" data-cons-off="${i}">patch</button></td>
-    </tr>`;
-  }).join("");
+  const verdict = removableNow > 0
+    ? `${current} nodes running, ${minNodesReq} needed for current reservations — <b>${removableNow} node${removableNow === 1 ? "" : "s"} can be drained now</b>.`
+    : `All ${current} nodes are pinned by <b>requests</b>, but live usage fits on ${minNodes}. Right-size over-requested pods to free <b>${removableIdeal} node${removableIdeal === 1 ? "" : "s"}</b>.`;
 
   el.innerHTML = `
-    ${head(`<span class="badge-tag">${couldRemove} node${couldRemove === 1 ? "" : "s"} removable</span>`)}
+    ${head(badge)}
     <div class="card-body">
-      <div class="grid">
-        <div><span class="k">active pods</span>${active.length} <span class="dim">(limit ${podLimit}/node)</span></div>
-        <div><span class="k">cpu demand</span>${fmtCpu(totalCpuUse)} live · ${fmtCpu(totalCpuReq)} requested <span class="dim">(${phantomCpuPct.toFixed(0)}% phantom)</span></div>
-        <div><span class="k">mem demand</span>${fmtBytes(totalMemUse)} live · ${fmtBytes(totalMemReq)} requested <span class="dim">(${phantomMemPct.toFixed(0)}% phantom)</span></div>
-        <div><span class="k">node template</span>${fmtCpu(nodeCpu)} · ${fmtBytes(nodeMem)}</div>
-      </div>
       <div class="proj">
-        ${row("current", current, "warn", "")}
-        ${row("min by requests", minNodesReq, minNodesReq <= current ? "ok" : "hot", `binding: ${reqBinding.join(" + ")}`)}
-        ${row("min by live usage", minNodes, "ok", `binding: ${liveBinding.join(" + ")} · with ${Math.round((headroom-1)*100)}% headroom`)}
+        ${bar("current", current, "warn")}
+        ${bar("needed now", minNodesReq, removableNow > 0 ? "ok" : "hot", `by requests · binding: ${reqBinding.join(" + ")}`)}
+        ${minNodes < minNodesReq ? bar("after right-sizing", minNodes, "ok", `by live usage +${Math.round((headroom - 1) * 100)}% · ${liveBinding.join(" + ")}`) : ""}
       </div>
-
-      <div class="rec-banner down">
-        <div class="head">scheduler is reserving ${fmtCpu(phantomCpu)} cpu and ${fmtBytes(phantomMem)} mem that nobody's using</div>
-        <div class="line">that's what triggers new nodes — kube-scheduler picks based on requests, not live usage. fix the offenders below and the autoscaler will release the extra node.</div>
-      </div>
-
-      ${offenders.length ? `
-        <div class="inflation-head">request inflation · top offenders by phantom load</div>
-        <div class="candidates">
-          <table>
-            <thead><tr>
-              <th>NAMESPACE</th><th>POD</th>
-              <th class="num">CPU REQ</th><th class="num">CPU USE</th><th class="num">CPU%</th>
-              <th class="num">MEM REQ</th><th class="num">MEM USE</th><th class="num">MEM%</th>
-              <th class="num">PHANTOM (CPU/MEM)</th>
-              <th class="act"></th>
-            </tr></thead>
-            <tbody>${inflationRows}</tbody>
-          </table>
-        </div>
-      ` : ""}
+      <div class="verdict-line ${removableNow > 0 ? "ok" : "warn"}">${verdict}</div>
+      <div class="cap-note">Scheduler is holding <b>${fmtCpu(phantomCpu)}</b> cpu and <b>${fmtBytes(phantomMem)}</b> mem that pods reserved but aren't using — that's what keeps the extra capacity alive. Right-size the worst offenders from the <b>Resources</b> tab.</div>
     </div>
   `;
-
-  // Wire patch buttons (re-use the existing patch modal)
-  $$(".patch-btn[data-cons-off]", el).forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.consOff, 10);
-      const o = offenders[idx];
-      if (o) openPatchModal(o.p);
-    });
-  });
 
   wireCollapse();
 }
 
-function consumerTable(title, byCpu) {
-  const ranked = state.pods
-    .filter(p => (byCpu ? p.rawCpu : p.rawMem) > 0)
-    .sort((a, b) => (byCpu ? b.rawCpu - a.rawCpu : b.rawMem - a.rawMem))
-    .slice(0, 10);
-  if (!ranked.length) {
-    return `<div class="consumer-panel"><h3>${title}</h3>
-      <div class="dim">no pod metrics yet — metrics-server may be warming up</div></div>`;
-  }
-  const max = Math.max(...ranked.map(p => byCpu ? p.rawCpu : p.rawMem));
-  const rows = ranked.map((p, i) => {
-    const v = byCpu ? p.rawCpu : p.rawMem;
-    const valStr = byCpu ? fmtCpu(v) : fmtBytes(v);
-    const sharePct = (v / max) * 100;
-    return `<tr>
-      <td class="rank">${i + 1}</td>
-      <td title="${p.namespace}">${p.namespace}</td>
-      <td title="${p.name}">${p.name}</td>
-      <td class="num">${valStr}</td>
-      <td class="share">${nodeBar(sharePct)}</td>
-    </tr>`;
-  }).join("");
-  return `<div class="consumer-panel"><h3>${title}</h3>
-    <table><thead><tr><th></th><th>NAMESPACE</th><th>POD</th><th class="num">${byCpu ? "CPU" : "MEM"}</th><th>SHARE</th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
-}
-
-function renderTopConsumers() {
-  const el = $("#top-consumers");
-  if (!el) return;
-  if (!state.pods.length) { el.innerHTML = ""; return; }
-  el.innerHTML = consumerTable("top cpu consumers", true) + consumerTable("top memory consumers", false);
-}
-
 // ---------- resources ----------
-function verdict(p, cpuP, memP) {
-  if (!isActive(p)) return ["COMPLETED", "verdict-none"];
-  if (p.cpuRequest === 0 && p.memRequest === 0) return ["NO REQ", "verdict-none"];
-  if (cpuP !== null && cpuP > 90) return ["UPSIZE CPU", "verdict-up"];
-  if (memP !== null && memP > 90) return ["UPSIZE MEM", "verdict-up"];
-  if (p.restarts > 5) return ["UNSTABLE", "verdict-up"];
-  if (cpuP !== null && cpuP < 30 && memP !== null && memP < 30) return ["DOWNSIZE", "verdict-down"];
-  if (cpuP !== null && cpuP < 30) return ["DOWNSIZE CPU", "verdict-down"];
-  if (memP !== null && memP < 30) return ["DOWNSIZE MEM", "verdict-down"];
-  return ["OK", "verdict-ok"];
+// workloadName is the label a group of replicas collapses to. For Deployments
+// the pod's controller is a ReplicaSet named <deployment>-<hash>, so strip the
+// trailing hash; other owners (DaemonSet/StatefulSet/CronJob) use their name.
+function workloadName(p) {
+  if (!p.ownerKind || !p.ownerName) return p.name;
+  if (p.ownerKind === "ReplicaSet") return p.ownerName.replace(/-[^-]+$/, "");
+  return p.ownerName;
 }
 
-function renderResources() {
-  let pods = state.pods.slice();
-  if (state.resNs !== "ALL") pods = pods.filter(p => p.namespace === state.resNs);
+// ---------- rightsizing (history-backed) ----------
+// Reads /api/rightsizing, which aggregates the last N hours of MongoDB usage
+// samples per workload and returns a p95/peak-based DOWNSIZE/OK/UPSIZE verdict.
+async function loadRightsizing() {
+  state.rsLoading = true;
+  renderRightsizing();
+  try {
+    const ns = state.rsNs && state.rsNs !== "ALL" ? `?ns=${encodeURIComponent(state.rsNs)}` : "";
+    state.rs = (await jget("/api/rightsizing" + ns)) || { ready: false, rows: [] };
+  } catch (e) {
+    state.rs = { ready: false, reason: e.message, rows: [] };
+  } finally {
+    state.rsLoading = false;
+    renderRightsizing();
+  }
+}
 
-  // Totals reflect what the scheduler actually reserves — i.e. ACTIVE pods
-  // only. Including Succeeded/Failed pods would falsely inflate
-  // request/limit totals (their containers have exited; the scheduler frees
-  // their reservation) and bury the real utilization signal.
-  let tCpuReq = 0, tCpuLim = 0, tCpuUse = 0, tMemReq = 0, tMemLim = 0, tMemUse = 0;
-  // Track the "phantom" requests sitting in Completed pod specs so we can
-  // surface them transparently instead of silently dropping them.
-  let phantomCpuReq = 0, phantomMemReq = 0;
-  const rows = pods.map(p => {
-    if (isActive(p)) {
-      tCpuReq += p.cpuRequest; tCpuLim += p.cpuLimit; tCpuUse += p.rawCpu;
-      tMemReq += p.memRequest; tMemLim += p.memLimit; tMemUse += p.rawMem;
-    } else {
-      phantomCpuReq += p.cpuRequest;
-      phantomMemReq += p.memRequest;
-    }
-    const cpuP = pct(p.rawCpu, p.cpuRequest);
-    const memP = pct(p.rawMem, p.memRequest);
-    const [v, vc] = verdict(p, cpuP, memP);
-    return { p, cpuP, memP, v, vc };
-  });
+// find a live pod for a workload so the patch modal can resolve its controller
+function podForWorkload(ns, workload) {
+  return state.pods.find(p => isActive(p) && p.namespace === ns && workloadName(p) === workload);
+}
 
-  const rank = r => r.v === "OK" ? 0 : r.v === "NO REQ" ? 1 : 2;
-  rows.sort((a, b) => {
-    switch (state.resSort) {
-      case "cpu": return (b.cpuP ?? -1) - (a.cpuP ?? -1);
-      case "mem": return (b.memP ?? -1) - (a.memP ?? -1);
-      case "verdict": return rank(b) - rank(a) || a.p.name.localeCompare(b.p.name);
-      default: return a.p.namespace.localeCompare(b.p.namespace) || a.p.name.localeCompare(b.p.name);
-    }
-  });
-  let filtered = state.resIssuesOnly ? rows.filter(r => r.v !== "OK") : rows;
-  if (state.resSearch) {
-    const q = state.resSearch.toLowerCase();
-    filtered = filtered.filter(r =>
-      r.p.name.toLowerCase().includes(q) ||
-      r.p.namespace.toLowerCase().includes(q) ||
-      r.v.toLowerCase().includes(q));
+// tone for a p95 cell: red near/over request, green when there's lots of headroom
+function pctToneCls(used, req) {
+  const p = pct(used, req);
+  if (p === null) return "";
+  if (p > 90) return "pct-hot";
+  if (p < 40) return "pct-cool";
+  return "";
+}
+
+function fmtWindow(mins) {
+  if (!mins) return "6h";
+  if (mins % 60 === 0) return (mins / 60) + "h";
+  if (mins < 60) return mins + "m";
+  return (mins / 60).toFixed(1) + "h";
+}
+
+function renderRsSummary(rs, c) {
+  const win = fmtWindow(rs.windowMins);
+  const learningNote = c.learning
+    ? `<div class="line">${c.learning} workload${c.learning === 1 ? "" : "s"} still <b>learning</b> — need ${win} of history before advising.</div>` : "";
+  let head, kind;
+  if (c.up > 0) { kind = "up"; head = `${c.up} workload${c.up === 1 ? "" : "s"} under-provisioned — p95 near the request`; }
+  else if (c.down > 0) { kind = "down"; head = `${c.down} workload${c.down === 1 ? "" : "s"} over-provisioned — safe to downsize`; }
+  else { kind = "ok"; head = `allocation looks right-sized over the ${win} window`; }
+  return `<div class="rec-banner ${kind}">
+    <div class="head">${head}</div>
+    <div class="line">Verdicts use the <b>95th percentile</b> and <b>peak</b> per-pod usage over the window, so a spiky workload isn't told to shrink on a quiet moment.</div>
+    ${learningNote}
+  </div>`;
+}
+
+function renderRightsizing() {
+  const tbody = $("#rs-tbody");
+  if (!tbody) return;
+  const rs = state.rs || { ready: false, rows: [] };
+  $("#rs-window").textContent = `${fmtWindow(rs.windowMins)} history · p95 + peak per pod`;
+
+  if (state.rsLoading && (!rs.rows || rs.rows.length === 0)) {
+    tbody.innerHTML = `<tr><td colspan="10" class="dim" style="padding:14px">loading…</td></tr>`;
+    $("#rs-summary").innerHTML = "";
+    return;
+  }
+  if (rs.ready === false && (!rs.rows || rs.rows.length === 0)) {
+    tbody.innerHTML = `<tr><td colspan="10" class="dim" style="padding:14px">${rs.reason || "history unavailable — start MongoDB (docker compose up -d) and relaunch."}</td></tr>`;
+    $("#rs-summary").innerHTML = "";
+    return;
   }
 
-  const cpuPctTot = pct(tCpuUse, tCpuReq);
-  const memPctTot = pct(tMemUse, tMemReq);
+  const all = rs.rows || [];
+  const learning = all.filter(r => r.verdict === "LEARNING").length;
+  const down = all.filter(r => r.verdict.startsWith("DOWNSIZE")).length;
+  const up = all.filter(r => r.verdict.startsWith("UPSIZE")).length;
+  $("#rs-summary").innerHTML = renderRsSummary(rs, { learning, down, up });
 
-  // reclaimable = requested - used for ACTIVE pods (Running/Pending) below
-  // 30% of their request. Succeeded/Failed pods don't reserve capacity so
-  // their requests aren't really reclaimable from the cluster's perspective.
-  let reclaimableCpu = 0, reclaimableMem = 0, downsizeCount = 0, completedCount = 0;
-  for (const r of rows) {
-    if (!isActive(r.p)) { completedCount++; continue; }
-    let counted = false;
-    if (r.cpuP !== null && r.cpuP < 30) {
-      reclaimableCpu += Math.max(0, r.p.cpuRequest - r.p.rawCpu);
-      counted = true;
-    }
-    if (r.memP !== null && r.memP < 30) {
-      reclaimableMem += Math.max(0, r.p.memRequest - r.p.rawMem);
-      counted = true;
-    }
-    if (counted) downsizeCount++;
+  let rows = all.slice();
+  if (state.rsNs !== "ALL") rows = rows.filter(r => r.namespace === state.rsNs);
+  if (state.rsSearch) {
+    const q = state.rsSearch.toLowerCase();
+    rows = rows.filter(r => r.workload.toLowerCase().includes(q) ||
+      r.namespace.toLowerCase().includes(q) || r.verdict.toLowerCase().includes(q));
   }
-  const cpuReclaimPct = tCpuReq > 0 ? (reclaimableCpu / tCpuReq) * 100 : 0;
-  const memReclaimPct = tMemReq > 0 ? (reclaimableMem / tMemReq) * 100 : 0;
+  if (state.rsIssuesOnly) rows = rows.filter(r => r.verdict !== "OK" && r.verdict !== "LEARNING");
+  rows.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.workload.localeCompare(b.workload));
 
-  // banner — pick the most important message instead of stacking lines
-  let bannerKind = "ok", bannerHead = "allocation is balanced", bannerLine = "", bannerAction = "";
-  if (tCpuReq === 0 && tMemReq === 0) {
-    bannerKind = "warn"; bannerHead = "no requests/limits set on any pod";
-    bannerLine = "right-sizing analysis needs pod resource requests to compare against.";
-    bannerAction = "add resources.requests to pod manifests, then return here.";
-  } else if (cpuPctTot > 90 || memPctTot > 90) {
-    bannerKind = "up";
-    bannerHead = `resources at risk · cpu ${cpuPctTot.toFixed(0)}% of request · mem ${memPctTot.toFixed(0)}% of request`;
-    bannerLine = cpuPctTot > 90 ? "cpu throttling likely under load. " : "";
-    bannerLine += memPctTot > 90 ? "memory near limit — OOMKill risk." : "";
-    bannerAction = "increase resources.requests on the affected pods.";
-  } else if (cpuReclaimPct >= 30 || memReclaimPct >= 30) {
-    bannerKind = "down";
-    bannerHead = `over-allocated · using ${cpuPctTot.toFixed(0)}% cpu / ${memPctTot.toFixed(0)}% mem of requests`;
-    bannerLine = `${downsizeCount} pod${downsizeCount === 1 ? "" : "s"} sitting below 30% of their request. ${fmtCpu(reclaimableCpu)} cpu and ${fmtBytes(reclaimableMem)} mem could be reclaimed by tightening requests.`;
-    bannerAction = "lower resources.requests on the candidate pods (see table below).";
-  } else {
-    bannerHead = `allocation balanced · cpu ${cpuPctTot.toFixed(0)}% · mem ${memPctTot.toFixed(0)}% of requests`;
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" class="dim" style="padding:14px">no workloads${state.rsNs !== "ALL" ? " in " + state.rsNs : ""}.</td></tr>`;
+    return;
   }
 
-  $("#res-summary").innerHTML = `
-    <h3>namespace summary · ${state.resNs}</h3>
-    <div class="hero-stats">
-      <div class="item">
-        <span class="k">pods</span>
-        <span class="v">${pods.length}</span>
-        <span class="sub">${downsizeCount} downsize · ${completedCount} completed (excluded from totals)</span>
-      </div>
-      <div class="item">
-        <span class="k">cpu use / req (active)</span>
-        <span class="v ${cpuPctTot < 30 ? "down" : cpuPctTot > 90 ? "up" : "ok"}">${fmtCpu(tCpuUse)} <span class="sub">of ${fmtCpu(tCpuReq)} (${cpuPctTot !== null ? cpuPctTot.toFixed(0) + "%" : "—"})</span></span>
-        ${phantomCpuReq > 0 ? `<span class="sub">+ ${fmtCpu(phantomCpuReq)} in completed pod specs (not reserved)</span>` : ""}
-      </div>
-      <div class="item">
-        <span class="k">mem use / req (active)</span>
-        <span class="v ${memPctTot < 30 ? "down" : memPctTot > 90 ? "up" : "ok"}">${fmtBytes(tMemUse)} <span class="sub">of ${fmtBytes(tMemReq)} (${memPctTot !== null ? memPctTot.toFixed(0) + "%" : "—"})</span></span>
-        ${phantomMemReq > 0 ? `<span class="sub">+ ${fmtBytes(phantomMemReq)} in completed pod specs (not reserved)</span>` : ""}
-      </div>
-      <div class="item">
-        <span class="k">reclaimable cpu</span>
-        <span class="v down">${fmtCpu(reclaimableCpu)}</span>
-        <span class="sub">${cpuReclaimPct.toFixed(0)}% of requests</span>
-      </div>
-      <div class="item">
-        <span class="k">reclaimable mem</span>
-        <span class="v down">${fmtBytes(reclaimableMem)}</span>
-        <span class="sub">${memReclaimPct.toFixed(0)}% of requests</span>
-      </div>
-    </div>
-    <div class="rec-banner ${bannerKind}">
-      <div class="head">${bannerHead}</div>
-      ${bannerLine ? `<div class="line">${bannerLine}</div>` : ""}
-      ${bannerAction ? `<div class="action">→ ${bannerAction}</div>` : ""}
-    </div>
-  `;
-
-  const tbody = $("#res-tbody");
   tbody.innerHTML = "";
-  filtered.forEach((r, i) => {
-    const p = r.p;
-    const patchable = isActive(p) && (p.cpuRequest > 0 || p.memRequest > 0);
-    const actionCell = patchable
-      ? `<td class="act"><button class="patch-btn" data-res="${i}">patch</button></td>`
-      : `<td class="act"><span class="dim">—</span></td>`;
+  rows.forEach((r, i) => {
+    const rep = podForWorkload(r.namespace, r.workload);
+    const managed = isSystemNamespace(r.namespace);
+    const actionable = r.verdict.startsWith("DOWNSIZE") || r.verdict.startsWith("UPSIZE");
+    let actionCell;
+    if (managed) actionCell = `<td class="act"><span class="managed-tag" title="Platform-managed namespace — patch via the EKS add-on/operator, not here.">managed</span></td>`;
+    else if (rep && actionable) actionCell = `<td class="act"><button class="patch-btn" data-rs="${i}">patch</button></td>`;
+    else actionCell = `<td class="act"><span class="dim">—</span></td>`;
+
+    const suggest = (r.suggestCpu || r.suggestMem)
+      ? `<div class="rs-suggest">→ ${r.suggestCpu ? fmtCpu(r.suggestCpu) : ""}${r.suggestCpu && r.suggestMem ? " · " : ""}${r.suggestMem ? fmtBytes(r.suggestMem) : ""}</div>` : "";
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${p.namespace}</td>
-      <td title="${p.name}">${p.name}</td>
-      <td class="num">${fmtCpu(p.cpuRequest)}</td>
-      <td class="num">${fmtCpu(p.cpuLimit)}</td>
-      <td class="num">${fmtCpu(p.rawCpu)}</td>
-      <td class="num">${r.cpuP !== null ? r.cpuP.toFixed(0) + "%" : "-"}</td>
-      <td class="num">${fmtBytes(p.memRequest)}</td>
-      <td class="num">${fmtBytes(p.memLimit)}</td>
-      <td class="num">${fmtBytes(p.rawMem)}</td>
-      <td class="num">${r.memP !== null ? r.memP.toFixed(0) + "%" : "-"}</td>
-      <td class="vrd"><span class="${r.vc}">${r.v}</span></td>
+      <td>${r.namespace}</td>
+      <td title="${r.ownerKind}/${r.workload} · ${r.replicas} replica${r.replicas === 1 ? "" : "s"} · ${r.samples} samples over ${fmtWindow(r.windowMins)}">${r.workload} <span class="dim">×${r.replicas}</span></td>
+      <td class="num">${fmtCpu(r.cpuRequest)}</td>
+      <td class="num ${pctToneCls(r.cpuP95, r.cpuRequest)}">${fmtCpu(r.cpuP95)}</td>
+      <td class="num dim">${fmtCpu(r.cpuPeak)}</td>
+      <td class="num">${fmtBytes(r.memRequest)}</td>
+      <td class="num ${pctToneCls(r.memP95, r.memRequest)}">${fmtBytes(r.memP95)}</td>
+      <td class="num dim">${fmtBytes(r.memPeak)}</td>
+      <td class="vrd"><span class="${r.verdictCls}">${r.verdict}</span>${suggest}</td>
       ${actionCell}
     `;
     tbody.appendChild(tr);
   });
-  // wire the per-row patch buttons
-  $$("button.patch-btn[data-res]", tbody).forEach(btn => {
+
+  $$("button.patch-btn[data-rs]", tbody).forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const idx = parseInt(btn.dataset.res, 10);
-      const r = filtered[idx];
-      if (r) openPatchModal(r.p);
+      const r = rows[parseInt(btn.dataset.rs, 10)];
+      const rep = r && podForWorkload(r.namespace, r.workload);
+      if (rep) openPatchModal(rep);
     });
   });
+
 }
 
-// ---------- finops ----------
-function binPackNodes(podsArr, nodeCpu, nodeMem, podLimit) {
-  if (nodeCpu <= 0 || nodeMem <= 0) return 0;
-  const items = podsArr.slice().sort((a, b) =>
-    Math.max(b.cpu / nodeCpu, b.mem / nodeMem) - Math.max(a.cpu / nodeCpu, a.mem / nodeMem));
-  const nodes = [];
-  for (const it of items) {
-    let placed = false;
-    for (const n of nodes) {
-      if (n.cpu + it.cpu <= nodeCpu && n.mem + it.mem <= nodeMem && n.count < podLimit) {
-        n.cpu += it.cpu; n.mem += it.mem; n.count++;
-        placed = true; break;
-      }
-    }
-    if (!placed) nodes.push({ cpu: it.cpu, mem: it.mem, count: 1 });
+// ---------- autoscalers (HPA) ----------
+// state.hpas holds every HPA in the cluster (fetched once per refresh); both
+// the autoscalers view and the resources table read from it. hpaIndex maps a
+// workload to its HPA so the resources rows can show scaling inline.
+function rebuildHpaIndex() {
+  const idx = new Map();
+  for (const h of state.hpas || []) {
+    // Key on the scale target the workload row can produce: namespace + the
+    // controller name (Deployment/StatefulSet/DaemonSet name).
+    idx.set(`${h.namespace}|${h.refName}`, h);
   }
-  return nodes.length;
+  state.hpaIndex = idx;
+}
+function hpaFor(namespace, name) {
+  return state.hpaIndex ? state.hpaIndex.get(`${namespace}|${name}`) : undefined;
 }
 
-function renderFinOps() {
-  renderProjection();
-  renderCandidates();
+async function loadHPAs() {
+  state.hpaLoading = true;
+  renderHPAs();
+  try {
+    state.hpas = (await jget("/api/hpas")) || [];
+    rebuildHpaIndex();
+  } catch (e) {
+    state.hpas = [];
+    setMsg("hpa load failed: " + e.message);
+  } finally {
+    state.hpaLoading = false;
+    renderHPAs();
+    renderRightsizing();
+  }
 }
 
-function renderProjection() {
-  const el = $("#finops-projection");
-  if (!el) return;
-  if (!state.nodes.length || !state.pods.length) {
-    el.innerHTML = `<div class="placeholder">waiting for node/pod data…</div>`;
+// A metric pill reads "cpu 31% / 80%" with a mini fill bar of current-vs-target.
+// >=90% of target = hot (about to scale up), <37.5% = cool (headroom / scaling
+// down), otherwise neutral. currentPct === -1 means no reading yet (a
+// freshly-scaled pod that hasn't reported metrics).
+function hpaMetricCell(m) {
+  const target = m.target || "—";
+  const cur = m.current || "—";
+  let tone = "hpa-mid", fill = 0, hasPct = m.currentPct >= 0 && m.targetPct > 0;
+  if (hasPct) {
+    const ratio = m.currentPct / m.targetPct;
+    tone = ratio >= 0.9 ? "hpa-hot" : ratio < 0.375 ? "hpa-cool" : "hpa-mid";
+    fill = Math.min(100, (m.currentPct / m.targetPct) * 100);
+  }
+  const bar = hasPct
+    ? `<span class="hpa-metric-track"><span class="hpa-metric-fill ${tone}" style="width:${fill}%"></span></span>`
+    : "";
+  return `<span class="hpa-metric ${tone}">`
+    + `<span class="hpa-metric-name">${m.name}</span>`
+    + `<span class="hpa-metric-val">${cur}<span class="dim"> / ${target}</span></span>`
+    + bar
+    + `</span>`;
+}
+
+// hpaBadge renders a compact autoscaler cell for the resources table: the
+// replica band (min–max), the live count, and the hottest metric's headroom.
+// Tooltip carries the target names and the current scaling reason.
+function hpaBadge(h) {
+  if (!h) return `<span class="dim">—</span>`;
+  const atMax = h.currentReplicas >= h.maxReplicas;
+  const atMin = h.currentReplicas <= h.minReplicas;
+  const cls = atMax ? "hpa-pill-max" : atMin ? "hpa-pill-min" : "hpa-pill-mid";
+
+  // hottest metric = closest to (or over) its target — that's what drives the
+  // next scale-up, so it's the one worth surfacing next to the count.
+  let hot = null;
+  for (const m of h.metrics || []) {
+    if (m.currentPct < 0 || m.targetPct <= 0) continue;
+    const ratio = m.currentPct / m.targetPct;
+    if (!hot || ratio > hot.ratio) hot = { m, ratio };
+  }
+  const metricStr = hot
+    ? `<span class="hpa-pill-metric">${hot.m.name} ${hot.m.current}</span>` : "";
+
+  const conds = h.conditions || [];
+  const limited = conds.find(c => c.type === "ScalingLimited" && c.status === "True");
+  const tip = [
+    `${h.refKind}/${h.refName}`,
+    `replicas ${h.minReplicas}–${h.maxReplicas}, now ${h.currentReplicas}` + (atMax ? " (at MAX)" : atMin ? " (at min)" : ""),
+    ...(h.metrics || []).map(m => `${m.name}: ${m.current} / ${m.target}`),
+    limited ? `limited: ${limited.reason}` : "",
+    h.lastScale ? `last scale: ${h.lastScale} ago` : "",
+  ].filter(Boolean).join("\n");
+
+  return `<span class="hpa-badge" title="${escapeAttr(tip)}">`
+    + `<span class="hpa-pill ${cls}">${h.currentReplicas}<span class="hpa-pill-den">/${h.maxReplicas}</span></span>`
+    + metricStr + `</span>`;
+}
+
+function renderHPAs() {
+  const tbody = $("#hpa-tbody");
+  if (!tbody) return;
+  const q = state.hpaSearch.trim().toLowerCase();
+  let rows = state.hpas.slice();
+  if (state.hpaNs !== "ALL") rows = rows.filter(h => h.namespace === state.hpaNs);
+  if (q) {
+    rows = rows.filter(h =>
+      h.name.toLowerCase().includes(q) ||
+      (h.refName || "").toLowerCase().includes(q) ||
+      (h.namespace || "").toLowerCase().includes(q));
+  }
+
+  if (state.hpaLoading && rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="dim" style="padding:14px">loading…</td></tr>`;
+    $("#hpa-summary").textContent = "";
     return;
   }
-  let avgCpu = 0, avgMem = 0, podLimit = 110;
-  let totalCpuCap = 0, totalMemCap = 0, totalCpuUse = 0, totalMemUse = 0;
-  for (const n of state.nodes) {
-    avgCpu += n.cpuCap; avgMem += n.memCap;
-    podLimit = n.podLimit || podLimit;
-    totalCpuCap += n.cpuCap; totalMemCap += n.memCap;
-    totalCpuUse += n.cpuUsed; totalMemUse += n.memUsed;
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="dim" style="padding:14px">no autoscalers found${state.hpaNs !== "ALL" ? " in " + state.hpaNs : ""}.</td></tr>`;
+    $("#hpa-summary").textContent = "";
+    return;
   }
-  avgCpu = Math.floor(avgCpu / state.nodes.length);
-  avgMem = Math.floor(avgMem / state.nodes.length);
-  const headroom = 1 + state.headroom / 100;
 
-  // Only ACTIVE pods consume scheduler capacity — Completed/Failed pods don't
-  // factor into bin-pack at all (their containers have exited).
-  const activePods = state.pods.filter(isActive);
-  const podsForPack = activePods.map(p => ({
-    cpu: Math.ceil(Math.max(p.cpuRequest, p.rawCpu) * headroom),
-    mem: Math.ceil(Math.max(p.memRequest, p.rawMem) * headroom),
-    rightSized: {
-      cpu: Math.ceil(Math.max(p.rawCpu * 1.2, 10) * headroom),
-      mem: Math.ceil(Math.max(p.rawMem * 1.2, 64 * 1024 * 1024) * headroom),
-    },
-  }));
-  const current = state.nodes.length;
-  const today = binPackNodes(podsForPack, avgCpu, avgMem, podLimit);
-  const rs = binPackNodes(podsForPack.map(p => p.rightSized), avgCpu, avgMem, podLimit);
+  tbody.innerHTML = rows.map(h => {
+    const metrics = (h.metrics || []).map(hpaMetricCell).join("") || "<span class=\"dim\">—</span>";
+    return `<tr>
+      <td>${h.namespace}</td>
+      <td class="hpa-name">${h.name}</td>
+      <td class="dim hpa-target" title="${escapeAttr((h.refKind || "") + "/" + (h.refName || ""))}">${h.refKind || ""}/${h.refName || ""}</td>
+      <td class="hpa-replicas-col">${hpaReplicasCell(h)}</td>
+      <td class="hpa-metrics-col">${metrics}</td>
+      <td class="num dim">${h.lastScale ? h.lastScale + " ago" : "—"}</td>
+    </tr>`;
+  }).join("");
 
-  // identify binding constraint for each scenario
-  const constraint = (pods, nodeCpu, nodeMem) => {
-    const sumCpu = pods.reduce((s, p) => s + p.cpu, 0);
-    const sumMem = pods.reduce((s, p) => s + p.mem, 0);
-    const cpuLB = Math.ceil(sumCpu / nodeCpu);
-    const memLB = Math.ceil(sumMem / nodeMem);
-    const podLB = Math.ceil(pods.length / podLimit);
-    const max = Math.max(cpuLB, memLB, podLB);
-    const names = [];
-    if (podLB === max) names.push("pod-count");
-    if (cpuLB === max) names.push("cpu");
-    if (memLB === max) names.push("memory");
-    return { name: names.join(" + "), lb: max, cpuLB, memLB, podLB };
-  };
-  const cToday = constraint(podsForPack, avgCpu, avgMem);
-  const cRs = constraint(podsForPack.map(p => p.rightSized), avgCpu, avgMem);
+  const maxed = rows.filter(h => h.currentReplicas >= h.maxReplicas).length;
+  $("#hpa-summary").textContent =
+    `${rows.length} autoscaler${rows.length === 1 ? "" : "s"}` + (maxed ? ` · ${maxed} at max replicas` : "");
+}
 
-  const peak = Math.max(current, today, rs, 1);
-  const klass = (v) => v > current ? "hot" : v < current ? "ok" : "warn";
-  const row = (label, val, kc, note) => {
-    const w = (val / peak) * 100;
-    return `<div class="proj-row">
-      <span class="lbl">${label}</span>
-      <span class="track"><span class="fill ${kc}" style="width:${w.toFixed(1)}%"></span></span>
-      <span class="val">${val}</span>
-      ${note ? `<span class="note dim">${note}</span>` : ""}
-    </div>`;
-  };
-
-  // actual cluster utilization (from metrics-server)
-  const cpuPct = totalCpuCap > 0 ? (totalCpuUse / totalCpuCap) * 100 : 0;
-  const memPct = totalMemCap > 0 ? (totalMemUse / totalMemCap) * 100 : 0;
-  const utilCls = p => p > 80 ? "hot" : p > 50 ? "warn" : "ok";
-  const utilRow = (label, p, used, cap, fmt) => `<div class="proj-row">
-    <span class="lbl">${label}</span>
-    <span class="track"><span class="fill ${utilCls(p)}" style="width:${Math.min(p,100).toFixed(1)}%"></span></span>
-    <span class="val">${p.toFixed(0)}%</span>
-    <span class="note dim">${fmt(used)} of ${fmt(cap)}</span>
+// hpaReplicasCell draws the min→max band with a filled track up to the current
+// count, plus a "cur / max" readout. Green when parked at min (headroom), red
+// when pinned at max (out of room), neutral in between.
+function hpaReplicasCell(h) {
+  const min = h.minReplicas, max = h.maxReplicas, cur = h.currentReplicas;
+  const atMax = cur >= max, atMin = cur <= min;
+  const span = Math.max(1, max - min);
+  const fill = Math.min(100, Math.max(0, ((cur - min) / span) * 100));
+  const cntCls = atMax ? "hpa-repl-max" : atMin ? "hpa-repl-min" : "hpa-repl-mid";
+  const barCls = atMax ? "hpa-hot" : atMin ? "hpa-cool" : "hpa-mid-bar";
+  return `<div class="hpa-repl" title="min ${min} · current ${cur} · max ${max}">
+    <span class="hpa-repl-num ${cntCls}">${cur}</span>
+    <span class="hpa-repl-track"><span class="hpa-repl-fill ${barCls}" style="width:${fill}%"></span></span>
+    <span class="hpa-repl-band dim">${min}–${max}</span>
   </div>`;
-
-  // verdict — grounded in real usage AND bin-pack outcome
-  let verdictHtml;
-  const lowUtil = cpuPct < 30 && memPct < 60;
-  if (rs < current) {
-    verdictHtml = `<div class="verdict-line ok">can shrink by ${current - rs} node${current - rs === 1 ? "" : "s"} after right-sizing (≈ ${Math.round((1 - rs / current) * 100)}% reduction). binding: ${cRs.name}.</div>`;
-  } else if (lowUtil && cToday.name.includes("pod-count")) {
-    // cluster is idle but pod-count limit prevents consolidation
-    const couldFit = Math.max(
-      Math.ceil(podsForPack.reduce((s, p) => s + p.cpu, 0) / avgCpu),
-      Math.ceil(podsForPack.reduce((s, p) => s + p.mem, 0) / avgMem),
-      1);
-    verdictHtml = `<div class="verdict-line warn">cluster under-utilized (cpu ${cpuPct.toFixed(0)}%, mem ${memPct.toFixed(0)}%) but bin-pack needs ${today} nodes because of the <b>pod-per-node limit (${podLimit})</b>. raise <code>--max-pods</code> on kubelet (or use larger nodes) and you could fit in ${couldFit} node${couldFit === 1 ? "" : "s"} by resources alone.</div>`;
-  } else if (lowUtil) {
-    verdictHtml = `<div class="verdict-line ok">cluster under-utilized: cpu ${cpuPct.toFixed(0)}%, mem ${memPct.toFixed(0)}%. likely room to shrink — review the right-sizing candidates below.</div>`;
-  } else if (rs > current) {
-    const over = rs - current;
-    verdictHtml = `<div class="verdict-line hot">overcommitted: bin-pack needs ${over} more node${over === 1 ? "" : "s"} than provisioned. binding: ${cToday.name}. pods may be unschedulable under load.</div>`;
-  } else {
-    verdictHtml = `<div class="verdict-line warn">right-sized — no node-count change projected. binding: ${cRs.name}.</div>`;
-  }
-
-  el.innerHTML = `
-    <div class="proj-section-head">actual utilization (live)</div>
-    <div class="proj">
-      ${utilRow("cpu", cpuPct, totalCpuUse, totalCpuCap, fmtCpu)}
-      ${utilRow("memory", memPct, totalMemUse, totalMemCap, fmtBytes)}
-      ${utilRow("pods", (activePods.length / (current * podLimit)) * 100, activePods.length, current * podLimit, n => n.toString())}
-    </div>
-    <div class="proj-section-head">bin-pack projection</div>
-    <div class="proj">
-      ${row("current nodes", current, "warn", "")}
-      ${row("today (max req/live)", today, klass(today), `binding: ${cToday.name}`)}
-      ${row("after right-size", rs, klass(rs), `binding: ${cRs.name}`)}
-    </div>
-    ${verdictHtml}
-    <div class="proj-meta">
-      <span><span class="k">node template</span>${fmtCpu(avgCpu)} cpu · ${fmtBytes(avgMem)} mem · ${podLimit} pod cap</span>
-      <span><span class="k">pods</span>${activePods.length} active <span class="dim">(${state.pods.length - activePods.length} completed excluded)</span></span>
-      <span><span class="k">method</span>first-fit-decreasing of max(request, live) × ${state.headroom}% headroom</span>
-    </div>
-  `;
 }
 
-function renderCandidates() {
-  const el = $("#finops-candidates");
-  if (!el) return;
-  const nsFilter = state.candNs;
-  const inNs = (p) => nsFilter === "ALL" || p.namespace === nsFilter;
-  // count completed/failed pods so we can mention them but exclude them
-  // from the reclaimable math — they don't actually hold cluster capacity.
-  const completed = state.pods.filter(p => inNs(p) && !isActive(p)).length;
-  // a pod is a downsize candidate if it uses < 30% of its CPU or memory request
-  const rows = [];
-  for (const p of state.pods) {
-    if (!inNs(p)) continue;
-    if (!isActive(p)) continue;
-    if (p.cpuRequest === 0 && p.memRequest === 0) continue;
-    const cpuP = p.cpuRequest > 0 ? (p.rawCpu / p.cpuRequest) * 100 : null;
-    const memP = p.memRequest > 0 ? (p.rawMem / p.memRequest) * 100 : null;
-    const cpuWaste = (cpuP !== null && cpuP < 30) ? p.cpuRequest - p.rawCpu : 0;
-    const memWaste = (memP !== null && memP < 30) ? p.memRequest - p.rawMem : 0;
-    if (cpuWaste === 0 && memWaste === 0) continue;
-    rows.push({ p, cpuP, memP, cpuWaste, memWaste });
-  }
-  rows.sort((a, b) => {
-    // rank by combined waste fraction (memory weighted same as cpu)
-    const aw = (a.cpuWaste / 1000) + (a.memWaste / (1024 * 1024 * 1024));
-    const bw = (b.cpuWaste / 1000) + (b.memWaste / (1024 * 1024 * 1024));
-    return bw - aw;
-  });
-  const top = rows.slice(0, 15);
-  const metaParts = [`${rows.length} active pod${rows.length === 1 ? "" : "s"} below 30% of request`];
-  if (completed > 0) metaParts.push(`${completed} completed/failed pod${completed === 1 ? "" : "s"} excluded (no live capacity held)`);
-  $("#candidates-meta").textContent = metaParts.join(" · ");
-  if (!top.length) {
-    el.innerHTML = `<div class="placeholder">no significant right-sizing candidates — pods are within 30% of their requests.</div>`;
-    return;
-  }
-  let totalCpuSave = 0, totalMemSave = 0;
-  for (const r of rows) { totalCpuSave += r.cpuWaste; totalMemSave += r.memWaste; }
-  const body = top.map((r, i) => `<tr>
-    <td>${r.p.namespace}</td>
-    <td title="${r.p.name}">${r.p.name}</td>
-    <td class="num">${fmtCpu(r.p.cpuRequest)}</td>
-    <td class="num">${fmtCpu(r.p.rawCpu)}</td>
-    <td class="num">${r.cpuP !== null ? r.cpuP.toFixed(0) + "%" : "-"}</td>
-    <td class="num">${fmtBytes(r.p.memRequest)}</td>
-    <td class="num">${fmtBytes(r.p.rawMem)}</td>
-    <td class="num">${r.memP !== null ? r.memP.toFixed(0) + "%" : "-"}</td>
-    <td class="num save">${r.cpuWaste > 0 ? fmtCpu(r.cpuWaste) : "-"} / ${r.memWaste > 0 ? fmtBytes(r.memWaste) : "-"}</td>
-    <td class="act"><button class="patch-btn" data-cand="${i}">patch</button></td>
-  </tr>`).join("");
-  el.innerHTML = `
-    <div class="candidates">
-      <table>
-        <thead><tr>
-          <th>NAMESPACE</th><th>POD</th>
-          <th class="num">CPU REQ</th><th class="num">CPU USE</th><th class="num">CPU%</th>
-          <th class="num">MEM REQ</th><th class="num">MEM USE</th><th class="num">MEM%</th>
-          <th class="num">RECLAIMABLE</th>
-          <th class="act"></th>
-        </tr></thead>
-        <tbody>${body}</tbody>
-      </table>
-    </div>
-    <div class="proj-meta">
-      <span><span class="k">cluster total reclaimable</span>${fmtCpu(totalCpuSave)} cpu · ${fmtBytes(totalMemSave)} mem</span>
-      <span><span class="k">threshold</span>< 30% of request</span>
-    </div>
-  `;
-  // wire up per-row patch buttons
-  $$(".patch-btn", el).forEach(btn => {
-    btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.cand, 10);
-      const r = top[idx];
-      if (r) openPatchModal(r.p);
-    });
-  });
+function escapeAttr(s) {
+  return String(s || "").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
 // ---------- patch modal ----------
@@ -892,6 +1107,11 @@ function cpuToK8s(milli) {
 let patchCtx = null;
 
 async function openPatchModal(p) {
+  // Backstop: never patch platform-managed namespaces even if invoked directly.
+  if (isSystemNamespace(p.namespace)) {
+    setMsg(`${p.namespace} is platform-managed — change it via the EKS add-on / operator, not a live patch`);
+    return;
+  }
   patchCtx = { pod: p, owner: null };
   $("#patch-title").textContent = `patch · ${p.namespace}/${p.name}`;
   $("#patch-meta").textContent = "resolving controller…";
@@ -1022,14 +1242,75 @@ async function loadCosts() {
   if (state.costsLoading) return;
   state.costsLoading = true;
   $("#costs-meta").textContent = "loading…";
+  $("#cost-services-meta").textContent = "loading…";
+  // Daily total and per-service breakdown are independent CE queries; load both
+  // but let each fail on its own so one error doesn't blank the other.
+  const daily = jget("/api/costs")
+    .then(d => { state.costs = d; renderCosts(); })
+    .catch(e => { $("#cost-chart").innerHTML = `<div class="err">${e.message}</div>`; $("#costs-meta").textContent = "error"; });
+  try { await Promise.all([daily, loadCostServices()]); }
+  finally { state.costsLoading = false; }
+}
+
+// AWS Cost Explorer reports full service names; shorten the common ones so the
+// list scans quickly. Unknowns just drop the "Amazon "/"AWS " prefix.
+const SERVICE_SHORT = {
+  "Amazon Elastic Compute Cloud - Compute": "EC2",
+  "EC2 - Other": "EC2 · Other",
+  "Amazon Elastic Kubernetes Service": "EKS",
+  "Amazon Elastic Container Service for Kubernetes": "EKS",
+  "Amazon Elastic Container Service": "ECS",
+  "Amazon Elastic Container Registry (ECR)": "ECR",
+  "Amazon EC2 Container Registry (ECR)": "ECR",
+  "Amazon Elastic Block Store": "EBS",
+  "Amazon Simple Storage Service": "S3",
+  "Amazon DynamoDB": "DynamoDB",
+  "Amazon Relational Database Service": "RDS",
+  "Amazon Virtual Private Cloud": "VPC",
+  "Amazon Elastic Load Balancing": "ELB",
+  "Amazon CloudWatch": "CloudWatch",
+  "AmazonCloudWatch": "CloudWatch",
+  "AWS Key Management Service": "KMS",
+  "AWS Lambda": "Lambda",
+  "Amazon Route 53": "Route 53",
+  "Amazon Simple Notification Service": "SNS",
+  "Amazon Simple Queue Service": "SQS",
+  "AWS Cost Explorer": "Cost Explorer",
+  "AWS Secrets Manager": "Secrets Manager",
+  "Amazon Simple Email Service": "SES",
+  "AWS Data Transfer": "Data Transfer",
+  "AWS Security Hub": "Security Hub",
+  "Tax": "Tax",
+};
+function shortenService(name) {
+  return SERVICE_SHORT[name] || name.replace(/^Amazon\s+/, "").replace(/^AWS\s+/, "");
+}
+
+// Fill the month dropdown with the current month and the previous few, newest
+// first. Values are "YYYY-MM"; labels read like "Sep 2026".
+function populateCostMonths() {
+  const sel = $("#cost-month");
+  if (!sel || sel.options.length) return;
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const o = document.createElement("option");
+    o.value = val;
+    o.textContent = d.toLocaleDateString(undefined, { month: "short", year: "numeric" }) + (i === 0 ? " (MTD)" : "");
+    sel.appendChild(o);
+  }
+}
+
+async function loadCostServices() {
+  const month = $("#cost-month") ? $("#cost-month").value : "";
+  $("#cost-services-meta").textContent = "loading…";
   try {
-    state.costs = await jget("/api/costs");
-    renderCosts();
+    state.costServices = await jget("/api/costs/services" + (month ? `?month=${month}` : ""));
+    renderCostServices();
   } catch (e) {
-    $("#cost-chart").innerHTML = `<div class="err">${e.message}</div>`;
-    $("#costs-meta").textContent = "error";
-  } finally {
-    state.costsLoading = false;
+    $("#cost-services").innerHTML = `<div class="err">${e.message}</div>`;
+    $("#cost-services-meta").textContent = "error";
   }
 }
 
@@ -1039,6 +1320,70 @@ function renderCostPlaceholder() {
     <div class="placeholder">
       no cost data loaded
       <div class="hint">click <b>load costs</b> to query AWS Cost Explorer (≈ $0.01/call, requires <code>aws</code> CLI on PATH)</div>
+    </div>`;
+  $("#cost-services").innerHTML = `
+    <div class="placeholder">per-service breakdown loads with costs</div>`;
+}
+
+// renderCostServices draws a ranked breakdown of spend by AWS service — where
+// the money actually goes (EKS, EC2, EBS, DynamoDB, …) — as a share bar list.
+function renderCostServices() {
+  const el = $("#cost-services");
+  const svc = state.costServices;
+  if (!svc || !svc.length) {
+    el.innerHTML = `<div class="placeholder">no per-service cost data for this period</div>`;
+    $("#cost-services-meta").textContent = "";
+    return;
+  }
+  const total = svc.reduce((s, x) => s + x.usd, 0);
+  $("#cost-services-meta").textContent = `${svc.length} services · $${total.toFixed(2)} total`;
+
+  // Curated, harmonious hues (cool → warm) rather than a raw rainbow — reads as
+  // one palette instead of crayons. hue()/color() also feed the legend swatch
+  // and the faint per-row share bar so a service is the same colour everywhere.
+  const hues = [210, 190, 168, 145, 96, 52, 32, 14, 340, 315, 268, 232];
+  const hue = i => hues[i % hues.length];
+  const color = i => `hsl(${hue(i)} 52% 62%)`;
+  const soft = i => `hsl(${hue(i)} 52% 62% / 0.16)`;
+
+  // Segmented donut: thin ring on a faint track, with a small gap between arcs.
+  const r = 82, sw = 18, C = 2 * Math.PI * r, gap = 3.5;
+  let acc = 0;
+  const segs = svc.map((x, i) => {
+    const len = total > 0 ? (x.usd / total) * C : 0;
+    const pct = total > 0 ? (x.usd / total) * 100 : 0;
+    const draw = Math.max(0.01, len - gap);
+    const seg = `<circle cx="100" cy="100" r="${r}" fill="none" stroke="${color(i)}" stroke-width="${sw}"
+        stroke-dasharray="${draw.toFixed(2)} ${(C - draw).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}">
+        <title>${shortenService(x.service)}: $${x.usd.toFixed(2)} (${pct.toFixed(1)}%)</title></circle>`;
+    acc += len;
+    return seg;
+  }).join("");
+
+  const legend = svc.map((x, i) => {
+    const pct = total > 0 ? (x.usd / total) * 100 : 0;
+    const bar = `linear-gradient(90deg, ${soft(i)} 0, ${soft(i)} ${pct.toFixed(1)}%, transparent ${pct.toFixed(1)}%)`;
+    return `<div class="svc-leg-row" style="background:${bar}">
+      <i class="svc-sw" style="background:${color(i)}"></i>
+      <span class="svc-leg-name" title="${x.service}">${shortenService(x.service)}</span>
+      <span class="svc-leg-amt">$${x.usd.toFixed(2)}</span>
+      <span class="svc-leg-pct">${pct.toFixed(1)}%</span>
+    </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="svc-chart">
+      <div class="svc-donut">
+        <svg viewBox="0 0 200 200" role="img" aria-label="cost share by service">
+          <circle class="svc-track" cx="100" cy="100" r="${r}" fill="none" stroke-width="${sw}" />
+          <g transform="rotate(-90 100 100)">${segs}</g>
+        </svg>
+        <div class="svc-donut-center">
+          <div class="svc-donut-total">$${Math.round(total).toLocaleString()}</div>
+          <div class="svc-donut-sub">total</div>
+        </div>
+      </div>
+      <div class="svc-legend">${legend}</div>
     </div>`;
 }
 
@@ -1239,23 +1584,34 @@ let ltLast = null;
 
 async function runLoadTest() {
   if (ltBusy) return;
-  const url = $("#lt-url").value.trim();
-  if (!url) { $("#lt-status").textContent = "enter a target URL first"; return; }
+  const raw = $("#pb-pod").value;
+  if (!raw) { $("#tf-status").textContent = "pick a Deployment pod first"; return; }
+  const [namespace, pod] = raw.split("|");
+  const port = parseInt($("#pb-port").value, 10);
+  if (!port || port <= 0) { $("#tf-status").textContent = "enter the pod's container port"; $("#pb-port").focus(); return; }
+  const method = $("#lt-method").value;
   const payload = {
-    url,
-    method: $("#lt-method").value,
+    namespace, pod, port,
+    scheme: $("#pb-scheme").value,
+    path: ($("#pb-path").value || "/").trim(),
+    method,
     threads: parseInt($("#lt-threads").value, 10) || 1,
     rampSeconds: parseInt($("#lt-ramp").value, 10) || 0,
     durationSeconds: parseInt($("#lt-duration").value, 10) || 1,
   };
+  const rawBody = ($("#lt-body").value || "").trim();
+  if (rawBody && ["POST", "PUT", "PATCH"].includes(method)) {
+    payload.body = rawBody;
+    payload.contentType = ($("#lt-content-type").value || "application/json").trim();
+  }
   ltBusy = true;
   $("#lt-run").disabled = true;
   const dur = payload.durationSeconds;
-  $("#lt-status").innerHTML = `<span class="lt-spin"></span> running ${payload.threads} users for ${dur}s against ${payload.method} ${url} — watch the cluster metrics react above…`;
+  $("#tf-status").innerHTML = `<span class="lt-spin"></span> port-forwarding to ${pod} and running ${payload.threads} users for ${dur}s (${payload.method}) — watch the cluster metrics react above…`;
   const started = Date.now();
   const tick = setInterval(() => {
     const left = Math.max(0, dur - Math.round((Date.now() - started) / 1000));
-    $("#lt-status").innerHTML = `<span class="lt-spin"></span> running… ~${left}s left (plus JMeter startup). Watch pods/CPU update above.`;
+    $("#tf-status").innerHTML = `<span class="lt-spin"></span> running… ~${left}s left (plus JMeter startup). Watch pods/CPU update above.`;
   }, 1000);
   try {
     const r = await fetch("/api/loadtest", {
@@ -1267,10 +1623,10 @@ async function runLoadTest() {
     if (!r.ok) throw new Error(j.error || `${r.status}`);
     ltLast = j;
     renderLoadResult(j);
-    $("#lt-status").textContent = `done · ${j.samples} requests in ${j.durationS}s`;
+    $("#tf-status").textContent = `done · ${j.samples} requests in ${j.durationS}s`;
   } catch (e) {
     $("#lt-results").innerHTML = `<div class="lt-err">${e.message}</div>`;
-    $("#lt-status").textContent = "failed";
+    $("#tf-status").textContent = "failed";
   } finally {
     clearInterval(tick);
     ltBusy = false;
@@ -1279,93 +1635,401 @@ async function runLoadTest() {
 }
 
 function renderLoadResult(j) {
-  const stat = (label, val, cls) =>
-    `<div class="lt-stat"><div class="lt-stat-v ${cls || ""}">${val}</div><div class="lt-stat-l">${label}</div></div>`;
+  const stat = (label, val, cls, sub) =>
+    `<div class="lt-stat"><div class="lt-stat-v ${cls || ""}">${val}</div><div class="lt-stat-l">${label}</div>${sub ? `<div class="lt-stat-sub">${sub}</div>` : ""}</div>`;
   const errCls = j.errorPct > 5 ? "hot" : j.errorPct > 0 ? "warn" : "ok";
-  const cards = [
-    stat("requests", j.samples),
-    stat("throughput", `${j.throughput}<span class="u">/s</span>`),
-    stat("errors", `${j.errorPct}<span class="u">%</span>`, errCls),
-    stat("avg", `${Math.round(j.avgMs)}<span class="u">ms</span>`),
-    stat("p90", `${j.p90Ms}<span class="u">ms</span>`),
-    stat("p95", `${j.p95Ms}<span class="u">ms</span>`),
-    stat("p99", `${j.p99Ms}<span class="u">ms</span>`),
-    stat("max", `${j.maxMs}<span class="u">ms</span>`),
+  const latCls = ms => ms < 200 ? "ok" : ms < 500 ? "warn" : "hot";
+
+  const overviewCards = [
+    stat("requests", (j.samples || 0).toLocaleString()),
+    stat("throughput", `${j.throughput}<span class="u">/s</span>`, "", `peak ${j.peakRps || 0}/s`),
+    stat("duration", `${j.durationS}<span class="u">s</span>`),
+    stat("errors", (j.errors || 0).toLocaleString(), j.errors > 0 ? errCls : "ok"),
+    stat("error rate", `${j.errorPct}<span class="u">%</span>`, errCls),
+  ].join("");
+
+  const latencyCards = [
+    stat("min", `${j.minMs}<span class="u">ms</span>`, latCls(j.minMs)),
+    stat("median p50", `${j.p50Ms}<span class="u">ms</span>`, latCls(j.p50Ms)),
+    stat("avg", `${Math.round(j.avgMs)}<span class="u">ms</span>`, latCls(j.avgMs)),
+    stat("std dev", `${Math.round(j.stdDev || 0)}<span class="u">ms</span>`),
+    stat("p90", `${j.p90Ms}<span class="u">ms</span>`, latCls(j.p90Ms)),
+    stat("p95", `${j.p95Ms}<span class="u">ms</span>`, latCls(j.p95Ms)),
+    stat("p99", `${j.p99Ms}<span class="u">ms</span>`, latCls(j.p99Ms)),
+    stat("max", `${j.maxMs}<span class="u">ms</span>`, latCls(j.maxMs)),
   ].join("");
 
   $("#lt-results").innerHTML = `
-    <div class="lt-target">${j.target} · ${j.threads} concurrent</div>
-    <div class="lt-stats">${cards}</div>
-    <div class="lt-chart-card">
-      <div class="lt-chart-head">
-        <span>requests / second</span>
-        <span class="lt-legend">
-          <span class="lg"><i class="sw ok"></i>ok</span>
-          <span class="lg"><i class="sw err"></i>errors</span>
-          <span class="lg"><i class="sw lat"></i>avg latency</span>
-        </span>
+    <div class="lt-target">${j.target} &middot; <b>${j.threads}</b> concurrent users</div>
+    <div class="lt-section-hdr">Overview</div>
+    <div class="lt-stats lt-stats-5">${overviewCards}</div>
+    <div class="lt-section-hdr">Latency breakdown</div>
+    <div class="lt-stats lt-stats-8">${latencyCards}</div>
+    <div class="lt-charts-row">
+      <div class="lt-chart-card">
+        <div class="lt-chart-head">
+          <span>Throughput over time</span>
+          <span class="lt-legend">
+            <span class="lg"><i class="sw ok"></i>ok</span>
+            <span class="lg"><i class="sw err"></i>errors</span>
+          </span>
+        </div>
+        <div class="lt-chart" id="lt-chart-tp"></div>
       </div>
-      <div class="lt-chart" id="lt-chart"></div>
+      <div class="lt-chart-card">
+        <div class="lt-chart-head">
+          <span>Latency over time</span>
+          <span class="lt-legend">
+            <span class="lg"><i class="sw lat"></i>avg ms</span>
+            <span class="lg" style="font-size:10px;color:var(--dim)">-- p90 &nbsp; <span style="color:var(--red);opacity:.7">-- p99</span></span>
+          </span>
+        </div>
+        <div class="lt-chart" id="lt-chart-lat"></div>
+      </div>
+    </div>
+    <div class="lt-charts-row" style="margin-top:10px">
+      <div class="lt-chart-card">
+        <div class="lt-chart-head"><span>Response time distribution</span></div>
+        <div class="lt-chart" id="lt-chart-hist"></div>
+      </div>
+      <div class="lt-chart-card">
+        <div class="lt-chart-head"><span>Latency percentiles</span></div>
+        <div class="lt-chart" id="lt-chart-pct"></div>
+      </div>
     </div>`;
-  drawLoadChart($("#lt-chart"), j.series || []);
+
+  const series = j.series || [];
+  drawThroughputChart($("#lt-chart-tp"), series);
+  drawLatencyTimeline($("#lt-chart-lat"), series, j);
+  drawHistogram($("#lt-chart-hist"), j.histogram || []);
+  drawPercentileChart($("#lt-chart-pct"), j);
 }
 
-// drawLoadChart renders a throughput + latency SVG. Bars are requests/sec with
-// the errored portion stacked in red; a connected line shows avg latency on a
-// second (right-hand) axis. Gridlines + axis labels on both sides.
-function drawLoadChart(host, s) {
-  if (!s.length) { host.innerHTML = '<div class="dim" style="padding:20px">no timeline</div>'; return; }
-  const W = Math.max(560, (host.clientWidth || 900));
-  const H = 248;
-  const m = { t: 28, r: 58, b: 26, l: 54 };
+// ---------- connection timing (probe) ----------
+let pbBusy = false;
+
+let tfMode = "latency";
+
+// Application pods eligible for the traffic view: Deployment-managed (a
+// Deployment's pods are controlled by a ReplicaSet named <deployment>-<hash>),
+// excluding platform / observability namespaces. This drops DaemonSets,
+// StatefulSets, Jobs/CronJobs, bare pods, and system workloads.
+function appDeploymentPods() {
+  return (state.pods || []).filter(p => p.ownerKind === "ReplicaSet" && !isInfraNamespace(p.namespace));
+}
+
+// Populate namespace → pod → endpoint. Called whenever the traffic view opens.
+function populateTraffic() {
+  populateTrafficNamespaces();
+}
+
+function populateTrafficNamespaces() {
+  const sel = $("#pb-ns");
+  if (!sel) return;
+  const prev = sel.value;
+  const namespaces = [...new Set(appDeploymentPods().map(p => p.namespace))].sort((a, b) => a.localeCompare(b));
+  if (!namespaces.length) {
+    sel.innerHTML = `<option value="">— no application namespaces —</option>`;
+    populateTrafficPods();
+    return;
+  }
+  sel.innerHTML = namespaces.map(n => `<option value="${n}">${n}</option>`).join("");
+  const selectedNs = state.selected >= 0 && state.filtered[state.selected] ? state.filtered[state.selected].namespace : "";
+  if (prev && namespaces.includes(prev)) sel.value = prev;
+  else if (namespaces.includes(selectedNs)) sel.value = selectedNs;
+  populateTrafficPods();
+}
+
+function populateTrafficPods() {
+  const sel = $("#pb-pod");
+  if (!sel) return;
+  const ns = $("#pb-ns").value;
+  const prev = sel.value;
+  const pods = appDeploymentPods()
+    .filter(p => p.namespace === ns)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!pods.length) {
+    sel.innerHTML = `<option value="">— no Deployment pods —</option>`;
+    loadProbeEndpoints();
+    return;
+  }
+  sel.innerHTML = pods.map(p => `<option value="${p.namespace}|${p.name}">${p.name}</option>`).join("");
+  if (prev && pods.some(p => `${p.namespace}|${p.name}` === prev)) sel.value = prev;
+  loadProbeEndpoints();
+}
+
+// Switch between the latency probe and the load test. Both share the same
+// namespace → pod → endpoint target; only the params and results differ.
+function setTrafficMode(m) {
+  tfMode = m === "load" ? "load" : "latency";
+  const isLoad = tfMode === "load";
+  $$(".tf-mode .btn").forEach(b => {
+    const on = b.dataset.mode === tfMode;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", String(on));
+  });
+  $(".tf-latency").hidden = isLoad;
+  $(".tf-load").hidden = !isLoad;
+  $("#pb-results").hidden = isLoad;
+  $("#lt-results").hidden = !isLoad;
+  $("#tf-status").textContent = "";
+  updateTfTargetHint();
+}
+
+// One-line echo of what will actually be hit, so both modes make the
+// port-forward target explicit.
+function updateTfTargetHint() {
+  const hint = $("#tf-target-hint");
+  if (!hint) return;
+  const raw = $("#pb-pod").value || "";
+  if (!raw) { hint.textContent = ""; return; }
+  const pod = raw.split("|")[1] || "";
+  const scheme = $("#pb-scheme").value;
+  const port = $("#pb-port").value || "?";
+  const path = ($("#pb-path").value || "/").trim() || "/";
+  hint.textContent = `port-forward → ${scheme}://${pod}:${port}${path}`;
+}
+
+// Ask the backend which endpoints the selected pod plausibly serves (from its
+// probes, ports, prometheus annotations, and Services) and fill the dropdown.
+// Picking one pre-fills scheme/port/path; the fields stay editable.
+async function loadProbeEndpoints() {
+  const sel = $("#pb-endpoint");
+  if (!sel) return;
+  const raw = $("#pb-pod").value;
+  if (!raw) { sel.innerHTML = ""; return; }
+  const [ns, pod] = raw.split("|");
+  sel.innerHTML = `<option value="">discovering…</option>`;
+  try {
+    const j = await jget(`/api/pod/${encodeURIComponent(ns)}/${encodeURIComponent(pod)}/endpoints`);
+    const eps = j.endpoints || [];
+    if (!eps.length) {
+      sel.innerHTML = `<option value="">— none found, enter port/path manually —</option>`;
+      return;
+    }
+    sel.innerHTML = eps.map((e, i) =>
+      `<option value="${i}" data-scheme="${e.scheme}" data-port="${e.port}" data-path="${e.path}">${e.scheme}://:${e.port}${e.path} · ${e.label} (${e.source})</option>`).join("");
+    applyProbeEndpoint();
+  } catch (e) {
+    sel.innerHTML = `<option value="">discovery failed — enter manually</option>`;
+  }
+}
+
+function applyProbeEndpoint() {
+  const sel = $("#pb-endpoint");
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.dataset || !opt.dataset.port) return;
+  $("#pb-scheme").value = opt.dataset.scheme || "http";
+  $("#pb-port").value = opt.dataset.port;
+  $("#pb-path").value = opt.dataset.path || "/";
+  updateTfTargetHint();
+}
+
+async function runProbe() {
+  if (pbBusy) return;
+  const raw = $("#pb-pod").value;
+  if (!raw) { $("#tf-status").textContent = "pick a Deployment pod first"; return; }
+  const [namespace, pod] = raw.split("|");
+  const port = parseInt($("#pb-port").value, 10);
+  if (!port || port <= 0) { $("#tf-status").textContent = "enter the pod's container port"; $("#pb-port").focus(); return; }
+  const payload = {
+    namespace, pod, port,
+    scheme: $("#pb-scheme").value,
+    path: ($("#pb-path").value || "/").trim(),
+    samples: parseInt($("#pb-samples").value, 10) || 5,
+  };
+  pbBusy = true;
+  $("#pb-run").disabled = true;
+  $("#tf-status").innerHTML = `<span class="lt-spin"></span> port-forwarding to ${pod} and timing ${payload.samples} request(s)…`;
+  try {
+    const r = await fetch("/api/probe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `${r.status}`);
+    renderProbeResult(j);
+    $("#tf-status").textContent = `done · ${j.okCount}/${j.count} ok${j.proto ? " · " + j.proto : ""}`;
+  } catch (e) {
+    $("#pb-results").innerHTML = `<div class="lt-err">${e.message}</div>`;
+    $("#tf-status").textContent = "failed";
+  } finally {
+    pbBusy = false;
+    $("#pb-run").disabled = false;
+  }
+}
+
+function renderProbeResult(j) {
+  const latCls = ms => ms < 50 ? "ok" : ms < 200 ? "warn" : "hot";
+  const stat = (label, s, cls, note) =>
+    `<div class="lt-stat"><div class="lt-stat-v ${cls || ""}">${s.avg}<span class="u">ms</span></div><div class="lt-stat-l">${label}</div><div class="lt-stat-sub">${note || `${s.min}–${s.max} ms`}</div></div>`;
+
+  const cards = [
+    stat("DNS", j.dns, latCls(j.dns.avg), "local · port-forward"),
+    stat("TCP connect", j.connect, latCls(j.connect.avg), "local · port-forward"),
+    stat("TLS handshake", j.tls, latCls(j.tls.avg), "local · port-forward"),
+    stat("server wait (TTFB)", j.wait, latCls(j.wait.avg)),
+    stat("transfer", j.transfer, latCls(j.transfer.avg)),
+    stat("total", j.total, latCls(j.total.avg)),
+  ].join("");
+
+  const rows = (j.samples || []).map((s, i) => s.err
+    ? `<tr class="pb-fail"><td>${i + 1}</td><td colspan="7" class="pb-errcell">${s.err}</td></tr>`
+    : `<tr><td>${i + 1}</td><td>${s.dnsMs}</td><td>${s.connectMs}</td><td>${s.tlsMs}</td><td>${s.waitMs}</td><td>${s.transferMs}</td><td><b>${s.totalMs}</b></td><td class="pb-code s${Math.floor(s.status / 100)}">${s.status}</td></tr>`).join("");
+
+  $("#pb-results").innerHTML = `
+    <div class="lt-target">GET ${j.target}${j.proto ? ` &middot; ${j.proto}` : ""} &middot; <b>${j.okCount}/${j.count}</b> ok</div>
+    <div class="lt-section-hdr">Latency breakdown (avg)</div>
+    <div class="lt-stats lt-stats-6">${cards}</div>
+    <div class="lt-section-hdr">Per-sample (ms)</div>
+    <table class="pb-table">
+      <thead><tr><th>#</th><th>DNS</th><th>TCP</th><th>TLS</th><th>wait</th><th>transfer</th><th>total</th><th>code</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// drawThroughputChart — vertical bar chart of req/s (ok=accent, errors=red).
+function drawThroughputChart(host, s) {
+  if (!s.length) { host.innerHTML = '<div style="padding:20px;font-size:12px;color:var(--muted)">no timeline</div>'; return; }
+  const W = Math.max(360, host.clientWidth || 500);
+  const H = 190;
+  const m = { t: 20, r: 16, b: 26, l: 44 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const n = s.length;
   const maxCount = Math.max(1, ...s.map(b => b.count));
-  const maxLat = Math.max(1, ...s.map(b => b.avgMs));
   const band = iw / n;
-  const bw = Math.min(band * 0.72, 30);
+  const bw = Math.min(band * 0.75, 28);
   const yBot = m.t + ih;
-
-  const svgns = "http://www.w3.org/2000/svg";
   const parts = [];
-  // gridlines + left/right axis labels
   for (let k = 0; k <= 4; k++) {
     const y = m.t + (ih * k) / 4;
-    parts.push(`<line x1="${m.l}" y1="${y}" x2="${m.l + iw}" y2="${y}" stroke="var(--border)" stroke-width="1"/>`);
-    const lv = Math.round(maxCount * (1 - k / 4));
-    const rv = Math.round(maxLat * (1 - k / 4));
-    parts.push(`<text x="${m.l - 8}" y="${y + 3}" text-anchor="end" class="lt-axis">${lv}</text>`);
-    parts.push(`<text x="${m.l + iw + 8}" y="${y + 3}" text-anchor="start" class="lt-axis lat">${rv}</text>`);
+    parts.push(`<line x1="${m.l}" y1="${y.toFixed(1)}" x2="${m.l + iw}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`);
+    parts.push(`<text x="${m.l - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="lt-axis">${Math.round(maxCount * (1 - k / 4))}</text>`);
   }
-  // bars (ok + error stacked)
   s.forEach((b, i) => {
     const x = m.l + band * i + (band - bw) / 2;
     const okC = Math.max(0, b.count - b.errors);
     const okH = (okC / maxCount) * ih;
     const erH = (b.errors / maxCount) * ih;
-    const tip = `t=${b.t}s · ${b.count} req · ${b.avgMs}ms avg${b.errors ? ` · ${b.errors} errors` : ""}`;
-    if (okH > 0) parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - okH).toFixed(1)}" width="${bw.toFixed(1)}" height="${okH.toFixed(1)}" fill="var(--accent)" opacity="0.85"><title>${tip}</title></rect>`);
-    if (erH > 0) parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - okH - erH).toFixed(1)}" width="${bw.toFixed(1)}" height="${erH.toFixed(1)}" fill="var(--red)"><title>${tip}</title></rect>`);
+    const tip = `t=${b.t}s · ${b.count} req${b.errors ? ` · ${b.errors} err` : ""}`;
+    if (okH > 0) parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - okH).toFixed(1)}" width="${bw.toFixed(1)}" height="${okH.toFixed(1)}" fill="var(--accent)" opacity="0.85" rx="1"><title>${tip}</title></rect>`);
+    if (erH > 0) parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - okH - erH).toFixed(1)}" width="${bw.toFixed(1)}" height="${erH.toFixed(1)}" fill="var(--red)" rx="1"><title>${tip}</title></rect>`);
   });
-  // latency line + points
-  const pts = s.map((b, i) => {
-    const cx = m.l + band * i + band / 2;
-    const cy = m.t + ih - (b.avgMs / maxLat) * ih;
-    return [cx, cy];
+  const ticks = n <= 1 ? [0] : [...new Set([0, Math.floor((n - 1) / 2), n - 1])];
+  ticks.forEach(i => {
+    const cx = (m.l + band * i + band / 2).toFixed(1);
+    parts.push(`<text x="${cx}" y="${H - 6}" text-anchor="middle" class="lt-axis">${s[i].t}s</text>`);
   });
-  parts.push(`<polyline points="${pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")}" fill="none" stroke="var(--yellow)" stroke-width="1.5"/>`);
-  pts.forEach(p => parts.push(`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2" fill="var(--yellow)"/>`));
-  // x-axis time ticks (start, mid, end)
-  const ticks = n <= 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
-  [...new Set(ticks)].forEach(i => {
-    const cx = m.l + band * i + band / 2;
-    parts.push(`<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" class="lt-axis">${s[i].t}s</text>`);
-  });
-  // axis captions — sit near the very top, clear of the first gridline label
-  parts.push(`<text x="${m.l - 8}" y="12" text-anchor="end" class="lt-axis dimlbl">req/s</text>`);
-  parts.push(`<text x="${m.l + iw + 8}" y="12" text-anchor="start" class="lt-axis dimlbl lat">ms</text>`);
+  parts.push(`<text x="${m.l - 6}" y="12" text-anchor="end" class="lt-axis dimlbl">req/s</text>`);
+  host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join("")}</svg>`;
+}
 
-  host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="${svgns}">${parts.join("")}</svg>`;
+// drawLatencyTimeline — line chart of per-second avg latency with p90/p99 reference lines.
+function drawLatencyTimeline(host, s, j) {
+  if (!s.length) { host.innerHTML = '<div style="padding:20px;font-size:12px;color:var(--muted)">no timeline</div>'; return; }
+  const W = Math.max(360, host.clientWidth || 500);
+  const H = 190;
+  const m = { t: 20, r: 46, b: 26, l: 44 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const n = s.length;
+  const maxLat = Math.max(1, j.maxMs || 0, ...s.map(b => b.avgMs));
+  const band = iw / n;
+  const yBot = m.t + ih;
+  const parts = [];
+  for (let k = 0; k <= 4; k++) {
+    const y = m.t + (ih * k) / 4;
+    parts.push(`<line x1="${m.l}" y1="${y.toFixed(1)}" x2="${m.l + iw}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`);
+    parts.push(`<text x="${m.l - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="lt-axis">${Math.round(maxLat * (1 - k / 4))}</text>`);
+  }
+  // p99 dashed reference line
+  const p99Y = (m.t + ih - (j.p99Ms / maxLat) * ih).toFixed(1);
+  parts.push(`<line x1="${m.l}" y1="${p99Y}" x2="${m.l + iw}" y2="${p99Y}" stroke="var(--red)" stroke-width="1" stroke-dasharray="4,3" opacity="0.55"/>`);
+  parts.push(`<text x="${m.l + iw + 4}" y="${(+p99Y + 3.5).toFixed(1)}" class="lt-axis" style="fill:var(--red);opacity:.7;font-size:9px">p99</text>`);
+  // p90 dashed reference line
+  const p90Y = (m.t + ih - (j.p90Ms / maxLat) * ih).toFixed(1);
+  parts.push(`<line x1="${m.l}" y1="${p90Y}" x2="${m.l + iw}" y2="${p90Y}" stroke="var(--dim)" stroke-width="1" stroke-dasharray="4,3" opacity="0.45"/>`);
+  parts.push(`<text x="${m.l + iw + 4}" y="${(+p90Y + 3.5).toFixed(1)}" class="lt-axis" style="font-size:9px">p90</text>`);
+  // filled area + line
+  const pts = s.map((b, i) => [(m.l + band * i + band / 2), (m.t + ih - (b.avgMs / maxLat) * ih)]);
+  const area = `M${pts[0][0].toFixed(1)},${yBot} ` + pts.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + ` L${pts[pts.length - 1][0].toFixed(1)},${yBot} Z`;
+  parts.push(`<path d="${area}" fill="var(--yellow)" opacity="0.07"/>`);
+  parts.push(`<polyline points="${pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")}" fill="none" stroke="var(--yellow)" stroke-width="2"/>`);
+  pts.forEach((p, i) => parts.push(`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="var(--yellow)"><title>t=${s[i].t}s: ${s[i].avgMs}ms avg</title></circle>`));
+  // x-axis ticks
+  const ticks = n <= 1 ? [0] : [...new Set([0, Math.floor((n - 1) / 2), n - 1])];
+  ticks.forEach(i => {
+    const cx = (m.l + band * i + band / 2).toFixed(1);
+    parts.push(`<text x="${cx}" y="${H - 6}" text-anchor="middle" class="lt-axis">${s[i].t}s</text>`);
+  });
+  parts.push(`<text x="${m.l - 6}" y="12" text-anchor="end" class="lt-axis dimlbl">ms</text>`);
+  host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join("")}</svg>`;
+}
+
+// drawHistogram — vertical bars for each response-time bucket.
+function drawHistogram(host, hist) {
+  if (!hist || !hist.length) { host.innerHTML = '<div style="padding:20px;font-size:12px;color:var(--muted)">no data</div>'; return; }
+  const W = Math.max(280, host.clientWidth || 400);
+  const H = 190;
+  const m = { t: 20, r: 16, b: 44, l: 40 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const n = hist.length;
+  const maxPct = Math.max(1, ...hist.map(b => b.pct));
+  const band = iw / n;
+  const bw = band * 0.68;
+  const yBot = m.t + ih;
+  const parts = [];
+  for (let k = 0; k <= 4; k++) {
+    const y = m.t + (ih * k) / 4;
+    parts.push(`<line x1="${m.l}" y1="${y.toFixed(1)}" x2="${m.l + iw}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`);
+    if (k < 4) parts.push(`<text x="${m.l - 4}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="lt-axis">${Math.round(maxPct * (1 - k / 4))}%</text>`);
+  }
+  hist.forEach((b, i) => {
+    const x = m.l + band * i + (band - bw) / 2;
+    const bH = (b.pct / maxPct) * ih;
+    const colors = ["var(--green)", "var(--accent)", "var(--yellow)", "var(--yellow)", "var(--red)", "var(--red)"];
+    const color = colors[i] || "var(--muted)";
+    if (bH > 0.5) {
+      parts.push(`<rect x="${x.toFixed(1)}" y="${(yBot - bH).toFixed(1)}" width="${bw.toFixed(1)}" height="${bH.toFixed(1)}" fill="${color}" opacity="0.8" rx="2"><title>${b.label}: ${b.count} (${b.pct}%)</title></rect>`);
+      parts.push(`<text x="${(x + bw / 2).toFixed(1)}" y="${(yBot - bH - 4).toFixed(1)}" text-anchor="middle" class="lt-axis" style="font-size:9px">${b.pct}%</text>`);
+    }
+    // x-axis label (two lines: wrap on dash)
+    const lbl = b.label.replace("–", "\n");
+    const lines = lbl.split("\n");
+    lines.forEach((ln, li) => {
+      parts.push(`<text x="${(x + bw / 2).toFixed(1)}" y="${(H - 28 + li * 12).toFixed(1)}" text-anchor="middle" class="lt-axis" style="font-size:9px">${ln}</text>`);
+    });
+  });
+  host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join("")}</svg>`;
+}
+
+// drawPercentileChart — horizontal waterfall bars for p50/p90/p95/p99/max.
+function drawPercentileChart(host, j) {
+  const rows = [
+    { label: "P50", val: j.p50Ms, color: "var(--green)" },
+    { label: "P90", val: j.p90Ms, color: "var(--accent)" },
+    { label: "P95", val: j.p95Ms, color: "var(--yellow)" },
+    { label: "P99", val: j.p99Ms, color: j.p99Ms > 500 ? "var(--red)" : "var(--yellow)" },
+    { label: "Max", val: j.maxMs, color: j.maxMs > 1000 ? "var(--red)" : "var(--yellow)" },
+  ];
+  const W = Math.max(280, host.clientWidth || 400);
+  const rowH = 36;
+  const H = rows.length * rowH + 24;
+  const m = { t: 12, r: 70, b: 12, l: 42 };
+  const iw = W - m.l - m.r;
+  const maxVal = Math.max(1, j.maxMs || 0);
+  const parts = [];
+  rows.forEach((r, i) => {
+    const y = m.t + i * rowH;
+    const barH = 18;
+    const barY = y + (rowH - barH) / 2;
+    const barW = Math.max(4, (r.val / maxVal) * iw);
+    parts.push(`<text x="${m.l - 6}" y="${(barY + barH / 2 + 4).toFixed(1)}" text-anchor="end" class="lt-axis" style="font-size:11px;font-weight:600">${r.label}</text>`);
+    parts.push(`<rect x="${m.l}" y="${barY.toFixed(1)}" width="${iw}" height="${barH}" fill="var(--border)" rx="4"/>`);
+    parts.push(`<rect x="${m.l}" y="${barY.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH}" fill="${r.color}" opacity="0.82" rx="4"><title>${r.label}: ${r.val}ms</title></rect>`);
+    parts.push(`<text x="${(m.l + barW + 8).toFixed(1)}" y="${(barY + barH / 2 + 4).toFixed(1)}" class="lt-axis" style="font-size:11px;fill:${r.color};font-weight:600">${r.val}ms</text>`);
+  });
+  host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join("")}</svg>`;
 }
 
 // ---------- gemini ----------
@@ -1813,12 +2477,16 @@ async function switchContext(name) {
     state.nodes = [];
     state.stats = null;
     state.namespaces = ["ALL"];
-    state.currentNs = "ALL";
-    state.resNs = "ALL";
+    state.nsSelected = null;
+    state.jobNsSel = null;
+    if (state.podNsMs) state.podNsMs.clear();
+    if (state.jobNsMs) state.jobNsMs.clear();
+    state.rsNs = "ALL";
+    state.rs = null;
     state.candNs = "ALL";
     state.selected = -1;
     state.costs = null;
-    state.gemini = { history: [], busy: false, pod: null, provider: state.gemini.provider || "gemini" };
+    state.gemini = { history: [], busy: false, pod: null, provider: state.gemini.provider || "openrouter" };
     await refresh();
     refreshPortForwards();
   } catch (e) {
@@ -1836,6 +2504,9 @@ function switchView(v) {
   state.view = v;
   $$(".view").forEach(s => s.classList.toggle("active", s.id === "view-" + v));
   $$(".nav").forEach(n => n.classList.toggle("active", n.dataset.view === v));
+  if (v === "load") populateTraffic();
+  if (v === "nodes") armCapacityCooldown();
+  if (v === "rightsizing") loadRightsizing();
 }
 
 // ---------- key bindings ----------
@@ -1877,7 +2548,7 @@ function bindKeys() {
       // global hotkeys when not on pods
       if (e.key === "1") switchView("pods");
       else if (e.key === "2") switchView("nodes");
-      else if (e.key === "3") switchView("resources");
+      else if (e.key === "3") switchView("rightsizing");
       else if (e.key === "4") switchView("finops");
       else if (e.key === "5") switchView("gemini");
       return;
@@ -1902,7 +2573,7 @@ function bindKeys() {
       case "r": refresh(); break;
       case "1": switchView("pods"); break;
       case "2": switchView("nodes"); break;
-      case "3": switchView("resources"); break;
+      case "3": switchView("rightsizing"); break;
       case "4": switchView("finops"); break;
       case "5": switchView("gemini"); break;
     }
@@ -1918,27 +2589,49 @@ function init() {
   $("#refresh-btn").addEventListener("click", refresh);
   $("#ctx-select").addEventListener("change", e => switchContext(e.target.value));
 
-  $("#ns-select").addEventListener("change", e => { state.currentNs = e.target.value; renderPodTable(); });
-  $("#res-ns-select").addEventListener("change", e => { state.resNs = e.target.value; renderResources(); });
-  $("#res-search").addEventListener("input", e => { state.resSearch = e.target.value; renderResources(); });
-  $("#cand-ns-select").addEventListener("change", e => { state.candNs = e.target.value; renderCandidates(); });
+  state.podNsMs = createMultiSelect($("#ns-ms"), "ALL", sel => { state.nsSelected = sel; renderPodTable(); });
+  state.jobNsMs = createMultiSelect($("#job-ns-ms"), "ALL", sel => { state.jobNsSel = sel; renderJobTable(); });
+  $("#job-search").addEventListener("input", e => { state.jobSearch = e.target.value; renderJobTable(); });
+  $("#job-all-runs").addEventListener("change", e => { state.jobAllRuns = e.target.checked; renderJobTable(); });
+  $("#job-failed-only").addEventListener("change", e => { state.jobFailedOnly = e.target.checked; renderJobTable(); });
+  $("#rs-ns-select").addEventListener("change", e => { state.rsNs = e.target.value; loadRightsizing(); });
+  $("#rs-search").addEventListener("input", e => { state.rsSearch = e.target.value; renderRightsizing(); });
+  $("#rs-issues-only").addEventListener("change", e => { state.rsIssuesOnly = e.target.checked; renderRightsizing(); });
   $("#search").addEventListener("input", e => { state.search = e.target.value; renderPodTable(); });
   $("#issues-only").addEventListener("change", e => { state.issuesOnly = e.target.checked; renderPodTable(); });
   $("#hide-cron").addEventListener("change", e => { state.hideCron = e.target.checked; renderPodTable(); });
-  $("#res-issues-only").addEventListener("change", e => { state.resIssuesOnly = e.target.checked; renderResources(); });
   $$(".sort").forEach(b => b.addEventListener("click", () => { state.sort = b.dataset.sort; renderPodTable(); }));
-  $("#res-sort-name").addEventListener("click", () => { state.resSort = "name"; renderResources(); });
-  $("#res-sort-cpu").addEventListener("click", () => { state.resSort = "cpu"; renderResources(); });
-  $("#res-sort-mem").addEventListener("click", () => { state.resSort = "mem"; renderResources(); });
-  $("#res-sort-verdict").addEventListener("click", () => { state.resSort = "verdict"; renderResources(); });
-  $("#headroom").addEventListener("change", e => {
-    state.headroom = parseInt(e.target.value, 10) || 0;
-    renderFinOps();
-  });
   $("#costs-load").addEventListener("click", loadCosts);
+  $("#cost-month").addEventListener("change", () => { if (state.costServices || state.costs) loadCostServices(); });
+  {
+    const card = $("#cost-services-card"), toggle = $(".card-collapse", card);
+    const flip = () => {
+      const collapsed = card.classList.toggle("collapsed");
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+    };
+    toggle.addEventListener("click", flip);
+    toggle.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+  }
+
+  // Traffic view: mode switch + shared namespace → pod → endpoint target.
+  $$(".tf-mode .btn").forEach(b => b.addEventListener("click", () => setTrafficMode(b.dataset.mode)));
+  $("#pb-ns").addEventListener("change", populateTrafficPods);
+  $("#pb-pod").addEventListener("change", () => { loadProbeEndpoints(); updateTfTargetHint(); });
+  $("#pb-endpoint").addEventListener("change", applyProbeEndpoint);
+  $("#pb-scheme").addEventListener("change", updateTfTargetHint);
+  $("#pb-port").addEventListener("input", updateTfTargetHint);
+  $("#pb-path").addEventListener("input", updateTfTargetHint);
+
+  const runCurrent = () => (tfMode === "load" ? runLoadTest() : runProbe());
+  $("#pb-run").addEventListener("click", runProbe);
+  $("#pb-port").addEventListener("keydown", e => { if (e.key === "Enter") runCurrent(); });
+  $("#pb-path").addEventListener("keydown", e => { if (e.key === "Enter") runCurrent(); });
 
   $("#lt-run").addEventListener("click", runLoadTest);
-  $("#lt-url").addEventListener("keydown", e => { if (e.key === "Enter") runLoadTest(); });
+  $("#lt-method").addEventListener("change", e => {
+    const needsBody = ["POST", "PUT", "PATCH"].includes(e.target.value);
+    $("#lt-body-row").style.display = needsBody ? "" : "none";
+  });
 
   $("#gemini-send").addEventListener("click", sendGemini);
   $("#gemini-input").addEventListener("keydown", e => { if (e.key === "Enter") sendGemini(); });
@@ -1987,8 +2680,11 @@ function init() {
   $("#shell-modal").addEventListener("click", e => { if (e.target.id === "shell-modal") closeShell(); });
   $("#container-cancel").addEventListener("click", () => $("#container-modal").classList.add("hidden"));
 
+  ["pod-table", "job-table", "rs-table"].forEach(id => makeResizable(document.getElementById(id)));
+
   bindKeys();
   switchView("pods");
+  populateCostMonths();
   renderCostPlaceholder();
   loadContexts();
   refresh();
