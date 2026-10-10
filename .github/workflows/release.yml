@@ -1,12 +1,15 @@
 name: Build & ship installers
 
-# Builds the desktop app for macOS, Windows and Linux, then copies the
-# installers to the server's downloads folder over SSH — so they're served
-# from the app's own home page (/downloads/…). Nothing is published to a
-# public GitHub release; the source stays in this private repo.
+# Builds the desktop app for macOS, Windows and Linux, then uploads the
+# installers to the public Vercel Blob store. The landing page (clusterheart.com,
+# hosted on Vercel) links to those blobs via /downloads/… redirects in
+# vercel.json — so there's no server to ship to. The source stays private.
 #
 # Trigger: push a tag (git tag v1.0.1 && git push origin v1.0.1) or run it
 # by hand from the Actions tab.
+#
+# Required repo secret: BLOB_READ_WRITE_TOKEN (read-write token for the
+# clusterheart-downloads Vercel Blob store).
 
 on:
   push:
@@ -79,55 +82,36 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-  ship:
+  publish:
     needs: build
     runs-on: ubuntu-latest
-    env:
-      REMOTE_DOWNLOADS: /root/clusterheart/server/downloads
     steps:
-      - name: Check deploy secrets
+      - name: Check Blob token
         env:
-          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
-          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          SSHPASS: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          missing=""
-          [ -z "$SSH_HOST" ] && missing="$missing DEPLOY_SSH_HOST"
-          [ -z "$SSH_USER" ] && missing="$missing DEPLOY_SSH_USER"
-          [ -z "$SSHPASS" ]  && missing="$missing DEPLOY_SSH_PASSWORD"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing repo secret(s):$missing"
+          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
+            echo "::error::Missing repo secret BLOB_READ_WRITE_TOKEN — set it with 'gh secret set BLOB_READ_WRITE_TOKEN', then re-run."
             exit 1
           fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - uses: actions/download-artifact@v4
         with:
           path: dl
           merge-multiple: true
 
-      - name: Add friendly filenames
-        run: |
-          cd dl
-          shopt -s nullglob
-          for f in *mac*arm64*.dmg; do cp "$f" Clusterheart-macOS-AppleSilicon.dmg; done
-          for f in *mac*x64*.dmg;   do cp "$f" Clusterheart-macOS-Intel.dmg; done
-          for f in *win*.exe;       do cp "$f" Clusterheart-Windows.exe; done
-          for f in *linux*x64*.AppImage *linux*x86_64*.AppImage; do cp "$f" Clusterheart-Linux.AppImage; done
-          ls -la
+      - name: Show collected installers
+        run: ls -la dl
 
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Ship installers to the server
+      - name: Upload installers to Vercel Blob
+        working-directory: electron
         env:
-          SSHPASS: ${{ secrets.DEPLOY_SSH_PASSWORD }}
-          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
-          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          sshpass -e ssh -o StrictHostKeyChecking=accept-new -p "$SSH_PORT" \
-            "$SSH_USER@$SSH_HOST" "mkdir -p $REMOTE_DOWNLOADS"
-          sshpass -e scp -o StrictHostKeyChecking=accept-new -P "$SSH_PORT" \
-            dl/* "$SSH_USER@$SSH_HOST:$REMOTE_DOWNLOADS/"
-          echo "✓ installers copied to $REMOTE_DOWNLOADS — live at /downloads/"
+          npm install --no-save @vercel/blob
+          node scripts/upload-blob.mjs "$GITHUB_WORKSPACE/dl"
