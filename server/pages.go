@@ -304,7 +304,7 @@ async function _post(url,payload){
     let d={};try{d=await r.json();}catch(e){}
     return {ok:r.ok,status:r.status,data:d};
   }catch(e){
-    var m=(e&&e.name==='TimeoutError')?'Server took too long — try again.':'Network error — is the server running?';
+    var m=(e&&e.name==='TimeoutError')?'Server took too long. Try again.':'Network error. Is the server running?';
     return {ok:false,status:0,data:{error:m}};
   }
 }
@@ -331,7 +331,7 @@ const homeBody = `{{define "body"}}
       <div class="lp-hero-text">
         <span class="eyebrow"><span class="dot"></span>Kubernetes · EKS · FinOps · AI</span>
         <h1>Stop switching tabs.<br><span class="grad">See your whole cluster.</span></h1>
-        <p class="lead">Live pod health, real AWS costs, and an AI kubectl copilot — in one desktop app that reads your local kubeconfig. Nothing leaves your machine.</p>
+        <p class="lead">Live pod health, real AWS costs, and an AI kubectl copilot, in one desktop app that reads your local kubeconfig. Nothing leaves your machine.</p>
         <div class="lp-cta">
           <a class="lp-btn primary" href="#download">Download free</a>
           <a class="lp-btn ghost" href="/signup">Create account</a>
@@ -422,7 +422,7 @@ const homeBody = `{{define "body"}}
     <div class="fcard">
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
       <h3>Shell, logs &amp; port-forward</h3>
-      <p>Exec into containers, stream logs, forward ports — without leaving the app.</p>
+      <p>Exec into containers, stream logs, forward ports, without leaving the app.</p>
     </div>
     <div class="fcard">
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
@@ -488,7 +488,7 @@ const homeBody = `{{define "body"}}
 
 <footer class="lp-foot">
   <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
-  <span>Kubernetes health, cost &amp; control — on your machine.</span>
+  <span>Kubernetes health, cost &amp; control, on your machine.</span>
   <span><a href="/login">Sign in</a> · <a href="/signup">Sign up</a></span>
 </footer>
 {{end}}`
@@ -513,7 +513,7 @@ async function submit(){
   go.disabled=true;_mark(msg,'Signing in…','info');
   var res=await _post('/api/login',{email:email.value.trim(),password:pass.value});
   if(!res.ok){_mark(msg,res.data.error||'Sign in failed.','err');go.disabled=false;return;}
-  _mark(msg,'Welcome back — redirecting…','ok');location.href='/account';
+  _mark(msg,'Welcome back, redirecting…','ok');location.href='/account';
 }
 go.addEventListener('click',submit);
 pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
@@ -576,7 +576,7 @@ const adminBody = `{{define "body"}}<div class="admin">
   <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">Clusterheart <span style="color:var(--faint);font-weight:500">· admin</span></span></div>
   <div class="admin-user">{{.Me}} · <a href="#" id="logout">log out</a></div>
 </div>
-<p class="sub" style="margin:0 0 22px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval — approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
+<p class="sub" style="margin:0 0 22px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
 <div class="panel">
 <table class="users">
 <thead><tr><th>User</th><th>Status</th><th>Last login</th><th></th></tr></thead>
