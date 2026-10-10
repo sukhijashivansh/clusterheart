@@ -329,9 +329,9 @@ const homeBody = `{{define "body"}}
   <div class="lp-wrap">
     <div class="lp-hero-inner">
       <div class="lp-hero-text">
-        <span class="eyebrow"><span class="dot"></span>Kubernetes · EKS · FinOps · AI</span>
+        <span class="eyebrow"><span class="dot"></span>Kubernetes · FinOps · AI</span>
         <h1>Stop switching tabs.<br><span class="grad">See your whole cluster.</span></h1>
-        <p class="lead">Live pod health, real AWS costs, and an AI kubectl copilot, in one desktop app that reads your local kubeconfig. Nothing leaves your machine.</p>
+        <p class="lead">Live pod health, real cloud costs, and an AI kubectl copilot, in one desktop app that reads your local kubeconfig. Nothing leaves your machine.</p>
         <div class="lp-cta">
           <a class="lp-btn primary" href="#download">Download free</a>
           <a class="lp-btn ghost" href="/signup">Create account</a>
@@ -346,7 +346,7 @@ const homeBody = `{{define "body"}}
           <span class="lp-pv-dot" style="background:#ff5f57"></span>
           <span class="lp-pv-dot" style="background:#febc2e"></span>
           <span class="lp-pv-dot" style="background:#28c840"></span>
-          <span class="lp-pv-title">clusterheart — production-eks</span>
+          <span class="lp-pv-title">clusterheart · production</span>
         </div>
         <div class="lp-preview-body">
           <div class="lp-prow">
@@ -406,7 +406,7 @@ const homeBody = `{{define "body"}}
     </div>
     <div class="fcard">
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-      <h3>AWS cost insights</h3>
+      <h3>Cloud cost insights</h3>
       <p>Real daily spend from Cost Explorer, right next to your live usage.</p>
     </div>
     <div class="fcard">
