@@ -109,19 +109,19 @@
             <ul class="text-base md:text-lg text-neutral-600 max-w-2xl mx-auto mb-10 space-y-3 text-left">
                 <li class="flex gap-3">
                     <i class="fa-solid fa-check text-black mt-1.5 text-sm"></i>
-                    <span>Right-size and patch workloads in one click</span>
+                    <span>Right-size workloads from real usage history, then patch in one click</span>
                 </li>
                 <li class="flex gap-3">
                     <i class="fa-solid fa-check text-black mt-1.5 text-sm"></i>
-                    <span>Fix issues fast with automatic diagnosis</span>
+                    <span>Auto-diagnose failing pods — events, logs, and root cause in one view</span>
                 </li>
                 <li class="flex gap-3">
                     <i class="fa-solid fa-check text-black mt-1.5 text-sm"></i>
-                    <span>Ask AI about your live cluster</span>
+                    <span>Ask an AI copilot about your live cluster in plain English</span>
                 </li>
                 <li class="flex gap-3">
                     <i class="fa-solid fa-check text-black mt-1.5 text-sm"></i>
-                    <span>Runs on your <strong class="text-black">local</strong> kubeconfig, credentials never leave your machine</span>
+                    <span>Runs entirely on your <strong class="text-black">kubeconfig</strong> — credentials never leave your machine</span>
                 </li>
             </ul>
 
@@ -142,7 +142,7 @@
             <div class="max-w-2xl mb-16">
                 <p class="mono text-xs font-medium tracking-[0.2em] text-neutral-400 uppercase mb-4">01 / Core</p>
                 <h2 class="text-4xl font-bold text-black tracking-tight mb-4">Everything you manage, locally</h2>
-                <p class="text-lg text-neutral-600">Live views of the workloads that matter, with one-click actions on every row.</p>
+                <p class="text-lg text-neutral-600">Live views of pods, jobs, and nodes — with one-click actions on every row.</p>
             </div>
 
             <div class="grid md:grid-cols-3 border-t border-l border-neutral-200 reveal">
@@ -155,15 +155,15 @@
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Live health at a glance:</strong> ready count, status, restarts, and real-time CPU/memory from metrics-server.</span>
+                            <span><strong class="text-black">Real-time health:</strong> ready count, status, restarts, and live CPU/memory from metrics-server.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Find problems fast:</strong> namespace filter, search, sort by CPU/memory/restarts, and an "issues only" toggle.</span>
+                            <span><strong class="text-black">Find problems fast:</strong> filter by namespace, sort by CPU/memory/restarts, or flip on "issues only".</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Act in one click:</strong> logs, YAML, shell, port-forward, delete, and one-click diagnose.</span>
+                            <span><strong class="text-black">Act in one click:</strong> logs, exec, port-forward, YAML, delete, and auto-diagnose.</span>
                         </li>
                     </ul>
                 </div>
@@ -177,7 +177,7 @@
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Full picture:</strong> every job including completed/lingering ones, with status and completion detail.</span>
+                            <span><strong class="text-black">Full picture:</strong> every job, including completed and lingering ones, with status and completion detail.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
@@ -185,7 +185,7 @@
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Drill down instantly:</strong> jump to a job's pod logs, YAML, or diagnosis without leaving the app.</span>
+                            <span><strong class="text-black">Drill down:</strong> jump from a job to its pod's logs, YAML, or diagnosis in one click.</span>
                         </li>
                     </ul>
                 </div>
@@ -199,15 +199,15 @@
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Capacity vs. usage:</strong> allocatable CPU, memory, and ephemeral storage against live usage per node.</span>
+                            <span><strong class="text-black">Capacity vs. usage:</strong> allocatable CPU, memory, and ephemeral storage against live usage, per node.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Health and role:</strong> Ready status and node role (control plane or worker) at a glance.</span>
+                            <span><strong class="text-black">Health and role:</strong> Ready status and node role — control plane or worker.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Packing view:</strong> pods-per-node vs. the pod limit, so you see crowding and headroom.</span>
+                            <span><strong class="text-black">Packing view:</strong> pods-per-node against the pod limit, so you see crowding and headroom.</span>
                         </li>
                     </ul>
                 </div>
@@ -223,21 +223,21 @@
                     <p class="mono text-xs font-medium tracking-[0.2em] text-neutral-400 uppercase mb-4">02 / FinOps</p>
                     <h2 class="text-4xl font-bold text-black tracking-tight mb-4">Cloud cost, where you manage it</h2>
                     <p class="text-lg text-neutral-600 mb-10 leading-relaxed">
-                        Understand your cluster's financial impact right beside the workloads driving it. No separate dashboard.
+                        See cloud spend next to the workloads driving it — no separate dashboard, no data leaving your machine.
                     </p>
 
                     <div class="space-y-3">
                         <div class="p-5 bg-white border-l-2 border-black">
                             <h4 class="font-bold text-black mb-1">Daily spend, in-app</h4>
-                            <p class="text-sm text-neutral-600">Pulls AWS Cost Explorer right beside the workloads driving it.</p>
+                            <p class="text-sm text-neutral-600">Live AWS Cost Explorer data in the same window as your workloads.</p>
                         </div>
                         <div class="p-5 bg-white border-l-2 border-neutral-200">
                             <h4 class="font-bold text-black mb-1">Cost by service</h4>
-                            <p class="text-sm text-neutral-600">See exactly which AWS services are running up the bill.</p>
+                            <p class="text-sm text-neutral-600">Break spend down by service and see exactly what's driving the bill.</p>
                         </div>
                         <div class="p-5 bg-white border-l-2 border-neutral-200">
                             <h4 class="font-bold text-black mb-1">Zero extra setup</h4>
-                            <p class="text-sm text-neutral-600">Reuses the same AWS profile your kube context already uses, so if the cluster loads, cost usually does too.</p>
+                            <p class="text-sm text-neutral-600">Reuses the AWS profile your kube context already uses. If the cluster loads, cost usually does too.</p>
                         </div>
                     </div>
                 </div>
@@ -301,27 +301,27 @@
                 <!-- AI Copilot -->
                 <div class="reveal">
                     <p class="mono text-xs font-medium tracking-[0.2em] text-neutral-500 uppercase mb-4">03 / AI Copilot</p>
-                    <h2 class="text-4xl font-bold tracking-tight mb-10">Ask questions from AI</h2>
+                    <h2 class="text-4xl font-bold tracking-tight mb-10">Ask your cluster anything</h2>
                     <ul class="space-y-8">
                         <li class="flex gap-4">
                             <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-robot"></i></div>
                             <div>
-                                <h4 class="font-bold mb-1.5">Cluster-aware copilot</h4>
-                                <p class="text-sm text-neutral-400 leading-relaxed">Chat that understands your workloads, metrics, events, and cost context.</p>
+                                <h4 class="font-bold mb-1.5">Full cluster context</h4>
+                                <p class="text-sm text-neutral-400 leading-relaxed">Understands your workloads, metrics, events, and cost — no copy-pasting YAML into a chatbot.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
                             <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-magnifying-glass"></i></div>
                             <div>
-                                <h4 class="font-bold mb-1.5">Reads your live cluster</h4>
-                                <p class="text-sm text-neutral-400 leading-relaxed">Runs safe, read only kubectl like get, describe, logs and top to answer with real data.</p>
+                                <h4 class="font-bold mb-1.5">Answers from live data</h4>
+                                <p class="text-sm text-neutral-400 leading-relaxed">Runs read-only kubectl — get, describe, logs, top — so answers come from your cluster, not guesses.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
                             <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-lock"></i></div>
                             <div>
-                                <h4 class="font-bold mb-1.5">Safe &amp; flexible</h4>
-                                <p class="text-sm text-neutral-400 leading-relaxed">Every mutating command is refused. Bring your own key: Gemini or OpenRouter, free models work out of the box.</p>
+                                <h4 class="font-bold mb-1.5">Read-only, bring your own key</h4>
+                                <p class="text-sm text-neutral-400 leading-relaxed">Every mutating command is refused. Plug in Gemini or OpenRouter — free models work out of the box.</p>
                             </div>
                         </li>
                     </ul>
@@ -335,22 +335,22 @@
                         <li class="flex gap-4">
                             <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-chart-line"></i></div>
                             <div>
-                                <h4 class="font-bold mb-1.5">History, not a guess</h4>
-                                <p class="text-sm text-neutral-400 leading-relaxed">Samples CPU/memory every 30s over a full window (6h default), sizing to p95 + peak so spiky apps aren't shrunk.</p>
+                                <h4 class="font-bold mb-1.5">Based on real usage, not guesses</h4>
+                                <p class="text-sm text-neutral-400 leading-relaxed">Samples CPU/memory every 30s over a 6h window and sizes to p95 + peak, so spiky apps never get starved.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
                             <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-gauge-high"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Clear verdicts</h4>
-                                <p class="text-sm text-neutral-400 leading-relaxed">OK / UPSIZE CPU / UPSIZE MEM / DOWNSIZE, each with a concrete suggested request.</p>
+                                <p class="text-sm text-neutral-400 leading-relaxed">OK / UPSIZE CPU / UPSIZE MEM / DOWNSIZE — each with a concrete suggested request.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
                             <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">One-click apply</h4>
-                                <p class="text-sm text-neutral-400 leading-relaxed">Patch the new resource request straight to the owning workload, right from the UI.</p>
+                                <p class="text-sm text-neutral-400 leading-relaxed">Patch the new request straight to the owning workload — no YAML editing.</p>
                             </div>
                         </li>
                     </ul>
@@ -377,11 +377,11 @@
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">One place for everything:</strong> inspect, diagnose, track cost, chat with AI, and right size in a single app.</span>
+                            <span><strong class="text-black">One app for everything:</strong> inspect, diagnose, track cost, chat with AI, and right-size — in one place.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">No tool sprawl:</strong> stop stitching five separate tools together just to run your cluster.</span>
+                            <span><strong class="text-black">No tool sprawl:</strong> stop stitching five tools together to run one cluster.</span>
                         </li>
                     </ul>
                 </div>
@@ -393,11 +393,11 @@
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Just a desktop install:</strong> point it at your kubeconfig and you are ready to go.</span>
+                            <span><strong class="text-black">Just a desktop install:</strong> point it at your kubeconfig and you're running.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">Zero cluster footprint:</strong> no agents, operators, or CRDs running inside your cluster.</span>
+                            <span><strong class="text-black">Zero cluster footprint:</strong> no agents, operators, or CRDs inside your cluster.</span>
                         </li>
                     </ul>
                 </div>
@@ -413,7 +413,7 @@
                         </li>
                         <li class="flex gap-3">
                             <span class="text-black font-bold">•</span>
-                            <span><strong class="text-black">We only gate access:</strong> the server just decides who is allowed in, nothing more.</span>
+                            <span><strong class="text-black">We only gate access:</strong> our server decides who's allowed in — it never sees your cluster.</span>
                         </li>
                     </ul>
                 </div>
