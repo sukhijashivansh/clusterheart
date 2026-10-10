@@ -18,7 +18,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 
-const SERVER = (process.env.CLUSTERHEART_SERVER || 'http://168.144.82.205').replace(/\/+$/, '');
+const SERVER = (process.env.CLUSTERHEART_SERVER || 'https://clusterheart-server.onrender.com').replace(/\/+$/, '');
 
 // Never let a stray error take the whole app down silently — log it and fall
 // back to the login screen instead of the window vanishing.
@@ -124,7 +124,8 @@ async function apiLogin(email, password) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
-    signal: AbortSignal.timeout(10000),
+    // Long timeout: a free-tier host may be cold-starting on first login.
+    signal: AbortSignal.timeout(60000),
   });
   const data = await res.json().catch(() => ({}));
   return { status: res.status, data };
@@ -132,7 +133,7 @@ async function apiLogin(email, password) {
 async function apiSession(token) {
   const res = await fetch(`${SERVER}/api/session`, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(20000),
   });
   return res.json().catch(() => ({ valid: false }));
 }

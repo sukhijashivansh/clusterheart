@@ -385,7 +385,7 @@ echo "Sign in at: %s/login"
 func main() {
 	loadDotEnv(".env")
 
-	addr := flag.String("addr", envOr("ADDR", "127.0.0.1:9000"), "listen address")
+	addr := flag.String("addr", defaultAddr(), "listen address")
 	flag.Parse()
 
 	st, err := openStore(context.Background())
@@ -478,4 +478,14 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// defaultAddr picks the listen address. Hosts like Render/Heroku inject PORT
+// and expect the process to bind 0.0.0.0:$PORT. Locally we fall back to ADDR
+// (or 127.0.0.1:9000) so dev behaviour is unchanged.
+func defaultAddr() string {
+	if p := os.Getenv("PORT"); p != "" {
+		return "0.0.0.0:" + p
+	}
+	return envOr("ADDR", "127.0.0.1:9000")
 }
