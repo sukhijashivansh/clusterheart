@@ -251,7 +251,7 @@
                     <div class="p-6">
                         <div class="flex items-baseline justify-between mb-6">
                             <span class="text-sm text-neutral-500">Today</span>
-                            <span class="mono text-3xl font-bold text-black">$63.63</span>
+                            <span id="costNum" class="mono text-3xl font-bold text-black" data-from="250" data-to="63.63">$63.63</span>
                         </div>
                         <div class="space-y-4">
                             <div>
@@ -560,6 +560,43 @@
                 icon.classList.toggle('text-white', !isOpen);
             });
         });
+
+        // FinOps cost counter: counts down from the "before" to the real total,
+        // shifting red -> orange -> green. Runs once, only when scrolled into view.
+        (() => {
+            const el = document.getElementById('costNum');
+            if (!el) return;
+            const from = parseFloat(el.dataset.from), to = parseFloat(el.dataset.to);
+            const stops = [[0xdc, 0x26, 0x26], [0xea, 0x58, 0x0c], [0x16, 0xa3, 0x4a]]; // red, orange, green
+            const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+            const colorAt = (p) => {
+                const seg = p < 0.5 ? 0 : 1;
+                const t = p < 0.5 ? p / 0.5 : (p - 0.5) / 0.5;
+                const c0 = stops[seg], c1 = stops[seg + 1];
+                return `rgb(${lerp(c0[0], c1[0], t)}, ${lerp(c0[1], c1[1], t)}, ${lerp(c0[2], c1[2], t)})`;
+            };
+            const render = (val, p) => { el.textContent = '$' + val.toFixed(2); el.style.color = colorAt(p); };
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            render(from, 0); // start high + red so the drop is visible from frame one
+
+            const run = () => {
+                if (reduce) { render(to, 1); return; }
+                const dur = 1600, t0 = performance.now();
+                const tick = (now) => {
+                    const p = Math.min((now - t0) / dur, 1);
+                    const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+                    render(from + (to - from) * eased, eased);
+                    if (p < 1) requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            };
+
+            const io = new IntersectionObserver((entries, obs) => {
+                entries.forEach(e => { if (e.isIntersecting) { run(); obs.unobserve(e.target); } });
+            }, { threshold: 0.6 });
+            io.observe(el);
+        })();
     </script>
 </body>
 </html>
