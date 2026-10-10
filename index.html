@@ -582,7 +582,7 @@
 
             const run = () => {
                 if (reduce) { render(to, 1); return; }
-                const dur = 1600, t0 = performance.now();
+                const dur = 2800, t0 = performance.now();
                 const tick = (now) => {
                     const p = Math.min((now - t0) / dur, 1);
                     const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
