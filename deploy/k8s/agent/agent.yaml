@@ -1,0 +1,97 @@
+# ClusterHeart SRE Agent — OBSERVE-ONLY install.
+#
+# This manifest grants read-only access that exactly matches what the agent
+# collector reads (nodes, pods, events, workloads, discovery). It contains NO
+# mutating verbs, NO pods/exec, NO pods/portforward, and NO access to Secret
+# values. Remediation runs under a SEPARATE, narrowly-scoped ServiceAccount that
+# is installed only when a cluster opts in (added in a later milestone).
+#
+# Before applying, create the agent credentials Secret (shown once at cluster
+# registration from the control plane):
+#
+#   kubectl create namespace clusterheart-sre
+#   kubectl -n clusterheart-sre create secret generic clusterheart-agent \
+#     --from-literal=CONTROLPLANE_URL=https://<control-plane-host> \
+#     --from-literal=CLUSTER_ID=<clu_...> \
+#     --from-literal=AGENT_TOKEN=<token-from-registration>
+#
+# Then: kubectl apply -f deploy/k8s/agent/agent.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clusterheart-sre
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clusterheart-agent
+  namespace: clusterheart-sre
+---
+# Read-only ClusterRole. Only the resources/verbs the collector actually uses.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clusterheart-agent-observe
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, events]
+    verbs: [get, list, watch]
+  - apiGroups: ["apps"]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: ["batch"]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  # Server version discovery (/version) for compatibility reporting.
+  - nonResourceURLs: ["/version", "/version/"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clusterheart-agent-observe
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: clusterheart-agent-observe
+subjects:
+  - kind: ServiceAccount
+    name: clusterheart-agent
+    namespace: clusterheart-sre
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clusterheart-agent
+  namespace: clusterheart-sre
+  labels: { app: clusterheart-agent }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: clusterheart-agent }
+  template:
+    metadata:
+      labels: { app: clusterheart-agent }
+    spec:
+      serviceAccountName: clusterheart-agent
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: agent
+          image: ghcr.io/decodx09/clusterheart-sre-agent:latest # build + push before use
+          args: ["/agent"]
+          envFrom:
+            - secretRef: { name: clusterheart-agent }
+          env:
+            - { name: COLLECT_INTERVAL, value: "30s" }
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits: { cpu: "200m", memory: "192Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
