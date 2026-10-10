@@ -1,0 +1,142 @@
+package controlplane
+
+import (
+	"context"
+	"sync"
+	"time"
+)
+
+// Policy is the per-tenant remediation policy. Defaults are deliberately SAFE:
+// approval-required, no namespaces actionable until explicitly allowlisted, and
+// production treated as protected. This realises "read-only by default".
+type Policy struct {
+	TenantID              string              `json:"tenantId"`
+	Mode                  Mode                `json:"mode"`
+	AllowedActions        map[ActionType]bool `json:"allowedActions"`
+	NamespaceAllowlist    []string            `json:"namespaceAllowlist"` // empty => nothing actionable; "*" => all
+	ProtectedEnvironments []string            `json:"protectedEnvironments"`
+	MaxConcurrent         int                 `json:"maxConcurrent"`
+	PerWorkloadCooldown   time.Duration       `json:"perWorkloadCooldown"`
+	Paused                bool                `json:"paused"` // emergency kill switch
+}
+
+// DefaultPolicy returns the safe default for a new tenant.
+func DefaultPolicy(tenantID string) Policy {
+	return Policy{
+		TenantID:              tenantID,
+		Mode:                  ModeApprovalRequired,
+		AllowedActions:        map[ActionType]bool{ActionRolloutRestart: true},
+		NamespaceAllowlist:    nil, // nothing actionable until an operator opts in
+		ProtectedEnvironments: []string{"production", "prod"},
+		MaxConcurrent:         1,
+		PerWorkloadCooldown:   10 * time.Minute,
+		Paused:                false,
+	}
+}
+
+func (p Policy) nsAllowed(ns string) bool {
+	for _, a := range p.NamespaceAllowlist {
+		if a == "*" || a == ns {
+			return true
+		}
+	}
+	return false
+}
+
+func (p Policy) isProtected(env string) bool {
+	for _, e := range p.ProtectedEnvironments {
+		if e == env {
+			return true
+		}
+	}
+	return false
+}
+
+// policyInput carries the live state the engine needs for rate/concurrency/
+// cooldown checks (supplied by the service from the store).
+type policyInput struct {
+	environment   string
+	activeCount   int
+	lastForTarget *time.Time
+}
+
+// policyEngine evaluates proposals deterministically. It never calls an LLM.
+// (Named to avoid colliding with the detection Engine in detect.go.)
+type policyEngine struct{}
+
+// Evaluate returns the policy verdict for an action against a target.
+func (policyEngine) Evaluate(pol Policy, action ActionType, target TargetRef, in policyInput, now time.Time) PolicyDecision {
+	var reasons []string
+	deny := func(r string) { reasons = append(reasons, r) }
+
+	if pol.Paused {
+		deny("emergency pause is active for this tenant")
+	}
+	if _, err := lookupAction(action); err != nil {
+		deny(err.Error())
+	}
+	if !pol.AllowedActions[action] {
+		deny("action is not allowlisted by policy")
+	}
+	if !pol.nsAllowed(target.Namespace) {
+		deny("namespace is not in the policy allowlist")
+	}
+	if pol.MaxConcurrent > 0 && in.activeCount >= pol.MaxConcurrent {
+		deny("maximum concurrent remediations reached")
+	}
+	if pol.PerWorkloadCooldown > 0 && in.lastForTarget != nil && now.Sub(*in.lastForTarget) < pol.PerWorkloadCooldown {
+		deny("cooldown is active for this target")
+	}
+
+	mode := pol.Mode
+	if mode == ModeOff {
+		deny("remediation is disabled (mode=off)")
+	}
+	// Production protection: auto never applies in a protected environment; it is
+	// downgraded to approval-required.
+	note := ""
+	if mode == ModeAuto && pol.isProtected(in.environment) {
+		mode = ModeApprovalRequired
+		note = "auto downgraded to approval-required in a protected environment"
+	}
+
+	allowed := len(reasons) == 0
+	if allowed && note != "" {
+		reasons = append(reasons, note) // informational, not a denial
+	}
+	return PolicyDecision{Allowed: allowed, Reasons: reasons, Mode: mode, EvaluatedAt: now}
+}
+
+// --- per-tenant policy store (in-memory) --------------------------------
+
+// PolicyStore persists per-tenant policies.
+type PolicyStore interface {
+	Get(ctx context.Context, tenantID string) (Policy, error)
+	Put(ctx context.Context, p Policy) error
+}
+
+type memPolicyStore struct {
+	mu sync.RWMutex
+	m  map[string]Policy
+}
+
+// NewMemPolicyStore returns an in-memory PolicyStore seeded with safe defaults.
+func NewMemPolicyStore() PolicyStore {
+	return &memPolicyStore{m: map[string]Policy{}}
+}
+
+func (s *memPolicyStore) Get(_ context.Context, tenantID string) (Policy, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if p, ok := s.m[tenantID]; ok {
+		return p, nil
+	}
+	return DefaultPolicy(tenantID), nil
+}
+
+func (s *memPolicyStore) Put(_ context.Context, p Policy) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[p.TenantID] = p
+	return nil
+}

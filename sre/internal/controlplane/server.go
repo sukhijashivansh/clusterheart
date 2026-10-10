@@ -24,12 +24,13 @@ const maxSnapshotsPerBatch = 50
 
 // Server holds control-plane dependencies.
 type Server struct {
-	store      Store
-	incidents  IncidentStore
-	engine     *Engine
-	adminToken string
-	log        *slog.Logger
-	now        func() time.Time
+	store       Store
+	incidents   IncidentStore
+	engine      *Engine
+	remediation *remediationService
+	adminToken  string
+	log         *slog.Logger
+	now         func() time.Time
 }
 
 // NewServer constructs a control-plane server. adminToken guards operator
@@ -38,13 +39,20 @@ func NewServer(store Store, incidents IncidentStore, adminToken string, log *slo
 	if log == nil {
 		log = slog.Default()
 	}
+	// Remediation stores are in-memory in slice A (dry-run only, read-only by
+	// default). Mongo persistence + the in-cluster executor arrive in slice B.
+	rem := newRemediationService(
+		NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(),
+		incidents, store, log,
+	)
 	return &Server{
-		store:      store,
-		incidents:  incidents,
-		engine:     newEngine(incidents, log),
-		adminToken: adminToken,
-		log:        log,
-		now:        time.Now,
+		store:       store,
+		incidents:   incidents,
+		engine:      newEngine(incidents, log),
+		remediation: rem,
+		adminToken:  adminToken,
+		log:         log,
+		now:         time.Now,
 	}
 }
 
@@ -56,6 +64,17 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
+	// Remediation (deterministic policy, approvals, dry-run execution, audit).
+	mux.HandleFunc("POST /api/v1/incidents/{id}/proposals", s.requireAdmin(s.handleCreateProposal))
+	mux.HandleFunc("GET /api/v1/proposals", s.requireAdmin(s.handleListProposals))
+	mux.HandleFunc("GET /api/v1/proposals/{id}", s.requireAdmin(s.handleGetProposal))
+	mux.HandleFunc("POST /api/v1/proposals/{id}/approve", s.requireAdmin(s.handleApproveProposal))
+	mux.HandleFunc("POST /api/v1/proposals/{id}/reject", s.requireAdmin(s.handleRejectProposal))
+	mux.HandleFunc("GET /api/v1/policy", s.requireAdmin(s.handleGetPolicy))
+	mux.HandleFunc("PUT /api/v1/policy", s.requireAdmin(s.handlePutPolicy))
+	mux.HandleFunc("POST /api/v1/policy/pause", s.requireAdmin(s.handlePausePolicy))
+	mux.HandleFunc("POST /api/v1/policy/resume", s.requireAdmin(s.handleResumePolicy))
+	mux.HandleFunc("GET /api/v1/audit", s.requireAdmin(s.handleListAudit))
 	// Agent.
 	mux.HandleFunc("POST /api/v1/agents/heartbeat", s.requireAgent(s.handleHeartbeat))
 	mux.HandleFunc("POST /api/v1/telemetry", s.requireAgent(s.handleTelemetry))

@@ -33,11 +33,19 @@ Slice B (remaining in M2) — not started:
 - [ ] **AI RCA path** emitting schema-validated structured proposals (never free-form patches/shell); provider abstraction + redaction + "telemetry is data, not instructions".
 
 ## Milestone 3 — Remediation Framework
-- [ ] Typed remediation registry; first action: `rollout restart` (reversible, controller-owned).
-- [ ] Deterministic **policy engine** (independent of the LLM): allowlists, scope, risk class, rate/cooldown/concurrency.
-- [ ] Modes: dry-run, recommend, approval-required.
-- [ ] Remediation Controller service (separate `remediate` SA) with precondition + resourceVersion checks.
-- [ ] Post-action health verification + audit records + rollback for reversible actions.
+Slice A (safety spine) — done & tested on this branch. **No live cluster mutation**: execution is dry-run only, read-only by default.
+- [x] Typed action registry; first action `RolloutRestart` (reversible, controller-owned). Unknown/invalid actions rejected — no arbitrary patches/shell.
+- [x] Deterministic **policy engine** (no LLM): action + namespace allowlists (deny-by-default), risk class, max-concurrent, per-workload cooldown, production protection (auto→approval), emergency pause/kill-switch.
+- [x] Full action contract (`RemediationProposal`): evidence/rationale, risk, reversibility, policy decision, before-state, execution result, rollback availability.
+- [x] Proposal lifecycle + API: create → policy-evaluate → blocked/proposed; approve (re-evaluates preconditions) → dry-run execute; reject. Policy get/put + pause/resume; audit API.
+- [x] Append-only **audit trail** for every decision + (dry-run) execution; tenant-scoped.
+- [x] Tested: policy allow/deny, approval + dry-run execution, unknown/invalid action rejection, kill-switch, cooldown, production downgrade, reject flow, tenant isolation, audit. Runtime E2E through the HTTP binary.
+
+Slice B (the executor) — not started:
+- [ ] In-cluster **Remediation Controller** binary (`cmd/remediation`) with a separate narrow `remediate` ServiceAccount + RBAC manifest.
+- [ ] Real `RolloutRestart` via client-go; precondition + resourceVersion (optimistic concurrency) checks immediately before apply; before-state capture.
+- [ ] Post-action health verification; rollback for reversible actions; failure handling → `failed` status.
+- [ ] Mongo persistence for proposals/policy/audit (currently in-memory).
 
 ## Milestone 4 — Guarded Autonomy
 - [ ] Allowlisted automatic execution; circuit breakers, loop detection, cooldowns.
