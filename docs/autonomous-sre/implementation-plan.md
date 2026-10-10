@@ -18,11 +18,19 @@ Control plane + agent skeleton with a real register → heartbeat → telemetry 
 - [x] Unit tests: auth, tenant isolation, telemetry validation, agent backoff, collector snapshot shape.
 
 ## Milestone 2 — Incident Intelligence
-- [ ] Incident data model + evidence items (bounded snapshots, not raw-log dumps).
-- [ ] Deterministic detection: CrashLoopBackOff, OOMKilled, ImagePullBackOff, unschedulable, probe failure, rollout stuck.
-- [ ] Dedup + correlation (time/namespace/workload/node); symptom-vs-cause separation.
-- [ ] Timelines; severity + confidence; maintenance-window suppression.
-- [ ] AI RCA path emitting **schema-validated structured proposals** (never free-form patches/shell).
+Slice A (detection) — done & tested on this branch:
+- [x] Incident data model + bounded evidence items.
+- [x] Deterministic detectors: CrashLoopBackOff, OOMKilled, ImagePullBackOff, Unschedulable, RolloutStuck (from pod/deployment status reported by the agent).
+- [x] Dedup via stable fingerprint; ReplicaSet→Deployment collapse so incidents survive rollouts.
+- [x] Open/resolved lifecycle (auto-resolve when a fault clears); timeline (firstSeen/lastSeen/occurrences); deterministic severity.
+- [x] Defense-in-depth redaction at the control-plane ingestion boundary (not just the agent).
+- [x] Incident API (list + get), tenant-scoped; unit-tested + runtime E2E (create → dedup → resolve → redaction).
+
+Slice B (remaining in M2) — not started:
+- [ ] Probe-failure + missing-telemetry/agent-down detectors.
+- [ ] Cross-signal correlation (group by node/namespace/dependency); cascading-failure + symptom-vs-cause heuristics.
+- [ ] Explicit confidence field; maintenance-window suppression; alert inhibition.
+- [ ] **AI RCA path** emitting schema-validated structured proposals (never free-form patches/shell); provider abstraction + redaction + "telemetry is data, not instructions".
 
 ## Milestone 3 — Remediation Framework
 - [ ] Typed remediation registry; first action: `rollout restart` (reversible, controller-owned).

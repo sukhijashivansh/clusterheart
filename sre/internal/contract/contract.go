@@ -50,12 +50,52 @@ type TelemetryBatch struct {
 // ClusterSnapshot is a point-in-time, bounded summary of cluster health. It is
 // intentionally aggregate (counts, not full object dumps) so the primary store
 // never becomes a raw-telemetry sink. Deep evidence is fetched on demand later.
+//
+// Problems are bounded lists of measured, per-object fault signals (not
+// diagnoses). The control plane turns these facts into incidents; the agent
+// never decides what is an incident.
 type ClusterSnapshot struct {
-	CollectedAt time.Time       `json:"collectedAt"`
-	Nodes       NodeSummary     `json:"nodes"`
-	Pods        PodSummary      `json:"pods"`
-	Warnings    []WarningEvent  `json:"warnings"`    // recent warning events (bounded)
-	Workloads   WorkloadSummary `json:"workloads"`
+	CollectedAt      time.Time         `json:"collectedAt"`
+	Nodes            NodeSummary       `json:"nodes"`
+	Pods             PodSummary        `json:"pods"`
+	Warnings         []WarningEvent    `json:"warnings"` // recent warning events (bounded)
+	Workloads        WorkloadSummary   `json:"workloads"`
+	PodProblems      []PodProblem      `json:"podProblems,omitempty"`
+	WorkloadProblems []WorkloadProblem `json:"workloadProblems,omitempty"`
+}
+
+// ProblemType enumerates the deterministic fault signals the agent reports.
+// These are symptoms derived from Kubernetes object status — never root causes.
+type ProblemType string
+
+const (
+	ProblemCrashLoopBackOff ProblemType = "CrashLoopBackOff"
+	ProblemOOMKilled        ProblemType = "OOMKilled"
+	ProblemImagePullBackOff ProblemType = "ImagePullBackOff"
+	ProblemUnschedulable    ProblemType = "Unschedulable"
+	ProblemRolloutStuck     ProblemType = "RolloutStuck"
+)
+
+// PodProblem is a measured fault on a pod/container (from pod status).
+type PodProblem struct {
+	Namespace    string      `json:"namespace"`
+	Pod          string      `json:"pod"`
+	Owner        string      `json:"owner,omitempty"`     // kind/name of the pod's controller, if any
+	Container    string      `json:"container,omitempty"` // for container-level problems
+	Node         string      `json:"node,omitempty"`
+	Type         ProblemType `json:"type"`
+	RestartCount int32       `json:"restartCount,omitempty"`
+	Message      string      `json:"message"` // redacted upstream
+}
+
+// WorkloadProblem is a measured fault on a controller object (e.g. a Deployment
+// rollout that exceeded its progress deadline).
+type WorkloadProblem struct {
+	Namespace string      `json:"namespace"`
+	Kind      string      `json:"kind"`
+	Name      string      `json:"name"`
+	Type      ProblemType `json:"type"`
+	Message   string      `json:"message"` // redacted upstream
 }
 
 type NodeSummary struct {

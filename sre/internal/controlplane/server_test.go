@@ -16,7 +16,7 @@ const adminTok = "admin-secret-test-token"
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	srv := NewServer(NewMemStore(), adminTok, nil)
+	srv := NewServer(NewMemStore(), NewMemIncidentStore(), adminTok, nil)
 	return httptest.NewServer(srv.Routes())
 }
 
@@ -156,6 +156,37 @@ func TestTelemetryRejectsBadVersionAndEmpty(t *testing.T) {
 	empty := contract.TelemetryBatch{APIVersion: contract.APIVersion}
 	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, empty); code != http.StatusBadRequest {
 		t.Fatalf("empty batch: want 400, got %d", code)
+	}
+}
+
+// TestIngestionRedaction proves the control plane re-redacts agent-supplied
+// text, so a non-compliant agent cannot land a raw secret in an incident.
+func TestIngestionRedaction(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "acme", "prod")
+
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{{
+			Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api",
+			Type: contract.ProblemCrashLoopBackOff, Message: "auth Bearer sk-abc123DEF failed",
+		}},
+	}}}
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry: want 202, got %d", code)
+	}
+	_, body := do(t, http.MethodGet, ts.URL+"/api/v1/incidents?tenantId=acme&status=open", adminTok, "", nil)
+	var out struct {
+		Incidents []Incident `json:"incidents"`
+	}
+	_ = json.Unmarshal(body, &out)
+	if len(out.Incidents) != 1 || len(out.Incidents[0].Evidence) != 1 {
+		t.Fatalf("unexpected incidents: %s", body)
+	}
+	msg := out.Incidents[0].Evidence[0].Message
+	if !bytes.Contains([]byte(msg), []byte("[REDACTED]")) || bytes.Contains([]byte(msg), []byte("sk-abc123DEF")) {
+		t.Fatalf("secret not redacted at ingestion: %q", msg)
 	}
 }
 

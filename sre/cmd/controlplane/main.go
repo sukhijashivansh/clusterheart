@@ -29,22 +29,34 @@ func main() {
 	}
 
 	var store controlplane.Store
+	var incidents controlplane.IncidentStore
 	if mongoURI == "" {
-		log.Warn("MONGO_URI not set — using in-memory store (NOT durable; local dev only)")
+		log.Warn("MONGO_URI not set — using in-memory stores (NOT durable; local dev only)")
 		store = controlplane.NewMemStore()
+		incidents = controlplane.NewMemIncidentStore()
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		ms, err := controlplane.NewMongoStore(ctx, mongoURI, mongoDB)
-		cancel()
+		db, err := controlplane.ConnectMongo(ctx, mongoURI, mongoDB)
 		if err != nil {
+			cancel()
 			log.Error("mongo connect failed", "err", err)
 			os.Exit(1)
 		}
-		store = ms
+		if store, err = controlplane.NewMongoStore(ctx, db); err != nil {
+			cancel()
+			log.Error("mongo store init failed", "err", err)
+			os.Exit(1)
+		}
+		if incidents, err = controlplane.NewMongoIncidentStore(ctx, db); err != nil {
+			cancel()
+			log.Error("mongo incident store init failed", "err", err)
+			os.Exit(1)
+		}
+		cancel()
 		log.Info("connected to MongoDB", "db", mongoDB)
 	}
 
-	srv := controlplane.NewServer(store, adminToken, log)
+	srv := controlplane.NewServer(store, incidents, adminToken, log)
 	httpSrv := &http.Server{
 		Addr:              addr,
 		Handler:           srv.Routes(),

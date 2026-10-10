@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"clusterheart/sre/internal/contract"
+	"clusterheart/sre/internal/redact"
 )
 
 // staleAfter is how long without a heartbeat before a cluster is reported
@@ -24,6 +25,8 @@ const maxSnapshotsPerBatch = 50
 // Server holds control-plane dependencies.
 type Server struct {
 	store      Store
+	incidents  IncidentStore
+	engine     *Engine
 	adminToken string
 	log        *slog.Logger
 	now        func() time.Time
@@ -31,11 +34,18 @@ type Server struct {
 
 // NewServer constructs a control-plane server. adminToken guards operator
 // endpoints; it must be non-empty in production (enforced by the caller).
-func NewServer(store Store, adminToken string, log *slog.Logger) *Server {
+func NewServer(store Store, incidents IncidentStore, adminToken string, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{store: store, adminToken: adminToken, log: log, now: time.Now}
+	return &Server{
+		store:      store,
+		incidents:  incidents,
+		engine:     newEngine(incidents, log),
+		adminToken: adminToken,
+		log:        log,
+		now:        time.Now,
+	}
 }
 
 // Routes returns the HTTP handler for the control plane.
@@ -44,6 +54,8 @@ func (s *Server) Routes() http.Handler {
 	// Operator / admin.
 	mux.HandleFunc("POST /api/v1/clusters", s.requireAdmin(s.handleRegister))
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
+	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
+	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
 	// Agent.
 	mux.HandleFunc("POST /api/v1/agents/heartbeat", s.requireAgent(s.handleHeartbeat))
 	mux.HandleFunc("POST /api/v1/telemetry", s.requireAgent(s.handleTelemetry))
@@ -169,13 +181,57 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusRequestEntityTooLarge, "too many snapshots in one batch")
 		return
 	}
+	// Defense-in-depth: re-redact all free-text fields at ingestion so a
+	// non-compliant or compromised agent cannot land raw secrets/PII in the
+	// incident store or a downstream AI prompt (the agent redacts too).
+	for i := range batch.Snapshots {
+		sanitizeSnapshot(&batch.Snapshots[i])
+	}
 	// Telemetry is written ONLY for the authenticated cluster — never a cluster
 	// id taken from the request body (tenant isolation at the boundary).
 	if err := s.store.SaveSnapshots(r.Context(), c.ID, batch.Snapshots); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not store telemetry")
 		return
 	}
+	// Run deterministic detection on the latest snapshot. Detection failures must
+	// not fail ingestion — telemetry is already durably stored.
+	if err := s.engine.reconcileLatest(r.Context(), c.TenantID, c.ID, batch.Snapshots); err != nil {
+		s.log.Error("incident reconcile failed", "clusterId", c.ID, "err", err)
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": len(batch.Snapshots)})
+}
+
+func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	status := strings.TrimSpace(r.URL.Query().Get("status")) // "", "open", or "resolved"
+	incs, err := s.incidents.ListIncidents(r.Context(), tenantID, status)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not list incidents")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": incs})
+}
+
+func (s *Server) handleGetIncident(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	inc, err := s.incidents.GetIncident(r.Context(), tenantID, r.PathValue("id"))
+	if err == ErrNotFound {
+		writeErr(w, http.StatusNotFound, "incident not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not load incident")
+		return
+	}
+	writeJSON(w, http.StatusOK, inc)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -189,6 +245,20 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready"})
+}
+
+// sanitizeSnapshot redacts secret/PII-shaped substrings from all free-text
+// fields of a snapshot in place.
+func sanitizeSnapshot(s *contract.ClusterSnapshot) {
+	for i := range s.Warnings {
+		s.Warnings[i].Message = redact.String(s.Warnings[i].Message)
+	}
+	for i := range s.PodProblems {
+		s.PodProblems[i].Message = redact.String(s.PodProblems[i].Message)
+	}
+	for i := range s.WorkloadProblems {
+		s.WorkloadProblems[i].Message = redact.String(s.WorkloadProblems[i].Message)
+	}
 }
 
 // --- helpers -------------------------------------------------------------

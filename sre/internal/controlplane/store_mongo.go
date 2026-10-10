@@ -42,9 +42,10 @@ type snapshotDoc struct {
 	Snapshot    contract.ClusterSnapshot `bson:"snapshot"`
 }
 
-// NewMongoStore connects to MongoDB and ensures indexes. dbName defaults to
-// "clusterheart" (shared with the rest of the project).
-func NewMongoStore(ctx context.Context, uri, dbName string) (Store, error) {
+// ConnectMongo dials MongoDB, pings it, and returns the database handle so the
+// control plane can share one client across the cluster store and the incident
+// store. dbName defaults to "clusterheart" (shared with the rest of the project).
+func ConnectMongo(ctx context.Context, uri, dbName string) (*mongo.Database, error) {
 	if uri == "" {
 		return nil, errors.New("MONGO_URI is not set")
 	}
@@ -60,7 +61,14 @@ func NewMongoStore(ctx context.Context, uri, dbName string) (Store, error) {
 	if err := client.Ping(pctx, readpref.Primary()); err != nil {
 		return nil, err
 	}
-	db := client.Database(dbName)
+	return client.Database(dbName), nil
+}
+
+// NewMongoStore builds the cluster/telemetry store on an existing database and
+// ensures its indexes.
+func NewMongoStore(ctx context.Context, db *mongo.Database) (Store, error) {
+	pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
 	s := &mongoStore{
 		clusters:  db.Collection("sre_clusters"),
 		snapshots: db.Collection("sre_snapshots"),
