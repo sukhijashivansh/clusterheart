@@ -258,14 +258,16 @@ func (a *app) pageSignup(w http.ResponseWriter, r *http.Request) {
 	render(w, signupTmpl, nil)
 }
 
-// pageHome serves the marketing landing page at "/". Because "/" is a catch-all
-// in http.ServeMux, redirect any other unmatched path to /login as before.
+// pageHome handles "/" and any unmatched path. The marketing landing page now
+// lives on Vercel (clusterheart.com); this server is accounts-only, so the root
+// shows the sign-in page directly (a 200, so platform health checks pass) and
+// every other unmatched path redirects to /login.
 func (a *app) pageHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	render(w, homeTmpl, nil)
+	a.pageLogin(w, r)
 }
 
 func (a *app) pageAccount(w http.ResponseWriter, r *http.Request) {

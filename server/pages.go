@@ -32,11 +32,12 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clusterheart</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 :root{
-  --bg:#07111e;--panel:#0d1b2f;--text:#cfe2f5;--muted:#6e8aaa;--faint:#354e66;
-  --border:rgba(255,255,255,.07);--border-strong:rgba(255,255,255,.13);
-  --accent:#38bdf8;--accent2:#7dd3fc;--accent-ink:#0ea5e9;
-  --green:#34d399;--amber:#fbbf24;--red:#f87171;
+  --bg:#ffffff;--panel:#ffffff;--text:#171717;--muted:#525252;--faint:#a3a3a3;
+  --border:#e5e5e5;--border-strong:#d4d4d4;
+  --accent:#3B5BDB;--accent2:#3B5BDB;--accent-ink:#3B5BDB;
+  --green:#16a34a;--amber:#d97706;--red:#dc2626;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -44,50 +45,46 @@ html,body{margin:0;min-height:100%}
 #download{scroll-margin-top:68px}
 body{
   background:var(--bg);color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   -webkit-font-smoothing:antialiased;line-height:1.5;
-  background-image:
-    radial-gradient(900px 600px at 85% -10%,rgba(56,189,248,.07),transparent 60%),
-    radial-gradient(600px 500px at 5% 110%,rgba(14,165,233,.05),transparent 60%);
-  background-attachment:fixed;
 }
-a{color:var(--accent);text-decoration:none;font-weight:600}
+a{color:var(--text);text-decoration:none;font-weight:600}
 a:hover{text-decoration:underline}
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}
 .card{
   width:100%;max-width:400px;padding:40px 36px;
-  background:var(--panel);border:1px solid var(--border-strong);border-radius:18px;
-  box-shadow:0 32px 80px -20px rgba(0,0,0,.7),0 2px 8px -2px rgba(0,0,0,.4);
+  background:var(--panel);border:1px solid var(--border);border-radius:0;
+  box-shadow:0 1px 2px rgba(0,0,0,.04),0 20px 50px -24px rgba(0,0,0,.18);
 }
-.brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
-.wordmark{font-size:20px;font-weight:700;letter-spacing:-.4px;color:var(--text)}
-.wordmark .a{color:var(--accent)}
-h1{font-size:23px;font-weight:750;letter-spacing:-.5px;margin:0 0 7px;color:var(--text)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.wordmark{font-size:19px;font-weight:700;letter-spacing:-.4px;color:var(--text)}
+.wordmark .a{color:inherit}
+h1{font-size:23px;font-weight:800;letter-spacing:-.5px;margin:0 0 7px;color:var(--text)}
 .sub{color:var(--muted);font-size:13.5px;margin:0 0 26px}
 label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:18px 0 8px}
 input{
   width:100%;padding:12px 14px;font-size:14px;color:var(--text);
-  background:rgba(255,255,255,.05);border:1px solid var(--border-strong);border-radius:11px;outline:none;
+  background:#fff;border:1px solid var(--border-strong);border-radius:0;outline:none;
   transition:border-color .15s,box-shadow .15s;
 }
-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.15)}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,91,219,.14)}
 input::placeholder{color:var(--faint)}
 .btn{
-  width:100%;margin-top:26px;padding:13px 16px;font-size:14px;font-weight:650;color:#fff;cursor:pointer;
-  background:linear-gradient(135deg,#0ea5e9,#0284c7);border:none;border-radius:11px;
-  box-shadow:0 12px 28px -10px rgba(14,165,233,.5);transition:transform .12s,box-shadow .12s,opacity .12s;
+  width:100%;margin-top:26px;padding:13px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;
+  background:#000;border:none;border-radius:0;
+  transition:background .15s,opacity .12s;
 }
-.btn:hover{transform:translateY(-1px);box-shadow:0 18px 34px -12px rgba(14,165,233,.6)}
-.btn:active{transform:translateY(0)}
-.btn:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
-.btn.secondary{margin-top:12px;background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--border-strong);box-shadow:none}
-.btn.secondary:hover{background:rgba(255,255,255,.1);box-shadow:none}
+.btn:hover{background:#262626}
+.btn:active{background:#000}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.secondary{margin-top:12px;background:#fff;color:var(--text);border:1px solid var(--border-strong)}
+.btn.secondary:hover{background:#fff;border-color:#000}
 .alt{margin-top:22px;font-size:13px;color:var(--muted);text-align:center}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600}
-.pill.on{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.22)}
-.pill.off{background:rgba(251,191,36,.10);color:var(--amber);border:1px solid rgba(251,191,36,.2)}
+.pill.on{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.pill.off{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 
 /* --- admin panel --- */
@@ -95,12 +92,12 @@ input::placeholder{color:var(--faint)}
 .admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px}
 .admin-user{font-size:13px;color:var(--muted);white-space:nowrap}
 .count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:8px;border-radius:20px;background:rgba(251,191,36,.14);color:var(--amber);font-size:12px;font-weight:700;vertical-align:middle}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:0;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04),0 20px 50px -24px rgba(0,0,0,.12)}
 table.users{width:100%;border-collapse:collapse}
-table.users th{text-align:left;padding:14px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);font-weight:700;background:rgba(255,255,255,.03);border-bottom:1px solid var(--border)}
+table.users th{text-align:left;padding:14px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;background:#fafafa;border-bottom:1px solid var(--border)}
 table.users td{padding:15px 18px;vertical-align:middle}
 table.users tbody tr{border-top:1px solid var(--border);transition:background .12s}
-table.users tbody tr:hover{background:rgba(255,255,255,.03)}
+table.users tbody tr:hover{background:#fafafa}
 .u-name{font-weight:650;font-size:14px;color:var(--text)}
 .u-email{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--muted)}
@@ -109,8 +106,9 @@ table.users tbody tr:hover{background:rgba(255,255,255,.03)}
 .act:hover{transform:translateY(-1px)}
 .act:active{transform:translateY(0)}
 .act:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
-.act.approve{border:none;color:#fff;background:linear-gradient(135deg,#0f9d63,#14b877);box-shadow:0 8px 20px -8px rgba(15,157,99,.5)}
-.act.revoke{border:1px solid var(--border-strong);background:rgba(255,255,255,.05);color:var(--muted)}
+.act.approve{border:none;color:#fff;background:#16a34a}
+.act.approve:hover{background:#15803d}
+.act.revoke{border:1px solid var(--border-strong);background:#fff;color:var(--muted)}
 .act.revoke:hover{color:var(--red);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.07)}
 .empty{padding:40px 18px;text-align:center;color:var(--muted)}
 
@@ -314,13 +312,13 @@ async function _post(url,payload){
 {{block "script" .}}{{end}}
 </body></html>{{end}}`
 
-const logoSVG = `<svg width="28" height="28" viewBox="0 0 100 100"><circle cx="50" cy="18" r="9" fill="#7dd3fc"/><circle cx="22" cy="34" r="8" fill="#38bdf8" opacity=".6"/><circle cx="78" cy="34" r="8" fill="#38bdf8" opacity=".6"/><circle cx="50" cy="50" r="13" fill="#38bdf8"/><circle cx="22" cy="66" r="8" fill="#0ea5e9"/><circle cx="78" cy="66" r="8" fill="#0ea5e9"/><circle cx="50" cy="82" r="9" fill="#0284c7"/></svg>`
+const logoSVG = `<svg width="26" height="26" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#3B5BDB"/><circle cx="50" cy="15" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="32.5" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="50" cy="85" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="32.5" r="10.5" fill="#3B5BDB"/></svg>`
 
 // --- home / landing ------------------------------------------------------
 
 const homeBody = `{{define "body"}}
 <nav class="lp-nav">
-  <div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
+  <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
   <div class="lp-nav-actions">
     <a href="/login" style="color:var(--muted);font-weight:500">Sign in</a>
     <a class="lp-btn primary" href="#download">Download</a>
@@ -489,7 +487,7 @@ const homeBody = `{{define "body"}}
 </section>
 
 <footer class="lp-foot">
-  <div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
+  <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
   <span>Kubernetes health, cost &amp; control — on your machine.</span>
   <span><a href="/login">Sign in</a> · <a href="/signup">Sign up</a></span>
 </footer>
@@ -498,7 +496,7 @@ const homeBody = `{{define "body"}}
 // --- login ---------------------------------------------------------------
 
 const loginBody = `{{define "body"}}<div class="center"><div class="card">
-<div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
+<div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <h1>Welcome back</h1><p class="sub">Sign in to your account.</p>
 <label for="email">Email</label>
 <input id="email" type="email" autocomplete="email" placeholder="you@company.com">
@@ -525,7 +523,7 @@ email.addEventListener('keydown',function(e){if(e.key==='Enter')pass.focus();});
 // --- signup --------------------------------------------------------------
 
 const signupBody = `{{define "body"}}<div class="center"><div class="card">
-<div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
+<div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <h1>Create your account</h1><p class="sub">Sign up to request access. An admin approves new accounts.</p>
 <label for="name">Name</label>
 <input id="name" type="text" autocomplete="name" placeholder="Jane Doe">
@@ -553,7 +551,7 @@ pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 // --- account -------------------------------------------------------------
 
 const accountBody = `{{define "body"}}<div class="center"><div class="card">
-<div class="brand">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span></span></div>
+<div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
 {{if .Approved}}
   <p><span class="pill on"><span class="dot"></span>Approved</span></p>
@@ -575,7 +573,7 @@ document.getElementById('logout').addEventListener('click',async function(){
 
 const adminBody = `{{define "body"}}<div class="admin">
 <div class="admin-head">
-  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">cluster<span class="a">heart</span> <span style="color:var(--faint);font-weight:500">· admin</span></span></div>
+  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">Clusterheart <span style="color:var(--faint);font-weight:500">· admin</span></span></div>
   <div class="admin-user">{{.Me}} · <a href="#" id="logout">log out</a></div>
 </div>
 <p class="sub" style="margin:0 0 22px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval — approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
