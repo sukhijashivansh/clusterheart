@@ -1,0 +1,33 @@
+# Render Blueprint for the Clusterheart account server (Go + MongoDB Atlas).
+#
+# Deploy: Render Dashboard -> New -> Blueprint -> connect this repo.
+# Render reads this file, provisions the service, and prompts for the secret
+# env vars marked `sync: false` (MONGO_URI, ADMIN_EMAILS).
+#
+# Before the first login works you must also:
+#   - MongoDB Atlas -> Network Access -> allow Render's egress (add 0.0.0.0/0,
+#     or Render's static outbound IPs on a paid instance).
+#
+# The service is reachable at https://<name>.onrender.com — i.e.
+# https://clusterheart-server.onrender.com (confirm the exact name after the
+# first deploy; Render appends a suffix only if the name is already taken).
+
+services:
+  - type: web
+    name: clusterheart-server
+    runtime: go
+    plan: free # free spins down after ~15m idle (cold start ~30-50s). Use `starter` for always-on.
+    rootDir: server
+    buildCommand: go build -tags netgo -ldflags "-s -w" -o clusterheart-server .
+    startCommand: ./clusterheart-server
+    healthCheckPath: /api/session # returns 200 {"valid":false} with no session
+    autoDeploy: true
+    envVars:
+      - key: MONGO_URI # mongodb+srv://... from Atlas — set in dashboard
+        sync: false
+      - key: ADMIN_EMAILS # comma-separated owner emails for /admin
+        sync: false
+      - key: MONGO_DB
+        value: clusterheart
+      - key: SESSION_SECRET # persist session key across deploys (Render fs is ephemeral)
+        generateValue: true
