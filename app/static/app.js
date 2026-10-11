@@ -2507,6 +2507,8 @@ function switchView(v) {
   if (v === "load") populateTraffic();
   if (v === "nodes") armCapacityCooldown();
   if (v === "rightsizing") loadRightsizing();
+  if (v === "incidents") { wireSRE(); loadIncidents(); }
+  if (v === "remediation") { wireSRE(); loadRemediation(); }
 }
 
 // ---------- key bindings ----------
@@ -2693,3 +2695,199 @@ function init() {
   setInterval(refreshPortForwards, 4000);
 }
 init();
+
+// ======================================================================
+// Autonomous SRE: incidents + remediation approval queue.
+// All data comes from the dashboard's server-side proxy (/api/sre/*), which
+// injects the control-plane admin token and pins the tenant. The renderer
+// never holds the token. Nothing here is fabricated: an unconfigured or
+// unreachable control plane shows an explicit notice, not fake rows.
+// ======================================================================
+const sreState = { configured: null, tenantId: "", paused: false };
+let sreWired = false;
+
+function sreEsc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function sreTime(t) {
+  if (!t) return "—";
+  const d = new Date(t);
+  if (isNaN(d)) return "—";
+  return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function sevBadge(sev) {
+  const s = String(sev || "").toLowerCase();
+  return `<span class="sre-badge sev-${sreEsc(s) || "unknown"}">${sreEsc(s || "—")}</span>`;
+}
+function statusBadge(st) {
+  const s = String(st || "").toLowerCase();
+  return `<span class="sre-badge st-${sreEsc(s)}">${sreEsc(s || "—")}</span>`;
+}
+
+function showNotice(el, kind, msg) {
+  el.className = "panel sre-notice " + (kind || "");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+function hideNotice(el) { el.classList.add("hidden"); }
+
+// Resolve configured-ness once (cached). Returns the config object.
+async function sreConfig() {
+  if (sreState.configured !== null) return sreState;
+  try {
+    const c = await jget("/api/sre/config");
+    sreState.configured = !!c.configured;
+    sreState.tenantId = c.tenantId || "";
+  } catch (_) {
+    sreState.configured = false;
+  }
+  return sreState;
+}
+
+function sreUnconfiguredMsg() {
+  return "SRE control plane is not configured. Launch the dashboard with " +
+    "CONTROLPLANE_URL, CONTROLPLANE_ADMIN_TOKEN and SRE_TENANT_ID set to connect " +
+    "to your Autonomous SRE control plane.";
+}
+
+// ---------- incidents ----------
+async function loadIncidents() {
+  const notice = $("#sre-inc-notice"), tbody = $("#sre-inc-tbody"), meta = $("#sre-inc-meta");
+  const cfg = await sreConfig();
+  if (!cfg.configured) { tbody.innerHTML = ""; meta.textContent = ""; showNotice(notice, "warn", sreUnconfiguredMsg()); return; }
+  hideNotice(notice);
+  meta.textContent = "loading…";
+  const status = $("#sre-inc-status").value;
+  try {
+    const data = await jget("/api/sre/incidents" + (status ? `?status=${encodeURIComponent(status)}` : ""));
+    sreState._incidents = (data && data.incidents) || [];
+    renderIncidents();
+    meta.textContent = `tenant ${cfg.tenantId}`;
+  } catch (e) {
+    tbody.innerHTML = ""; meta.textContent = "";
+    showNotice(notice, "err", "could not load incidents: " + e.message);
+  }
+}
+function renderIncidents() {
+  const tbody = $("#sre-inc-tbody");
+  const q = ($("#sre-inc-search").value || "").toLowerCase();
+  const rows = (sreState._incidents || []).filter(i =>
+    !q || [i.type, i.workload, i.namespace, i.title].some(x => String(x || "").toLowerCase().includes(q)));
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="8" class="dim" style="padding:14px">no incidents</td></tr>`; return; }
+  tbody.innerHTML = rows.map(i => `
+    <tr class="sre-row" data-id="${sreEsc(i.id)}">
+      <td>${sevBadge(i.severity)}</td>
+      <td>${sreEsc(i.type)}</td>
+      <td>${sreEsc(i.workload || "—")}</td>
+      <td class="c-ns">${sreEsc(i.namespace || "—")}</td>
+      <td class="num">${i.occurrences || 0}</td>
+      <td class="dim">${sreTime(i.firstSeen)}</td>
+      <td class="dim">${sreTime(i.lastSeen)}</td>
+      <td>${statusBadge(i.status)}</td>
+    </tr>`).join("");
+  $$("#sre-inc-tbody .sre-row").forEach(tr => tr.addEventListener("click", () => {
+    const inc = (sreState._incidents || []).find(x => x.id === tr.dataset.id);
+    if (inc) openModal(`incident · ${inc.type}`, JSON.stringify(inc, null, 2));
+  }));
+}
+
+// ---------- remediation approval queue ----------
+async function loadRemediation() {
+  const notice = $("#sre-prop-notice"), tbody = $("#sre-prop-tbody");
+  const cfg = await sreConfig();
+  if (!cfg.configured) { tbody.innerHTML = ""; $("#sre-policy-meta").textContent = ""; showNotice(notice, "warn", sreUnconfiguredMsg()); return; }
+  hideNotice(notice);
+  await loadPolicyMeta();
+  const status = $("#sre-prop-status").value;
+  try {
+    const data = await jget("/api/sre/proposals" + (status ? `?status=${encodeURIComponent(status)}` : ""));
+    sreState._proposals = (data && data.proposals) || [];
+    renderProposals();
+  } catch (e) {
+    tbody.innerHTML = "";
+    showNotice(notice, "err", "could not load proposals: " + e.message);
+  }
+}
+async function loadPolicyMeta() {
+  try {
+    const pol = await jget("/api/sre/policy");
+    sreState.paused = !!pol.paused;
+    const meta = $("#sre-policy-meta");
+    meta.textContent = `mode ${pol.mode}${pol.paused ? " · PAUSED" : ""}`;
+    const btn = $("#sre-pause-btn");
+    btn.textContent = pol.paused ? "resume automation" : "pause automation";
+    btn.classList.toggle("danger", !pol.paused);
+  } catch (_) { /* leave meta blank on failure */ }
+}
+function renderProposals() {
+  const tbody = $("#sre-prop-tbody");
+  const rows = sreState._proposals || [];
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="7" class="dim" style="padding:14px">no proposals</td></tr>`; return; }
+  tbody.innerHTML = rows.map(p => {
+    const t = p.target || {};
+    const target = `${sreEsc(t.kind || "")}/${sreEsc(t.namespace || "")}/${sreEsc(t.name || "")}`;
+    let result = "—";
+    if (p.execution) {
+      const e = p.execution;
+      const verdict = e.success ? "ok" : "failed";
+      const dry = e.dryRun ? " (dry-run)" : "";
+      result = `<span class="sre-exec ${e.success ? "ok" : "bad"}">${verdict}${dry}</span>` +
+        (e.error ? `<div class="dim sre-exec-err">${sreEsc(e.error)}</div>` : "");
+    } else if (p.status === "blocked" && p.decision && p.decision.reasons) {
+      result = `<span class="dim">${sreEsc(p.decision.reasons.join("; "))}</span>`;
+    }
+    const actions = p.status === "proposed"
+      ? `<button class="btn primary sre-approve" data-id="${sreEsc(p.id)}">approve</button>
+         <button class="btn sre-reject" data-id="${sreEsc(p.id)}">reject</button>`
+      : "";
+    return `
+      <tr class="sre-row" data-id="${sreEsc(p.id)}">
+        <td>${statusBadge(p.status)}</td>
+        <td>${sreEsc(p.action)}</td>
+        <td>${target}</td>
+        <td>${sevBadge(p.riskClass)}</td>
+        <td class="sre-rationale">${sreEsc(p.rationale || "—")}</td>
+        <td>${result}</td>
+        <td class="act">${actions}</td>
+      </tr>`;
+  }).join("");
+  $$("#sre-prop-tbody .sre-row").forEach(tr => tr.addEventListener("click", e => {
+    if (e.target.closest("button")) return; // let action buttons handle their own click
+    const p = (sreState._proposals || []).find(x => x.id === tr.dataset.id);
+    if (p) openModal(`proposal · ${p.action}`, JSON.stringify(p, null, 2));
+  }));
+  $$("#sre-prop-tbody .sre-approve").forEach(b => b.addEventListener("click", () => decideProposal(b.dataset.id, "approve")));
+  $$("#sre-prop-tbody .sre-reject").forEach(b => b.addEventListener("click", () => decideProposal(b.dataset.id, "reject")));
+}
+async function decideProposal(id, action) {
+  const body = action === "reject" ? { reason: "rejected from dashboard" } : {};
+  try {
+    const r = await fetch(`/api/sre/proposals/${encodeURIComponent(id)}/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `${r.status}`);
+    setMsg(`proposal ${action}d`);
+    loadRemediation();
+  } catch (e) { setMsg(`could not ${action}: ${e.message}`); }
+}
+async function togglePause() {
+  const path = sreState.paused ? "/api/sre/policy/resume" : "/api/sre/policy/pause";
+  try {
+    const r = await fetch(path, { method: "POST" });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `${r.status}`);
+    setMsg(sreState.paused ? "automation resumed" : "automation paused");
+    loadRemediation();
+  } catch (e) { setMsg("could not change pause state: " + e.message); }
+}
+
+function wireSRE() {
+  if (sreWired) return;
+  sreWired = true;
+  $("#sre-inc-refresh").addEventListener("click", loadIncidents);
+  $("#sre-inc-status").addEventListener("change", loadIncidents);
+  $("#sre-inc-search").addEventListener("input", renderIncidents);
+  $("#sre-prop-refresh").addEventListener("click", loadRemediation);
+  $("#sre-prop-status").addEventListener("change", loadRemediation);
+  $("#sre-pause-btn").addEventListener("click", togglePause);
+}

@@ -39,6 +39,8 @@
     <a href="#" class="nav" data-view="finops">finops</a>
     <a href="#" class="nav" data-view="load">traffic</a>
     <a href="#" class="nav" data-view="gemini">AI</a>
+    <a href="#" class="nav" data-view="incidents">incidents</a>
+    <a href="#" class="nav" data-view="remediation">remediation</a>
 
     <div id="row-help" class="hint">
       <div class="hint-title">pod shortcuts</div>
@@ -333,6 +335,82 @@
         <button id="gemini-send" class="btn primary">send</button>
       </div>
       <div id="gemini-err" class="err"></div>
+    </section>
+
+    <!-- INCIDENTS VIEW (Autonomous SRE control plane) -->
+    <section id="view-incidents" class="view">
+      <div class="toolbar">
+        <span class="title">incidents</span>
+        <span class="sep"></span>
+        <span class="filter-label">status</span>
+        <select id="sre-inc-status" class="sel">
+          <option value="open">open</option>
+          <option value="resolved">resolved</option>
+          <option value="">all</option>
+        </select>
+        <span class="sep"></span>
+        <input id="sre-inc-search" class="input" placeholder="filter type / workload / namespace" />
+        <span class="grow"></span>
+        <span id="sre-inc-meta" class="dim"></span>
+        <button id="sre-inc-refresh" class="btn">refresh</button>
+      </div>
+      <div id="sre-inc-notice" class="panel hidden"></div>
+      <div class="table-wrap">
+        <table id="sre-inc-table">
+          <thead>
+            <tr>
+              <th class="sev">SEVERITY</th>
+              <th>TYPE</th>
+              <th>WORKLOAD</th>
+              <th class="c-ns">NAMESPACE</th>
+              <th class="num">COUNT</th>
+              <th>FIRST SEEN</th>
+              <th>LAST SEEN</th>
+              <th>STATUS</th>
+            </tr>
+          </thead>
+          <tbody id="sre-inc-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- REMEDIATION VIEW (approval queue + kill switch) -->
+    <section id="view-remediation" class="view">
+      <div class="toolbar">
+        <span class="title">remediation</span>
+        <span class="sep"></span>
+        <span class="filter-label">status</span>
+        <select id="sre-prop-status" class="sel">
+          <option value="">all</option>
+          <option value="proposed">proposed</option>
+          <option value="approved">approved</option>
+          <option value="executed">executed</option>
+          <option value="failed">failed</option>
+          <option value="blocked">blocked</option>
+          <option value="rejected">rejected</option>
+        </select>
+        <span class="grow"></span>
+        <span id="sre-policy-meta" class="dim"></span>
+        <button id="sre-pause-btn" class="btn danger" title="emergency stop: block all automated remediation for this tenant">pause automation</button>
+        <button id="sre-prop-refresh" class="btn">refresh</button>
+      </div>
+      <div id="sre-prop-notice" class="panel hidden"></div>
+      <div class="table-wrap">
+        <table id="sre-prop-table">
+          <thead>
+            <tr>
+              <th>STATUS</th>
+              <th>ACTION</th>
+              <th>TARGET</th>
+              <th class="sev">RISK</th>
+              <th>RATIONALE</th>
+              <th>RESULT</th>
+              <th class="act">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="sre-prop-tbody"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 </div>

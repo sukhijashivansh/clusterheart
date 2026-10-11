@@ -1544,3 +1544,32 @@ td.pct-cool { color: var(--green); }
 .hpa-pill-min { color: var(--green); border-color: var(--green); background: var(--green-soft); }
 .hpa-pill-mid { color: var(--accent-bright); border-color: var(--accent); background: var(--accent-soft); }
 .hpa-pill-metric { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.02em; }
+
+/* ---------- Autonomous SRE: incidents + remediation ---------- */
+#sre-inc-table th.sev, #sre-prop-table th.sev { width: 92px; }
+#sre-prop-table th.act, #sre-prop-table td.act { width: 150px; text-align: right; white-space: nowrap; }
+.sre-row { cursor: pointer; }
+.sre-rationale { color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sre-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--border-strong); font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+}
+/* severity + risk */
+.sre-badge.sev-critical, .sre-badge.sev-high { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+.sre-badge.sev-medium { color: var(--yellow); border-color: var(--yellow); background: var(--yellow-soft); }
+.sre-badge.sev-low, .sre-badge.sev-info { color: var(--green); border-color: var(--green); background: var(--green-soft); }
+/* lifecycle status */
+.sre-badge.st-open, .sre-badge.st-failed, .sre-badge.st-blocked { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+.sre-badge.st-proposed, .sre-badge.st-approved { color: var(--yellow); border-color: var(--yellow); background: var(--yellow-soft); }
+.sre-badge.st-executed, .sre-badge.st-resolved { color: var(--green); border-color: var(--green); background: var(--green-soft); }
+.sre-badge.st-rejected { color: var(--muted); }
+
+.sre-exec.ok  { color: var(--green); font-weight: 600; }
+.sre-exec.bad { color: var(--red);   font-weight: 600; }
+.sre-exec-err { margin-top: 2px; max-width: 280px; white-space: normal; }
+
+.sre-notice { margin: 10px 0; padding: 12px 14px; border-radius: 8px; line-height: 1.5; }
+.sre-notice.warn { color: var(--yellow); border: 1px solid var(--yellow); background: var(--yellow-soft); }
+.sre-notice.err  { color: var(--red);    border: 1px solid var(--red);    background: var(--red-soft); }
