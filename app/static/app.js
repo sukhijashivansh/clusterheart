@@ -2785,7 +2785,10 @@ function renderIncidents() {
       <td class="dim">${sreTime(i.firstSeen)}</td>
       <td class="dim">${sreTime(i.lastSeen)}</td>
       <td>${statusBadge(i.status)}</td>
-      <td class="act"><button class="btn sre-diagnose" data-id="${sreEsc(i.id)}">diagnose</button></td>
+      <td class="act">
+        <button class="btn sre-diagnose" data-id="${sreEsc(i.id)}">diagnose</button>
+        <button class="btn sre-propose" data-id="${sreEsc(i.id)}" title="turn the AI recommendation into a policy-checked proposal">propose fix</button>
+      </td>
     </tr>`).join("");
   $$("#sre-inc-tbody .sre-row").forEach(tr => tr.addEventListener("click", e => {
     if (e.target.closest("button")) return;
@@ -2793,6 +2796,25 @@ function renderIncidents() {
     if (inc) openModal(`incident · ${inc.type}`, JSON.stringify(inc, null, 2));
   }));
   $$("#sre-inc-tbody .sre-diagnose").forEach(b => b.addEventListener("click", () => diagnoseIncident(b.dataset.id, b)));
+  $$("#sre-inc-tbody .sre-propose").forEach(b => b.addEventListener("click", () => proposeFix(b.dataset.id, b)));
+}
+
+// proposeFix turns an incident's AI recommendation into a policy-checked
+// remediation proposal (server-side). On success it jumps to the remediation
+// approval queue; if nothing is auto-recommended it says so (never fabricates).
+async function proposeFix(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "proposing…"; }
+  try {
+    const r = await fetch(`/api/sre/incidents/${encodeURIComponent(id)}/propose`, { method: "POST" });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `${r.status}`);
+    setMsg(`proposal created (${data.status}) — see remediation`);
+    switchView("remediation");
+  } catch (e) {
+    setMsg("propose failed: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "propose fix"; }
+  }
 }
 
 // diagnoseIncident runs AI root-cause analysis for an incident and renders the

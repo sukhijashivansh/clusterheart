@@ -69,6 +69,8 @@ func (s *Server) Routes() http.Handler {
 	// AI root-cause analysis (deterministic by default; external AI opt-in).
 	mux.HandleFunc("POST /api/v1/incidents/{id}/diagnose", s.requireAdmin(s.handleDiagnose))
 	mux.HandleFunc("GET /api/v1/incidents/{id}/diagnosis", s.requireAdmin(s.handleGetDiagnosis))
+	// One-click: turn an actionable diagnosis into a policy-checked proposal.
+	mux.HandleFunc("POST /api/v1/incidents/{id}/propose", s.requireAdmin(s.handleProposeFromDiagnosis))
 	// Remediation (deterministic policy, approvals, dry-run execution, audit).
 	mux.HandleFunc("POST /api/v1/incidents/{id}/proposals", s.requireAdmin(s.handleCreateProposal))
 	mux.HandleFunc("GET /api/v1/proposals", s.requireAdmin(s.handleListProposals))
@@ -298,6 +300,43 @@ func (s *Server) handleGetDiagnosis(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, dg)
+}
+
+// handleProposeFromDiagnosis turns an incident's AI recommendation into a
+// remediation proposal — through the normal policy-checked CreateProposal path
+// (the diagnosis only pre-fills action+target; it never bypasses policy). If no
+// diagnosis exists yet, one is produced first.
+func (s *Server) handleProposeFromDiagnosis(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	id := r.PathValue("id")
+	dg, err := s.diagnosis.Get(r.Context(), tenantID, id)
+	if err == ErrNotFound {
+		dg, err = s.diagnosis.Diagnose(r.Context(), tenantID, id)
+	}
+	if err == ErrNotFound {
+		writeErr(w, http.StatusNotFound, "incident not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not diagnose incident")
+		return
+	}
+	if !dg.RecommendedActionable || dg.RecommendedTarget == nil {
+		writeErr(w, http.StatusUnprocessableEntity, "no automatic action recommended for this incident; investigate")
+		return
+	}
+	p, err := s.remediation.CreateProposal(r.Context(), tenantID, id,
+		ActionType(dg.RecommendedAction), *dg.RecommendedTarget, nil,
+		"from AI diagnosis: "+dg.Summary, "operator:dashboard")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, p)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {

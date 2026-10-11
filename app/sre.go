@@ -126,6 +126,8 @@ func (s *server) handleSREIncidentItem(w http.ResponseWriter, r *http.Request) {
 		s.sreForward(w, r, http.MethodPost, "/api/v1/incidents/"+url.PathEscape(id)+"/diagnose", nil, nil)
 	case sub == "diagnosis" && r.Method == http.MethodGet:
 		s.sreForward(w, r, http.MethodGet, "/api/v1/incidents/"+url.PathEscape(id)+"/diagnosis", nil, nil)
+	case sub == "propose" && r.Method == http.MethodPost:
+		s.sreForward(w, r, http.MethodPost, "/api/v1/incidents/"+url.PathEscape(id)+"/propose", nil, nil)
 	default:
 		writeErr(w, http.StatusNotFound, "not found")
 	}

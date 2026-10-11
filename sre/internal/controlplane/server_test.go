@@ -204,3 +204,63 @@ func TestTelemetryBatchTooLarge(t *testing.T) {
 		t.Fatalf("oversized batch: want 413, got %d", code)
 	}
 }
+
+func TestProposeFromDiagnosisHTTP(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "tenantP", "eks")
+
+	// Telemetry with one actionable (CrashLoopBackOff) and one non-actionable
+	// (ImagePullBackOff) fault → two incidents.
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{
+			{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "boom"},
+			{Namespace: "web", Pod: "img-1", Owner: "Deployment/img", Container: "img", Type: contract.ProblemImagePullBackOff, Message: "pull denied"},
+		},
+	}}}
+	if code, body := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry: want 202, got %d: %s", code, body)
+	}
+	// Allow the web namespace so the proposal isn't blocked.
+	pol := map[string]any{"mode": "approval-required", "allowedActions": []string{"RolloutRestart"},
+		"namespaceAllowlist": []string{"web"}, "protectedEnvironments": []string{"production"},
+		"maxConcurrent": 5, "perWorkloadCooldownSeconds": 0, "paused": false}
+	if code, body := do(t, http.MethodPut, ts.URL+"/api/v1/policy?tenantId=tenantP", adminTok, "", pol); code != http.StatusOK {
+		t.Fatalf("policy: want 200, got %d: %s", code, body)
+	}
+
+	_, body := do(t, http.MethodGet, ts.URL+"/api/v1/incidents?tenantId=tenantP&status=open", adminTok, "", nil)
+	var il struct {
+		Incidents []Incident `json:"incidents"`
+	}
+	_ = json.Unmarshal(body, &il)
+	var crashID, imgID string
+	for _, i := range il.Incidents {
+		switch i.Type {
+		case contract.ProblemCrashLoopBackOff:
+			crashID = i.ID
+		case contract.ProblemImagePullBackOff:
+			imgID = i.ID
+		}
+	}
+	if crashID == "" || imgID == "" {
+		t.Fatalf("expected both incidents, got %s", body)
+	}
+
+	// Actionable incident → 201 Created, a proposed RolloutRestart on its workload.
+	code, body := do(t, http.MethodPost, ts.URL+"/api/v1/incidents/"+crashID+"/propose?tenantId=tenantP", adminTok, "", nil)
+	if code != http.StatusCreated {
+		t.Fatalf("propose(crashloop): want 201, got %d: %s", code, body)
+	}
+	var p RemediationProposal
+	_ = json.Unmarshal(body, &p)
+	if p.Status != StatusProposed || p.Action != ActionRolloutRestart || p.Target.Name != "api" {
+		t.Fatalf("unexpected proposal: %+v", p)
+	}
+
+	// Non-actionable incident → 422, no proposal.
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/incidents/"+imgID+"/propose?tenantId=tenantP", adminTok, "", nil); code != http.StatusUnprocessableEntity {
+		t.Fatalf("propose(imagepull): want 422, got %d", code)
+	}
+}
