@@ -47,7 +47,9 @@ Slice B (the executor) — done & tested on this branch. Execution now reaches a
 - [x] Real `RolloutRestart` via client-go for Deployment/StatefulSet/DaemonSet; resourceVersion (optimistic concurrency) check immediately before apply; before-state capture; dry-run validated against the API server (no persisted change).
 - [x] Post-action health verification (rollout completion for Deployments); failure handling → `failed` status; cross-cluster/replay report rejection. Rollback availability recorded (restart is reversible); automatic rollback execution deferred to M4.
 - [x] Tested: apply + verify, dry-run (no verification), not-found, verification-failure → failed, unsupported kind/resource rejected, StatefulSet apply; control-plane side approval→pending→report (success + failure), replay/cross-cluster rejection, cooldown keyed on reported execution time.
-- [ ] Mongo persistence for proposals/policy/audit (currently in-memory — a control-plane restart loses in-flight proposals). Carried into M3 Slice C.
+Slice C (durable state) — done & tested on this branch:
+- [x] Mongo persistence for proposals/policy/audit (`remediation_mongo.go`); domain structs carry bson tags (no parallel doc type). Tenant-scoped reads; indexes for the policy engine's concurrency/cooldown queries. In-memory stores remain the local-dev/test default; the caller injects the implementation via `NewServer`.
+- [x] Integration-tested against a real MongoDB (gated on `MONGO_TEST_URI`, skipped in the hermetic suite): proposal round-trip + tenant scoping, `ActiveCount`, `LastExecutionForTarget` sort, `map[ActionType]bool` policy round-trip, audit scoping.
 
 ## Milestone 4 — Guarded Autonomy
 - [ ] Allowlisted automatic execution; circuit breakers, loop detection, cooldowns.

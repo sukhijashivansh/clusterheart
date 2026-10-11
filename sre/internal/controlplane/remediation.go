@@ -54,10 +54,12 @@ const (
 )
 
 // TargetRef identifies the object an action targets.
+// bson tags let the Mongo remediation store persist proposals (and the nested
+// decision/execution) directly, without a parallel doc struct.
 type TargetRef struct {
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
+	Kind      string `json:"kind" bson:"kind"`
+	Namespace string `json:"namespace" bson:"namespace"`
+	Name      string `json:"name" bson:"name"`
 }
 
 func (t TargetRef) String() string { return t.Kind + "/" + t.Namespace + "/" + t.Name }
@@ -65,48 +67,48 @@ func (t TargetRef) String() string { return t.Kind + "/" + t.Namespace + "/" + t
 // PolicyDecision is the deterministic verdict for a proposal. It is produced
 // without any AI involvement.
 type PolicyDecision struct {
-	Allowed     bool      `json:"allowed"`
-	Reasons     []string  `json:"reasons"`
-	Mode        Mode      `json:"mode"`
-	EvaluatedAt time.Time `json:"evaluatedAt"`
+	Allowed     bool      `json:"allowed" bson:"allowed"`
+	Reasons     []string  `json:"reasons" bson:"reasons"`
+	Mode        Mode      `json:"mode" bson:"mode"`
+	EvaluatedAt time.Time `json:"evaluatedAt" bson:"evaluatedAt"`
 }
 
 // ActionExecution records what happened when an approved action ran. In slice A
 // every execution is a DRY RUN (no cluster contact); slice B adds the real
 // in-cluster executor and fills BeforeState from the live object.
 type ActionExecution struct {
-	StartedAt          time.Time `json:"startedAt"`
-	FinishedAt         time.Time `json:"finishedAt"`
-	DryRun             bool      `json:"dryRun"`
-	Success            bool      `json:"success"`
-	PlannedChange      string    `json:"plannedChange"`
-	BeforeState        string    `json:"beforeState"`
-	Result             string    `json:"result"`
-	RollbackAvailable  bool      `json:"rollbackAvailable"`
-	VerificationPassed *bool     `json:"verificationPassed,omitempty"`
-	Error              string    `json:"error,omitempty"`
+	StartedAt          time.Time `json:"startedAt" bson:"startedAt"`
+	FinishedAt         time.Time `json:"finishedAt" bson:"finishedAt"`
+	DryRun             bool      `json:"dryRun" bson:"dryRun"`
+	Success            bool      `json:"success" bson:"success"`
+	PlannedChange      string    `json:"plannedChange" bson:"plannedChange"`
+	BeforeState        string    `json:"beforeState" bson:"beforeState"`
+	Result             string    `json:"result" bson:"result"`
+	RollbackAvailable  bool      `json:"rollbackAvailable" bson:"rollbackAvailable"`
+	VerificationPassed *bool     `json:"verificationPassed,omitempty" bson:"verificationPassed,omitempty"`
+	Error              string    `json:"error,omitempty" bson:"error,omitempty"`
 }
 
 // RemediationProposal is the full action contract (spec §7). Every field that
 // matters for safety and audit is captured.
 type RemediationProposal struct {
-	ID         string            `json:"id"`
-	IncidentID string            `json:"incidentId"`
-	TenantID   string            `json:"tenantId"`
-	ClusterID  string            `json:"clusterId"`
-	Action     ActionType        `json:"action"`
-	Target     TargetRef         `json:"target"`
-	Params     map[string]string `json:"params,omitempty"`
-	Rationale  string            `json:"rationale"` // evidence-linked "why"
-	RiskClass  RiskClass         `json:"riskClass"`
-	Reversible bool              `json:"reversible"`
-	Status     ProposalStatus    `json:"status"`
-	Decision   *PolicyDecision   `json:"decision,omitempty"`
-	CreatedAt  time.Time         `json:"createdAt"`
-	CreatedBy  string            `json:"createdBy"` // "operator:<id>" or "system:<rule>" — never executes AI
-	DecidedBy  string            `json:"decidedBy,omitempty"`
-	DecidedAt  *time.Time        `json:"decidedAt,omitempty"`
-	Execution  *ActionExecution  `json:"execution,omitempty"`
+	ID         string            `json:"id" bson:"_id"`
+	IncidentID string            `json:"incidentId" bson:"incidentId"`
+	TenantID   string            `json:"tenantId" bson:"tenantId"`
+	ClusterID  string            `json:"clusterId" bson:"clusterId"`
+	Action     ActionType        `json:"action" bson:"action"`
+	Target     TargetRef         `json:"target" bson:"target"`
+	Params     map[string]string `json:"params,omitempty" bson:"params,omitempty"`
+	Rationale  string            `json:"rationale" bson:"rationale"` // evidence-linked "why"
+	RiskClass  RiskClass         `json:"riskClass" bson:"riskClass"`
+	Reversible bool              `json:"reversible" bson:"reversible"`
+	Status     ProposalStatus    `json:"status" bson:"status"`
+	Decision   *PolicyDecision   `json:"decision,omitempty" bson:"decision,omitempty"`
+	CreatedAt  time.Time         `json:"createdAt" bson:"createdAt"`
+	CreatedBy  string            `json:"createdBy" bson:"createdBy"` // "operator:<id>" or "system:<rule>" — never executes AI
+	DecidedBy  string            `json:"decidedBy,omitempty" bson:"decidedBy,omitempty"`
+	DecidedAt  *time.Time        `json:"decidedAt,omitempty" bson:"decidedAt,omitempty"`
+	Execution  *ActionExecution  `json:"execution,omitempty" bson:"execution,omitempty"`
 }
 
 // --- typed action registry ----------------------------------------------

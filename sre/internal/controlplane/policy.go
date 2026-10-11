@@ -10,14 +10,14 @@ import (
 // approval-required, no namespaces actionable until explicitly allowlisted, and
 // production treated as protected. This realises "read-only by default".
 type Policy struct {
-	TenantID              string              `json:"tenantId"`
-	Mode                  Mode                `json:"mode"`
-	AllowedActions        map[ActionType]bool `json:"allowedActions"`
-	NamespaceAllowlist    []string            `json:"namespaceAllowlist"` // empty => nothing actionable; "*" => all
-	ProtectedEnvironments []string            `json:"protectedEnvironments"`
-	MaxConcurrent         int                 `json:"maxConcurrent"`
-	PerWorkloadCooldown   time.Duration       `json:"perWorkloadCooldown"`
-	Paused                bool                `json:"paused"` // emergency kill switch
+	TenantID              string              `json:"tenantId" bson:"_id"`
+	Mode                  Mode                `json:"mode" bson:"mode"`
+	AllowedActions        map[ActionType]bool `json:"allowedActions" bson:"allowedActions"`
+	NamespaceAllowlist    []string            `json:"namespaceAllowlist" bson:"namespaceAllowlist"` // empty => nothing actionable; "*" => all
+	ProtectedEnvironments []string            `json:"protectedEnvironments" bson:"protectedEnvironments"`
+	MaxConcurrent         int                 `json:"maxConcurrent" bson:"maxConcurrent"`
+	PerWorkloadCooldown   time.Duration       `json:"perWorkloadCooldown" bson:"perWorkloadCooldown"`
+	Paused                bool                `json:"paused" bson:"paused"` // emergency kill switch
 }
 
 // DefaultPolicy returns the safe default for a new tenant.

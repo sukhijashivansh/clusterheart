@@ -10,14 +10,14 @@ import (
 // AuditEvent is an append-only record of a decision or mutation (spec §8: full
 // audit trail). Every proposal/approval/execution writes one.
 type AuditEvent struct {
-	ID         string    `json:"id"`
-	TenantID   string    `json:"tenantId"`
-	At         time.Time `json:"at"`
-	Actor      string    `json:"actor"` // who/what triggered it
-	Event      string    `json:"event"` // e.g. proposal.created, proposal.approved, remediation.executed
-	ProposalID string    `json:"proposalId,omitempty"`
-	IncidentID string    `json:"incidentId,omitempty"`
-	Details    string    `json:"details,omitempty"`
+	ID         string    `json:"id" bson:"_id"`
+	TenantID   string    `json:"tenantId" bson:"tenantId"`
+	At         time.Time `json:"at" bson:"at"`
+	Actor      string    `json:"actor" bson:"actor"` // who/what triggered it
+	Event      string    `json:"event" bson:"event"` // e.g. proposal.created, proposal.approved, remediation.executed
+	ProposalID string    `json:"proposalId,omitempty" bson:"proposalId,omitempty"`
+	IncidentID string    `json:"incidentId,omitempty" bson:"incidentId,omitempty"`
+	Details    string    `json:"details,omitempty" bson:"details,omitempty"`
 }
 
 // AuditStore is an append-only audit log, tenant-scoped on read.

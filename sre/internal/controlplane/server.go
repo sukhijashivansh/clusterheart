@@ -34,22 +34,19 @@ type Server struct {
 }
 
 // NewServer constructs a control-plane server. adminToken guards operator
-// endpoints; it must be non-empty in production (enforced by the caller).
-func NewServer(store Store, incidents IncidentStore, adminToken string, log *slog.Logger) *Server {
+// endpoints; it must be non-empty in production (enforced by the caller). The
+// remediation stores (proposals/policy/audit) are injected so the caller can
+// choose Mongo (durable) or in-memory (local dev / tests).
+func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol PolicyStore, audit AuditStore, adminToken string, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	// Remediation stores are in-memory in slice A (dry-run only, read-only by
-	// default). Mongo persistence + the in-cluster executor arrive in slice B.
-	rem := newRemediationService(
-		NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(),
-		incidents, store, log,
-	)
+	remSvc := newRemediationService(rem, pol, audit, incidents, store, log)
 	return &Server{
 		store:       store,
 		incidents:   incidents,
 		engine:      newEngine(incidents, log),
-		remediation: rem,
+		remediation: remSvc,
 		adminToken:  adminToken,
 		log:         log,
 		now:         time.Now,

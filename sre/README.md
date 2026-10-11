@@ -127,5 +127,8 @@ go test ./...
 - **Not yet tested against a live cluster:** `agent.Collector.Snapshot` and
   `remediation.Executor` (both need a real kube API). Verify on a disposable
   kind/minikube cluster before relying on them.
-- **In-memory only:** remediation proposals/policy/audit — a control-plane
-  restart loses in-flight proposals. Mongo persistence is the next slice.
+- **Durable when `MONGO_URI` is set:** clusters/telemetry, incidents, and
+  remediation proposals/policy/audit all persist to MongoDB; without it the
+  control plane falls back to in-memory stores (local dev only). The Mongo
+  remediation stores are integration-tested against a real MongoDB
+  (`MONGO_TEST_URI=... go test ./internal/controlplane -run Mongo`).
