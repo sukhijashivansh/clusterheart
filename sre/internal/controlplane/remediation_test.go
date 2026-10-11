@@ -161,6 +161,48 @@ func TestCircuitBreakerOpensAfterRepeatedFailures(t *testing.T) {
 	}
 }
 
+func TestScopedKillSwitches(t *testing.T) {
+	svc, inc := setupRemediation(t, "staging") // cluster cluA, target Deployment/web/api
+	allowNamespace(t, svc, ModeApprovalRequired)
+	ctx := context.Background()
+	propose := func() ProposalStatus {
+		p, err := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "op")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p.Status
+	}
+	// Baseline: allowed (proposed).
+	if propose() != StatusProposed {
+		t.Fatal("baseline should be proposed")
+	}
+	// Workload pause blocks just this workload.
+	if _, err := svc.SetPauseScope(ctx, "t1", "workload", deploymentTarget.String(), true, "op"); err != nil {
+		t.Fatal(err)
+	}
+	if propose() != StatusBlocked {
+		t.Fatal("workload pause should block its workload")
+	}
+	// A different workload is unaffected.
+	other := TargetRef{Kind: "Deployment", Namespace: "web", Name: "other"}
+	if p, _ := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, other, nil, "", "op"); p.Status != StatusProposed {
+		t.Fatalf("other workload should not be blocked, got %s %v", p.Status, p.Decision.Reasons)
+	}
+	// Resume the workload, then pause the whole cluster → blocks everything on it.
+	if _, err := svc.SetPauseScope(ctx, "t1", "workload", deploymentTarget.String(), false, "op"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPauseScope(ctx, "t1", "cluster", "cluA", true, "op"); err != nil {
+		t.Fatal(err)
+	}
+	if propose() != StatusBlocked {
+		t.Fatal("cluster pause should block targets on that cluster")
+	}
+	if p, _ := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, other, nil, "", "op"); p.Status != StatusBlocked {
+		t.Fatal("cluster pause should block all workloads on the cluster")
+	}
+}
+
 func TestScaleBoundedByPolicyMaxReplicas(t *testing.T) {
 	svc, inc := setupRemediation(t, "staging")
 	ctx := context.Background()

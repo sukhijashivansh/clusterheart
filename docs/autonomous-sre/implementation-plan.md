@@ -75,9 +75,9 @@ Slice A (guardrails) — done & tested on this branch:
 - [x] **Circuit breaker / loop detection**: once a target accumulates N failed remediations within a window (default 3 / 30m, policy-configurable), further proposals for that target are denied — a recurring incident can no longer drive an endless restart loop. Store-backed failure count (mem + Mongo), evaluated in the deterministic engine; unit-tested (breaker opens, other targets unaffected) + Mongo-integration-tested.
 - [x] Emergency pause / kill switch at the **tenant** level + global per-tenant automation pause (M3 slice A).
 
-Slice B (remaining) — not started:
-- [ ] Cluster- and workload-scoped kill switches (currently tenant-scoped only).
-- [ ] Failure-injection test matrix across the catalog (spec §19 scenarios) as the action set grows beyond RolloutRestart.
+Slice B — partly done on this branch:
+- [x] **Cluster- and workload-scoped kill switches** (spec §8): `POST /policy/pause|resume` with optional `?clusterId=` or `?workload=Kind/Namespace/Name` scopes the emergency stop; the deterministic engine denies proposals whose cluster or workload is paused (tenant pause still overrides all). Persisted in policy (mem + Mongo); audited with scope. Unit-tested (workload pause isolates one workload; cluster pause blocks all its workloads).
+- [ ] Failure-injection test matrix across the catalog (spec §19 scenarios).
 
 ## Milestone 5 — Advanced
 Slice A (notifications) — done & tested on this branch:

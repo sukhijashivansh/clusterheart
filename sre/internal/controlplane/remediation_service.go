@@ -66,8 +66,8 @@ func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID s
 	}
 	replicas, hasReplicas := parseReplicas(params)
 	return s.engine.Evaluate(pol, action, target, policyInput{
-		environment: env, activeCount: active, lastForTarget: last, recentFailures: failures,
-		requestedReplicas: replicas, hasReplicas: hasReplicas,
+		environment: env, clusterID: clusterID, activeCount: active, lastForTarget: last,
+		recentFailures: failures, requestedReplicas: replicas, hasReplicas: hasReplicas,
 	}, now)
 }
 
@@ -253,13 +253,34 @@ func (s *remediationService) PutPolicy(ctx context.Context, p Policy, actor stri
 	return nil
 }
 
-// SetPaused flips the emergency kill switch for a tenant (spec §8, §20).
+// SetPaused flips the tenant-wide emergency kill switch (spec §8, §20).
 func (s *remediationService) SetPaused(ctx context.Context, tenantID string, paused bool, actor string) (Policy, error) {
+	return s.SetPauseScope(ctx, tenantID, "tenant", "", paused, actor)
+}
+
+// SetPauseScope flips an emergency kill switch at tenant / cluster / workload
+// scope. scope="cluster" uses a clusterId as id; scope="workload" uses a
+// TargetRef string ("Kind/Namespace/Name"); anything else is tenant-wide.
+func (s *remediationService) SetPauseScope(ctx context.Context, tenantID, scope, id string, paused bool, actor string) (Policy, error) {
 	p, err := s.pol.Get(ctx, tenantID)
 	if err != nil {
 		return Policy{}, err
 	}
-	p.Paused = paused
+	switch scope {
+	case "cluster":
+		if id == "" {
+			return Policy{}, fmt.Errorf("cluster pause requires a cluster id")
+		}
+		p.PausedClusters = toggleMember(p.PausedClusters, id, paused)
+	case "workload":
+		if id == "" {
+			return Policy{}, fmt.Errorf("workload pause requires a workload id")
+		}
+		p.PausedWorkloads = toggleMember(p.PausedWorkloads, id, paused)
+	default:
+		scope, id = "tenant", ""
+		p.Paused = paused
+	}
 	if err := s.pol.Put(ctx, p); err != nil {
 		return Policy{}, err
 	}
@@ -267,6 +288,24 @@ func (s *remediationService) SetPaused(ctx context.Context, tenantID string, pau
 	if paused {
 		ev = "policy.paused"
 	}
-	s.appendAudit(ctx, tenantID, actor, ev, "", "", "")
+	detail := scope
+	if id != "" {
+		detail = scope + ":" + id
+	}
+	s.appendAudit(ctx, tenantID, actor, ev, "", "", detail)
 	return p, nil
+}
+
+// toggleMember adds id to the set when present=true, removes it when false.
+func toggleMember(set []string, id string, present bool) []string {
+	out := set[:0:0]
+	for _, x := range set {
+		if x != id {
+			out = append(out, x)
+		}
+	}
+	if present {
+		out = append(out, id)
+	}
+	return out
 }

@@ -210,9 +210,17 @@ func (s *Server) setPause(w http.ResponseWriter, r *http.Request, paused bool) {
 		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
 		return
 	}
-	pol, err := s.remediation.SetPaused(r.Context(), tenantID, paused, "operator:api")
+	// Optional scope: ?clusterId=... (cluster) or ?workload=Kind/Namespace/Name
+	// (workload). With neither, the switch is tenant-wide.
+	scope, id := "tenant", ""
+	if c := strings.TrimSpace(r.URL.Query().Get("clusterId")); c != "" {
+		scope, id = "cluster", c
+	} else if wl := strings.TrimSpace(r.URL.Query().Get("workload")); wl != "" {
+		scope, id = "workload", wl
+	}
+	pol, err := s.remediation.SetPauseScope(r.Context(), tenantID, scope, id, paused, "operator:api")
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "could not update policy")
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, pol)

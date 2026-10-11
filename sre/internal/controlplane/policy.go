@@ -18,7 +18,12 @@ type Policy struct {
 	ProtectedEnvironments []string            `json:"protectedEnvironments" bson:"protectedEnvironments"`
 	MaxConcurrent         int                 `json:"maxConcurrent" bson:"maxConcurrent"`
 	PerWorkloadCooldown   time.Duration       `json:"perWorkloadCooldown" bson:"perWorkloadCooldown"`
-	Paused                bool                `json:"paused" bson:"paused"` // emergency kill switch
+	Paused                bool                `json:"paused" bson:"paused"` // tenant-wide emergency kill switch
+	// Scoped kill switches (spec §8): pause automation for specific clusters or
+	// workloads without pausing the whole tenant. Workloads are keyed by
+	// TargetRef.String() ("Kind/Namespace/Name").
+	PausedClusters  []string `json:"pausedClusters,omitempty" bson:"pausedClusters,omitempty"`
+	PausedWorkloads []string `json:"pausedWorkloads,omitempty" bson:"pausedWorkloads,omitempty"`
 	// Circuit breaker / loop detection (spec §8): once a target has accumulated
 	// CircuitBreakerFailures failed remediations within CircuitBreakerWindow, new
 	// proposals for that target are denied until the window passes — so a
@@ -56,6 +61,15 @@ func (p Policy) nsAllowed(ns string) bool {
 	return false
 }
 
+func strSliceContains(xs []string, v string) bool {
+	for _, x := range xs {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
 func (p Policy) isProtected(env string) bool {
 	for _, e := range p.ProtectedEnvironments {
 		if e == env {
@@ -69,6 +83,7 @@ func (p Policy) isProtected(env string) bool {
 // cooldown checks (supplied by the service from the store).
 type policyInput struct {
 	environment       string
+	clusterID         string
 	activeCount       int
 	lastForTarget     *time.Time
 	recentFailures    int  // failed remediations for this target within the breaker window
@@ -87,6 +102,12 @@ func (policyEngine) Evaluate(pol Policy, action ActionType, target TargetRef, in
 
 	if pol.Paused {
 		deny("emergency pause is active for this tenant")
+	}
+	if in.clusterID != "" && strSliceContains(pol.PausedClusters, in.clusterID) {
+		deny("emergency pause is active for this cluster")
+	}
+	if strSliceContains(pol.PausedWorkloads, target.String()) {
+		deny("emergency pause is active for this workload")
 	}
 	if _, err := lookupAction(action); err != nil {
 		deny(err.Error())
