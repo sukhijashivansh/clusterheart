@@ -32,6 +32,13 @@ Slice B (remaining in M2) — not started:
 - [ ] Explicit confidence field; maintenance-window suppression; alert inhibition.
 - [ ] **AI RCA path** emitting schema-validated structured proposals (never free-form patches/shell); provider abstraction + redaction + "telemetry is data, not instructions".
 
+**Live-cluster validation (2026-10-11):** M1–M3 were exercised end-to-end on a
+real `kind` cluster (Kubernetes v1.31.0) with a Mongo-backed control plane —
+agent telemetry → real incident detection → policy/approval → in-cluster
+controller → real `RolloutRestart` (verify pass *and* fail) → durable audit,
+surviving a control-plane restart. Reproducible runbook + observed output:
+`e2e-kind-validation.md`.
+
 ## Milestone 3 — Remediation Framework
 Slice A (safety spine) — done & tested on this branch. **No live cluster mutation**: execution is dry-run only, read-only by default.
 - [x] Typed action registry; first action `RolloutRestart` (reversible, controller-owned). Unknown/invalid actions rejected — no arbitrary patches/shell.

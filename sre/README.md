@@ -124,9 +124,12 @@ go test ./...
   downgrade, kill-switch) + approval→pending→report flow. The **executor** against
   a `fake.Clientset`: RolloutRestart apply + verify, dry-run, not-found,
   verification-failure, unsupported kind, StatefulSet.
-- **Not yet tested against a live cluster:** `agent.Collector.Snapshot` and
-  `remediation.Executor` (both need a real kube API). Verify on a disposable
-  kind/minikube cluster before relying on them.
+- **Validated on a live `kind` cluster (Kubernetes v1.31.0):** the full loop —
+  agent collector → deterministic detection (CrashLoopBackOff/RolloutStuck) →
+  policy → approval → controller → real `RolloutRestart` → verification (pass
+  *and* fail paths) → durable audit, through a Mongo-backed control plane,
+  surviving a control-plane restart. Reproducible runbook + observed output:
+  `../docs/autonomous-sre/e2e-kind-validation.md`.
 - **Durable when `MONGO_URI` is set:** clusters/telemetry, incidents, and
   remediation proposals/policy/audit all persist to MongoDB; without it the
   control plane falls back to in-memory stores (local dev only). The Mongo
