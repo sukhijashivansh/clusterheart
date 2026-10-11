@@ -64,6 +64,11 @@ Slice C (durable state) — done & tested on this branch:
 - [x] Mongo persistence for proposals/policy/audit (`remediation_mongo.go`); domain structs carry bson tags (no parallel doc type). Tenant-scoped reads; indexes for the policy engine's concurrency/cooldown queries. In-memory stores remain the local-dev/test default; the caller injects the implementation via `NewServer`.
 - [x] Integration-tested against a real MongoDB (gated on `MONGO_TEST_URI`, skipped in the hermetic suite): proposal round-trip + tenant scoping, `ActiveCount`, `LastExecutionForTarget` sort, `map[ActionType]bool` policy round-trip, audit scoping.
 
+### Remediation catalog (spec §7) — growing
+- [x] `RolloutRestart` (Deployment/StatefulSet/DaemonSet) — M3.
+- [x] `Scale` (Deployment/StatefulSet replica count), **bounded** by policy `MaxReplicas` (default 10) + a structural hard ceiling; before-count captured (reversible); dry-run + post-scale verification; executor tested against a fake clientset incl. a status reactor. Uses the existing remediate RBAC (`get,update`) — no new permissions.
+- [ ] Resource rightsizing (requests/limits), scheduling/config fixes — future.
+
 ## Milestone 4 — Guarded Autonomy
 Slice A (guardrails) — done & tested on this branch:
 - [x] Allowlisted automatic execution (mode=auto → proposal created pre-approved → the in-cluster controller applies it; established in M3 slice B). Per-workload cooldown (M3 slice A) and max-concurrent caps already enforced deterministically.

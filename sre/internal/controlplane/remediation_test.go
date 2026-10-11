@@ -161,6 +161,43 @@ func TestCircuitBreakerOpensAfterRepeatedFailures(t *testing.T) {
 	}
 }
 
+func TestScaleBoundedByPolicyMaxReplicas(t *testing.T) {
+	svc, inc := setupRemediation(t, "staging")
+	ctx := context.Background()
+	pol := DefaultPolicy("t1")
+	pol.NamespaceAllowlist = []string{"web"}
+	pol.AllowedActions[ActionScale] = true
+	pol.MaxReplicas = 5
+	if err := svc.PutPolicy(ctx, pol, "test"); err != nil {
+		t.Fatal(err)
+	}
+	// Within the bound → proposed.
+	ok, err := svc.CreateProposal(ctx, "t1", inc, ActionScale, deploymentTarget, map[string]string{"replicas": "3"}, "scale up", "op")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok.Status != StatusProposed {
+		t.Fatalf("replicas within bound should be proposed, got %s %v", ok.Status, ok.Decision.Reasons)
+	}
+	// Over the bound → blocked with an explanatory reason.
+	over, err := svc.CreateProposal(ctx, "t1", inc, ActionScale, deploymentTarget, map[string]string{"replicas": "50"}, "scale up", "op")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if over.Status != StatusBlocked || !containsSubstr(over.Decision.Reasons, "exceeds policy maximum") {
+		t.Fatalf("over-bound scale should be blocked, got %s %v", over.Status, over.Decision.Reasons)
+	}
+}
+
+func TestScaleRequiresReplicasParam(t *testing.T) {
+	svc, inc := setupRemediation(t, "staging")
+	allowNamespace(t, svc, ModeApprovalRequired)
+	// Missing replicas param is a structural validation error.
+	if _, err := svc.CreateProposal(context.Background(), "t1", inc, ActionScale, deploymentTarget, nil, "", "op"); err == nil {
+		t.Fatal("Scale without a replicas param must be rejected")
+	}
+}
+
 func TestControllerFailureReportMarksFailed(t *testing.T) {
 	svc, inc := setupRemediation(t, "staging")
 	allowNamespace(t, svc, ModeApprovalRequired)

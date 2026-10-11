@@ -146,7 +146,7 @@ func TestMongoDiagnosisUpsertAndScope(t *testing.T) {
 	}
 	d := Diagnosis{
 		ID: "dg_1", IncidentID: "inc_1", TenantID: "t1", Summary: "crash loop",
-		Hypotheses: []Hypothesis{{Cause: "bad config", Confidence: ConfidenceHigh, Supporting: []string{"backoff"}}},
+		Hypotheses:        []Hypothesis{{Cause: "bad config", Confidence: ConfidenceHigh, Supporting: []string{"backoff"}}},
 		RecommendedAction: "RolloutRestart", RecommendedActionable: true,
 		RecommendedTarget: &TargetRef{Kind: "Deployment", Namespace: "web", Name: "api"},
 		Source:            "deterministic", CreatedAt: time.Now(),

@@ -35,6 +35,7 @@ type policyRequest struct {
 	Paused                      bool         `json:"paused"`
 	CircuitBreakerFailures      int          `json:"circuitBreakerFailures"`
 	CircuitBreakerWindowSeconds int          `json:"circuitBreakerWindowSeconds"`
+	MaxReplicas                 int          `json:"maxReplicas"`
 }
 
 // --- handlers ------------------------------------------------------------
@@ -191,6 +192,7 @@ func (s *Server) handlePutPolicy(w http.ResponseWriter, r *http.Request) {
 		Paused:                 req.Paused,
 		CircuitBreakerFailures: req.CircuitBreakerFailures,
 		CircuitBreakerWindow:   time.Duration(req.CircuitBreakerWindowSeconds) * time.Second,
+		MaxReplicas:            req.MaxReplicas,
 	}
 	if err := s.remediation.PutPolicy(r.Context(), pol, "operator:api"); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not save policy")

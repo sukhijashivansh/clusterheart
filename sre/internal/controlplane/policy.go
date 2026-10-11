@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -24,6 +25,9 @@ type Policy struct {
 	// recurring incident cannot drive an endless restart loop. Zero disables it.
 	CircuitBreakerFailures int           `json:"circuitBreakerFailures" bson:"circuitBreakerFailures"`
 	CircuitBreakerWindow   time.Duration `json:"circuitBreakerWindow" bson:"circuitBreakerWindow"`
+	// MaxReplicas bounds the Scale action (spec §8: bounded replica adjustments).
+	// Zero disables the bound (structural hardMaxReplicas still applies).
+	MaxReplicas int `json:"maxReplicas" bson:"maxReplicas"`
 }
 
 // DefaultPolicy returns the safe default for a new tenant.
@@ -39,6 +43,7 @@ func DefaultPolicy(tenantID string) Policy {
 		Paused:                 false,
 		CircuitBreakerFailures: 3,
 		CircuitBreakerWindow:   30 * time.Minute,
+		MaxReplicas:            10,
 	}
 }
 
@@ -63,10 +68,12 @@ func (p Policy) isProtected(env string) bool {
 // policyInput carries the live state the engine needs for rate/concurrency/
 // cooldown checks (supplied by the service from the store).
 type policyInput struct {
-	environment    string
-	activeCount    int
-	lastForTarget  *time.Time
-	recentFailures int // failed remediations for this target within the breaker window
+	environment       string
+	activeCount       int
+	lastForTarget     *time.Time
+	recentFailures    int  // failed remediations for this target within the breaker window
+	requestedReplicas int  // for Scale: the desired replica count
+	hasReplicas       bool // whether requestedReplicas is meaningful
 }
 
 // policyEngine evaluates proposals deterministically. It never calls an LLM.
@@ -98,6 +105,9 @@ func (policyEngine) Evaluate(pol Policy, action ActionType, target TargetRef, in
 	}
 	if pol.CircuitBreakerFailures > 0 && in.recentFailures >= pol.CircuitBreakerFailures {
 		deny("circuit breaker is open: too many recent failed remediations for this target")
+	}
+	if action == ActionScale && in.hasReplicas && pol.MaxReplicas > 0 && in.requestedReplicas > pol.MaxReplicas {
+		deny(fmt.Sprintf("requested replicas %d exceeds policy maximum %d", in.requestedReplicas, pol.MaxReplicas))
 	}
 
 	mode := pol.Mode

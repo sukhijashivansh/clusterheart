@@ -51,7 +51,7 @@ func (s *remediationService) appendAudit(ctx context.Context, tenantID, actor, e
 }
 
 // evaluate gathers live state and runs the deterministic policy engine.
-func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID string, action ActionType, target TargetRef) PolicyDecision {
+func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID string, action ActionType, target TargetRef, params map[string]string) PolicyDecision {
 	pol, _ := s.pol.Get(ctx, tenantID)
 	env := ""
 	if c, err := s.clusters.GetCluster(ctx, clusterID); err == nil {
@@ -64,8 +64,11 @@ func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID s
 	if pol.CircuitBreakerFailures > 0 && pol.CircuitBreakerWindow > 0 {
 		failures, _ = s.rem.RecentFailuresForTarget(ctx, clusterID, target, now.Add(-pol.CircuitBreakerWindow))
 	}
-	return s.engine.Evaluate(pol, action, target,
-		policyInput{environment: env, activeCount: active, lastForTarget: last, recentFailures: failures}, now)
+	replicas, hasReplicas := parseReplicas(params)
+	return s.engine.Evaluate(pol, action, target, policyInput{
+		environment: env, activeCount: active, lastForTarget: last, recentFailures: failures,
+		requestedReplicas: replicas, hasReplicas: hasReplicas,
+	}, now)
 }
 
 // CreateProposal validates and records a proposal, evaluates policy, and either
@@ -84,7 +87,7 @@ func (s *remediationService) CreateProposal(ctx context.Context, tenantID, incid
 		return nil, fmt.Errorf("incident: %w", err)
 	}
 
-	dec := s.evaluate(ctx, tenantID, inc.ClusterID, action, target)
+	dec := s.evaluate(ctx, tenantID, inc.ClusterID, action, target, params)
 	p := &RemediationProposal{
 		ID: newID("rem"), IncidentID: incidentID, TenantID: tenantID, ClusterID: inc.ClusterID,
 		Action: action, Target: target, Params: params, Rationale: rationale,
@@ -123,7 +126,7 @@ func (s *remediationService) Approve(ctx context.Context, tenantID, id, approver
 	}
 	// Preconditions can change between proposal and approval (pause, cooldown,
 	// concurrency) — re-evaluate deterministically.
-	dec := s.evaluate(ctx, tenantID, p.ClusterID, p.Action, p.Target)
+	dec := s.evaluate(ctx, tenantID, p.ClusterID, p.Action, p.Target, p.Params)
 	now := s.now()
 	p.DecidedBy = approver
 	p.DecidedAt = &now
@@ -194,7 +197,7 @@ func (s *remediationService) ReportResult(ctx context.Context, cluster Cluster, 
 	}
 	s.appendAudit(ctx, cluster.TenantID, "controller:"+cluster.ID, ev, p.ID, p.IncidentID, detail)
 	s.notifier.Notify(Notification{
-		Kind: "remediation." + map[bool]string{true: "executed", false: "failed"}[res.Success],
+		Kind:  "remediation." + map[bool]string{true: "executed", false: "failed"}[res.Success],
 		Title: fmt.Sprintf("%s on %s", p.Action, p.Target), Detail: detailLine(res),
 		TenantID: cluster.TenantID, ClusterID: cluster.ID,
 	})

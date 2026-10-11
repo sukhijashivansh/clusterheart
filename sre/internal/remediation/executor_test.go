@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,7 +11,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	ktesting "k8s.io/client-go/testing"
 )
 
 func newDeployment(ns, name string, replicas int32, healthy bool) *appsv1.Deployment {
@@ -96,6 +99,61 @@ func TestUnsupportedKindRejected(t *testing.T) {
 	})
 	if res.Success {
 		t.Fatal("RolloutRestart on a Pod must fail")
+	}
+}
+
+func TestScaleDeploymentApplies(t *testing.T) {
+	cs := fake.NewSimpleClientset(newDeployment("web", "api", 2, true))
+	// The fake runs no controllers, so make the reported status follow the
+	// updated spec.replicas (as a real Deployment controller eventually would),
+	// so post-scale verification has something to converge on.
+	cs.PrependReactor("update", "deployments", func(a ktesting.Action) (bool, runtime.Object, error) {
+		d := a.(ktesting.UpdateAction).GetObject().(*appsv1.Deployment)
+		r := deref(d.Spec.Replicas)
+		d.Status.ObservedGeneration = d.Generation
+		d.Status.UpdatedReplicas, d.Status.AvailableReplicas, d.Status.ReadyReplicas = r, r, r
+		return false, d, nil // fall through to the default tracker (persists d)
+	})
+	e := NewExecutorWithClient(cs, nil)
+	e.verifyInterval = 10 * time.Millisecond
+	res := e.Execute(context.Background(), contract.PendingAction{
+		Action: "Scale", Target: contract.ActionTarget{Kind: "Deployment", Namespace: "web", Name: "api"},
+		Params: map[string]string{"replicas": "5"}, DryRun: false, TimeoutSeconds: 5,
+	})
+	if !res.Success {
+		t.Fatalf("scale failed: %q", res.Error)
+	}
+	if res.BeforeState == "" || !strings.Contains(res.BeforeState, "replicas=2") {
+		t.Fatalf("before-state should capture the previous count: %q", res.BeforeState)
+	}
+	d, _ := e.client.AppsV1().Deployments("web").Get(context.Background(), "api", metav1.GetOptions{})
+	if d.Spec.Replicas == nil || *d.Spec.Replicas != 5 {
+		t.Fatalf("replicas not set to 5: %v", d.Spec.Replicas)
+	}
+}
+
+func TestScaleDryRunDoesNotPersist(t *testing.T) {
+	e := NewExecutorWithClient(fake.NewSimpleClientset(newDeployment("web", "api", 2, true)), nil)
+	res := e.Execute(context.Background(), contract.PendingAction{
+		Action: "Scale", Target: contract.ActionTarget{Kind: "Deployment", Namespace: "web", Name: "api"},
+		Params: map[string]string{"replicas": "9"}, DryRun: true, TimeoutSeconds: 5,
+	})
+	if !res.Success || !res.DryRun {
+		t.Fatalf("dry-run scale should succeed: %+v", res)
+	}
+	if res.VerificationPassed != nil {
+		t.Fatal("dry-run must not verify a live scale")
+	}
+}
+
+func TestScaleInvalidReplicasRejected(t *testing.T) {
+	e := NewExecutorWithClient(fake.NewSimpleClientset(newDeployment("web", "api", 2, true)), nil)
+	res := e.Execute(context.Background(), contract.PendingAction{
+		Action: "Scale", Target: contract.ActionTarget{Kind: "Deployment", Namespace: "web", Name: "api"},
+		Params: map[string]string{"replicas": "nope"},
+	})
+	if res.Success {
+		t.Fatal("invalid replicas must fail")
 	}
 }
 

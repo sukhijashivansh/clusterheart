@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"clusterheart/sre/internal/contract"
@@ -66,6 +67,8 @@ func (e *Executor) Execute(ctx context.Context, a contract.PendingAction) contra
 	switch a.Action {
 	case "RolloutRestart":
 		return e.rolloutRestart(ctx, a, start)
+	case "Scale":
+		return e.scale(ctx, a, start)
 	default:
 		// Defensive: the control plane only ever sends registered actions.
 		return contract.ActionResult{
@@ -159,6 +162,88 @@ func (e *Executor) rolloutRestart(ctx context.Context, a contract.PendingAction,
 	}
 
 	result := "applied: rolling restart triggered"
+	if a.DryRun {
+		result = "dry-run: validated against the API server; no changes persisted"
+	}
+	return contract.ActionResult{
+		StartedAt: start, FinishedAt: e.now(), DryRun: a.DryRun, Success: true,
+		PlannedChange: planned, BeforeState: before, Result: result,
+		RollbackAvailable: true, VerificationPassed: verify,
+	}
+}
+
+// scale sets spec.replicas on a Deployment/StatefulSet to the requested count,
+// capturing the previous count as before-state (so the change is reversible),
+// with optimistic concurrency and (for Deployments) post-scale verification.
+func (e *Executor) scale(ctx context.Context, a contract.PendingAction, start time.Time) contract.ActionResult {
+	ns, name := a.Target.Namespace, a.Target.Name
+	want, err := strconv.Atoi(a.Params["replicas"])
+	fail := func(msg string) contract.ActionResult {
+		return contract.ActionResult{
+			StartedAt: start, FinishedAt: e.now(), DryRun: a.DryRun, Success: false,
+			PlannedChange:     fmt.Sprintf("scale %s/%s in %s to %s replicas", a.Target.Kind, name, ns, a.Params["replicas"]),
+			RollbackAvailable: true, Error: msg,
+		}
+	}
+	if err != nil || want < 0 {
+		return fail("invalid 'replicas' parameter")
+	}
+	want32 := int32(want)
+	planned := fmt.Sprintf("scale %s/%s in %s to %d replicas", a.Target.Kind, name, ns, want32)
+	opts := metav1.UpdateOptions{}
+	if a.DryRun {
+		opts.DryRun = []string{metav1.DryRunAll}
+	}
+	var before string
+	var verify *bool
+
+	switch a.Target.Kind {
+	case "Deployment":
+		d, gerr := e.client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+		if k8serrors.IsNotFound(gerr) {
+			return fail("deployment not found")
+		}
+		if gerr != nil {
+			return fail(gerr.Error())
+		}
+		before = fmt.Sprintf("resourceVersion=%s, replicas=%d", d.ResourceVersion, deref(d.Spec.Replicas))
+		d.Spec.Replicas = &want32
+		if _, uerr := e.client.AppsV1().Deployments(ns).Update(ctx, d, opts); uerr != nil {
+			if k8serrors.IsConflict(uerr) {
+				return fail("resource changed since read (optimistic concurrency); retry")
+			}
+			return fail(uerr.Error())
+		}
+		if !a.DryRun {
+			v := e.verifyDeployment(ctx, ns, name, timeout(a))
+			verify = &v
+			if !v {
+				r := fail("scaled workload did not become healthy within timeout")
+				r.BeforeState, r.VerificationPassed = before, &v
+				return r
+			}
+		}
+	case "StatefulSet":
+		ss, gerr := e.client.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
+		if k8serrors.IsNotFound(gerr) {
+			return fail("statefulset not found")
+		}
+		if gerr != nil {
+			return fail(gerr.Error())
+		}
+		before = fmt.Sprintf("resourceVersion=%s, replicas=%d", ss.ResourceVersion, deref(ss.Spec.Replicas))
+		ss.Spec.Replicas = &want32
+		if _, uerr := e.client.AppsV1().StatefulSets(ns).Update(ctx, ss, opts); uerr != nil {
+			if k8serrors.IsConflict(uerr) {
+				return fail("resource changed since read; retry")
+			}
+			return fail(uerr.Error())
+		}
+	default:
+		return fail("Scale supports Deployment/StatefulSet, not " + a.Target.Kind)
+	}
+
+	result := fmt.Sprintf("applied: scaled to %d replicas", want32)
 	if a.DryRun {
 		result = "dry-run: validated against the API server; no changes persisted"
 	}

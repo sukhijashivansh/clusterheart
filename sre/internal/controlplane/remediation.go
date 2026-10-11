@@ -3,6 +3,7 @@ package controlplane
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -19,7 +20,14 @@ const (
 	// ActionRolloutRestart triggers a rolling restart of a controller-owned
 	// workload (Deployment/StatefulSet/DaemonSet). Reversible via rollout undo.
 	ActionRolloutRestart ActionType = "RolloutRestart"
+	// ActionScale sets the replica count of a Deployment/StatefulSet within
+	// policy-bounded limits. Reversible (the before-count is captured).
+	ActionScale ActionType = "Scale"
 )
+
+// hardMaxReplicas is a defensive structural ceiling enforced at validation time,
+// independent of (and in addition to) the per-tenant policy's MaxReplicas.
+const hardMaxReplicas = 1000
 
 // RiskClass classifies the blast radius of an action.
 type RiskClass string
@@ -144,6 +152,44 @@ var actionRegistry = map[ActionType]actionSpec{
 				t.Kind, t.Name, t.Namespace)
 		},
 	},
+	ActionScale: {
+		risk:       RiskMedium,
+		reversible: true, // the previous replica count is captured as before-state
+		validate: func(t TargetRef, params map[string]string) error {
+			switch t.Kind {
+			case "Deployment", "StatefulSet":
+			default:
+				return fmt.Errorf("Scale supports Deployment/StatefulSet, not %q", t.Kind)
+			}
+			if t.Namespace == "" || t.Name == "" {
+				return errors.New("target namespace and name are required")
+			}
+			r, ok := params["replicas"]
+			if !ok {
+				return errors.New("Scale requires a 'replicas' parameter")
+			}
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 0 || n > hardMaxReplicas {
+				return fmt.Errorf("replicas must be an integer in [0,%d]", hardMaxReplicas)
+			}
+			return nil
+		},
+		plan: func(t TargetRef) string {
+			return fmt.Sprintf("set spec.replicas on %s/%s in %s to the requested count", t.Kind, t.Name, t.Namespace)
+		},
+	},
+}
+
+// parseReplicas returns the replicas param as an int, or (0,false) if absent/invalid.
+func parseReplicas(params map[string]string) (int, bool) {
+	if params == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(params["replicas"])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // lookupAction returns the spec for a supported action, or an error if the
