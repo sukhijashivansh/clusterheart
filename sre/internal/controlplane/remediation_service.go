@@ -24,18 +24,22 @@ type remediationService struct {
 	audit     AuditStore
 	incidents IncidentStore
 	clusters  Store
+	notifier  Notifier
 	engine    policyEngine
 	log       *slog.Logger
 	now       func() time.Time
 }
 
-func newRemediationService(rem RemediationStore, pol PolicyStore, audit AuditStore, incidents IncidentStore, clusters Store, log *slog.Logger) *remediationService {
+func newRemediationService(rem RemediationStore, pol PolicyStore, audit AuditStore, incidents IncidentStore, clusters Store, notifier Notifier, log *slog.Logger) *remediationService {
 	if log == nil {
 		log = slog.Default()
 	}
+	if notifier == nil {
+		notifier = noopNotifier{}
+	}
 	return &remediationService{
 		rem: rem, pol: pol, audit: audit, incidents: incidents, clusters: clusters,
-		engine: policyEngine{}, log: log, now: time.Now,
+		notifier: notifier, engine: policyEngine{}, log: log, now: time.Now,
 	}
 }
 
@@ -189,7 +193,22 @@ func (s *remediationService) ReportResult(ctx context.Context, cluster Cluster, 
 		detail = "applied"
 	}
 	s.appendAudit(ctx, cluster.TenantID, "controller:"+cluster.ID, ev, p.ID, p.IncidentID, detail)
+	s.notifier.Notify(Notification{
+		Kind: "remediation." + map[bool]string{true: "executed", false: "failed"}[res.Success],
+		Title: fmt.Sprintf("%s on %s", p.Action, p.Target), Detail: detailLine(res),
+		TenantID: cluster.TenantID, ClusterID: cluster.ID,
+	})
 	return p, nil
+}
+
+func detailLine(res contract.ActionResult) string {
+	if !res.Success {
+		return "failed: " + res.Error
+	}
+	if res.DryRun {
+		return "dry-run validated (no changes applied)"
+	}
+	return res.Result
 }
 
 // Reject marks a proposal rejected (a human declined it).

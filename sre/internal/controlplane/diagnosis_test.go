@@ -94,7 +94,7 @@ func TestLLMRejectsNonJSON(t *testing.T) {
 // or returns something that fails validation.
 func TestServiceFallsBackWhenLLMFails(t *testing.T) {
 	inc := NewMemIncidentStore()
-	_ = inc.UpsertObservation(context.Background(), "t1", "cluA", time.Now(), observation{
+	_, _ = inc.UpsertObservation(context.Background(), "t1", "cluA", time.Now(), observation{
 		fingerprint: "fp1", typ: contract.ProblemCrashLoopBackOff, severity: "high",
 		title: "x", namespace: "web", workload: "Deployment/api",
 		evidence: EvidenceItem{ObservedAt: time.Now(), Ref: "web/api-1", Reason: "CrashLoopBackOff", Message: "boom"},

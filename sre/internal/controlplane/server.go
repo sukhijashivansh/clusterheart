@@ -43,12 +43,13 @@ func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol P
 	if log == nil {
 		log = slog.Default()
 	}
-	remSvc := newRemediationService(rem, pol, audit, incidents, store, log)
+	notifier := newNotifier(log)
+	remSvc := newRemediationService(rem, pol, audit, incidents, store, notifier, log)
 	diagSvc := newDiagnosisService(diag, incidents, newLLMDiagnoser())
 	return &Server{
 		store:       store,
 		incidents:   incidents,
-		engine:      newEngine(incidents, log),
+		engine:      newEngine(incidents, notifier, log),
 		remediation: remSvc,
 		diagnosis:   diagSvc,
 		adminToken:  adminToken,

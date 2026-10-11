@@ -23,14 +23,14 @@ func setupRemediation(t *testing.T, env string) (*remediationService, string) {
 		t.Fatal(err)
 	}
 	inc := NewMemIncidentStore()
-	eng := newEngine(inc, nil)
+	eng := newEngine(inc, nil, nil)
 	_ = eng.Reconcile(ctx, "t1", "cluA", snapWithProblems(time.Now(),
 		[]contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}}, nil))
 	incs, _ := inc.ListIncidents(ctx, "t1", "open")
 	if len(incs) != 1 {
 		t.Fatalf("setup expected 1 incident, got %d", len(incs))
 	}
-	svc := newRemediationService(NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(), inc, clusters, nil)
+	svc := newRemediationService(NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(), inc, clusters, nil, nil)
 	return svc, incs[0].ID
 }
 

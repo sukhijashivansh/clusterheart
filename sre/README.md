@@ -59,6 +59,9 @@ Control plane (durable store):
 | `MONGO_URI` | MongoDB connection string (omit → in-memory, non-durable) |
 | `MONGO_DB` | database name (default `clusterheart`) |
 | `ADDR` / `PORT` | listen address |
+| `SRE_AI_PROVIDER` / `SRE_AI_API_KEY` / `SRE_AI_MODEL` / `SRE_AI_BASE_URL` | opt-in external AI for root-cause analysis (OpenAI/OpenRouter-style). Unset → deterministic diagnoser only |
+| `SRE_SLACK_WEBHOOK_URL` | Slack incoming webhook for incident/remediation notifications (optional) |
+| `SRE_WEBHOOK_URL` | generic JSON webhook for notifications (optional) |
 
 Agent:
 

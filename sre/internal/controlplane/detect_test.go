@@ -23,7 +23,7 @@ func openIncidents(t *testing.T, store IncidentStore, tenant string) []Incident 
 
 func TestDetectorsCreateIncidents(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	now := time.Now()
 
 	snap := snapWithProblems(now,
@@ -58,7 +58,7 @@ func TestDetectorsCreateIncidents(t *testing.T) {
 
 func TestDedupAndTimeline(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	base := time.Now()
 	prob := []contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}}
 
@@ -82,7 +82,7 @@ func TestDedupAndTimeline(t *testing.T) {
 
 func TestResolveWhenProblemClears(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	now := time.Now()
 	prob := []contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}}
 
@@ -103,7 +103,7 @@ func TestResolveWhenProblemClears(t *testing.T) {
 
 func TestIncidentTenantIsolation(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	now := time.Now()
 	prob := []contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemOOMKilled, Message: "x"}}
 	_ = eng.Reconcile(context.Background(), "tenantA", "cluA", snapWithProblems(now, prob, nil))
