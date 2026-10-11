@@ -75,6 +75,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/policy/pause", s.requireAdmin(s.handlePausePolicy))
 	mux.HandleFunc("POST /api/v1/policy/resume", s.requireAdmin(s.handleResumePolicy))
 	mux.HandleFunc("GET /api/v1/audit", s.requireAdmin(s.handleListAudit))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/remediation-token", s.requireAdmin(s.handleMintRemediationToken))
+	// In-cluster remediation controller (separate remediate credential).
+	mux.HandleFunc("GET /api/v1/remediation/pending", s.requireRemediator(s.handlePendingRemediation))
+	mux.HandleFunc("POST /api/v1/remediation/{id}/result", s.requireRemediator(s.handleReportResult))
 	// Agent.
 	mux.HandleFunc("POST /api/v1/agents/heartbeat", s.requireAgent(s.handleHeartbeat))
 	mux.HandleFunc("POST /api/v1/telemetry", s.requireAgent(s.handleTelemetry))

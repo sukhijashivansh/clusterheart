@@ -2,12 +2,16 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"clusterheart/sre/internal/contract"
 )
+
+// testCluster mirrors the cluster setupRemediation registers (for ReportResult).
+var testCluster = Cluster{ID: "cluA", TenantID: "t1"}
 
 // setupRemediation wires a service with one registered cluster (given env) and a
 // single open CrashLoopBackOff incident, and returns the service + incident id.
@@ -57,33 +61,67 @@ func TestProposalBlockedByDefault(t *testing.T) {
 	}
 }
 
-func TestApprovalFlowDryRunExecution(t *testing.T) {
+func TestApprovalThenControllerExecutes(t *testing.T) {
 	svc, inc := setupRemediation(t, "staging")
 	allowNamespace(t, svc, ModeApprovalRequired)
+	ctx := context.Background()
 
-	p, err := svc.CreateProposal(context.Background(), "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "crashloop", "operator:test")
+	p, err := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "crashloop", "operator:test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Status != StatusProposed {
-		t.Fatalf("want proposed, got %s (%v)", p.Status, p.Decision.Reasons)
+	if p.Status != StatusProposed || p.Execution != nil {
+		t.Fatalf("want proposed/no-exec, got %s (%v)", p.Status, p.Decision.Reasons)
 	}
-	if p.Execution != nil {
-		t.Fatal("must not execute before approval")
-	}
-	done, err := svc.Approve(context.Background(), "t1", p.ID, "operator:boss")
+	appr, err := svc.Approve(ctx, "t1", p.ID, "operator:boss")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if done.Status != StatusExecuted || done.Execution == nil {
+	// Approval does NOT execute in the control plane — it hands off to the controller.
+	if appr.Status != StatusApproved || appr.Execution != nil {
+		t.Fatalf("approval must not execute in control plane: status=%s", appr.Status)
+	}
+	pend, _ := svc.PendingForCluster(ctx, "t1", "cluA")
+	if len(pend) != 1 || pend[0].ID != p.ID {
+		t.Fatalf("expected 1 pending action, got %d", len(pend))
+	}
+	// The in-cluster controller reports a (dry-run) success.
+	tru := true
+	res := contract.ActionResult{Success: true, DryRun: true, PlannedChange: "restart", Result: "ok",
+		RollbackAvailable: true, VerificationPassed: &tru, StartedAt: time.Now(), FinishedAt: time.Now()}
+	done, err := svc.ReportResult(ctx, testCluster, p.ID, res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != StatusExecuted || done.Execution == nil || !done.Execution.Success {
 		t.Fatalf("want executed, got %s", done.Status)
 	}
-	ex := done.Execution
-	if !ex.DryRun || !ex.Success || !ex.RollbackAvailable || ex.PlannedChange == "" {
-		t.Fatalf("unexpected execution: %+v", ex)
+	// Re-reporting must be rejected (no replay/overwrite of a completed action).
+	if _, err := svc.ReportResult(ctx, testCluster, p.ID, res); !errors.Is(err, errConflict) {
+		t.Fatalf("re-report should conflict, got %v", err)
 	}
-	if !strings.Contains(ex.Result, "no changes applied") {
-		t.Fatalf("dry-run should not apply changes: %q", ex.Result)
+	// A cluster may not report on a proposal that is not its own.
+	if _, err := svc.ReportResult(ctx, Cluster{ID: "cluB", TenantID: "t1"}, p.ID, res); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-cluster report should be ErrNotFound, got %v", err)
+	}
+}
+
+func TestControllerFailureReportMarksFailed(t *testing.T) {
+	svc, inc := setupRemediation(t, "staging")
+	allowNamespace(t, svc, ModeApprovalRequired)
+	ctx := context.Background()
+	p, _ := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
+	_, _ = svc.Approve(ctx, "t1", p.ID, "boss")
+	fal := false
+	done, err := svc.ReportResult(ctx, testCluster, p.ID, contract.ActionResult{
+		Success: false, VerificationPassed: &fal, Error: "rollout did not become healthy",
+		StartedAt: time.Now(), FinishedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != StatusFailed {
+		t.Fatalf("want failed, got %s", done.Status)
 	}
 }
 
@@ -122,12 +160,18 @@ func TestEmergencyPauseBlocksEverything(t *testing.T) {
 func TestCooldownAfterExecution(t *testing.T) {
 	svc, inc := setupRemediation(t, "staging")
 	allowNamespace(t, svc, ModeApprovalRequired)
-	p, _ := svc.CreateProposal(context.Background(), "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
-	if _, err := svc.Approve(context.Background(), "t1", p.ID, "boss"); err != nil {
+	ctx := context.Background()
+	p, _ := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
+	if _, err := svc.Approve(ctx, "t1", p.ID, "boss"); err != nil {
+		t.Fatal(err)
+	}
+	// Controller executes and reports back, which records the execution time.
+	now := time.Now()
+	if _, err := svc.ReportResult(ctx, testCluster, p.ID, contract.ActionResult{Success: true, StartedAt: now, FinishedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	// Immediately proposing the same target again must hit the cooldown.
-	p2, _ := svc.CreateProposal(context.Background(), "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
+	p2, _ := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
 	if p2.Status != StatusBlocked || !containsSubstr(p2.Decision.Reasons, "cooldown") {
 		t.Fatalf("want cooldown block, got %s %v", p2.Status, p2.Decision.Reasons)
 	}

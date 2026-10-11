@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"clusterheart/sre/internal/contract"
 )
 
 // errConflict signals a lifecycle violation (e.g. approving a non-proposed item).
@@ -89,16 +91,14 @@ func (s *remediationService) CreateProposal(ctx context.Context, tenantID, incid
 
 	switch dec.Mode {
 	case ModeDryRun, ModeAuto:
-		// slice A: auto resolves to a dry run (no in-cluster executor yet).
-		s.execute(p)
-		_ = s.rem.Create(ctx, p)
-		s.appendAudit(ctx, tenantID, createdBy, "proposal.created", p.ID, incidentID, string(dec.Mode))
-		s.appendAudit(ctx, tenantID, createdBy, "remediation.executed", p.ID, incidentID, "dry-run")
-	default: // recommend / approval-required
+		// Ready for the in-cluster controller to pick up. dry-run vs real apply
+		// is resolved from the mode when the action is handed to the controller.
+		p.Status = StatusApproved
+	default: // recommend / approval-required → wait for a human
 		p.Status = StatusProposed
-		_ = s.rem.Create(ctx, p)
-		s.appendAudit(ctx, tenantID, createdBy, "proposal.created", p.ID, incidentID, string(dec.Mode))
 	}
+	_ = s.rem.Create(ctx, p)
+	s.appendAudit(ctx, tenantID, createdBy, "proposal.created", p.ID, incidentID, string(dec.Mode))
 	return p, nil
 }
 
@@ -124,12 +124,65 @@ func (s *remediationService) Approve(ctx context.Context, tenantID, id, approver
 		s.appendAudit(ctx, tenantID, approver, "proposal.blocked", p.ID, p.IncidentID, strings.Join(dec.Reasons, "; "))
 		return p, nil
 	}
+	// Approved and ready for the in-cluster controller to execute. The control
+	// plane never applies the change itself.
 	p.Status = StatusApproved
 	_ = s.rem.Update(ctx, p)
 	s.appendAudit(ctx, tenantID, approver, "proposal.approved", p.ID, p.IncidentID, "")
-	s.execute(p)
+	return p, nil
+}
+
+// PendingForCluster returns approved, not-yet-executed proposals for a cluster.
+// The in-cluster controller pulls these, executes them, and reports back.
+func (s *remediationService) PendingForCluster(ctx context.Context, tenantID, clusterID string) ([]RemediationProposal, error) {
+	all, err := s.rem.List(ctx, tenantID, string(StatusApproved))
+	if err != nil {
+		return nil, err
+	}
+	var out []RemediationProposal
+	for _, p := range all {
+		if p.ClusterID == clusterID && p.Execution == nil {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// ReportResult records the outcome the in-cluster controller reports for an
+// approved action. The result may only be reported by the cluster that owns the
+// proposal, and only while it is still approved (prevents replay/overwrite).
+func (s *remediationService) ReportResult(ctx context.Context, cluster Cluster, proposalID string, res contract.ActionResult) (*RemediationProposal, error) {
+	p, err := s.rem.Get(ctx, cluster.TenantID, proposalID)
+	if err != nil {
+		return nil, err
+	}
+	if p.ClusterID != cluster.ID {
+		return nil, ErrNotFound // a cluster may only report on its own proposals
+	}
+	if p.Status != StatusApproved {
+		return nil, fmt.Errorf("%w: proposal is %s, not awaiting execution", errConflict, p.Status)
+	}
+	p.Execution = &ActionExecution{
+		StartedAt: res.StartedAt, FinishedAt: res.FinishedAt, DryRun: res.DryRun,
+		Success: res.Success, PlannedChange: res.PlannedChange, BeforeState: res.BeforeState,
+		Result: res.Result, RollbackAvailable: res.RollbackAvailable,
+		VerificationPassed: res.VerificationPassed, Error: res.Error,
+	}
+	if res.Success {
+		p.Status = StatusExecuted
+	} else {
+		p.Status = StatusFailed
+	}
 	_ = s.rem.Update(ctx, p)
-	s.appendAudit(ctx, tenantID, approver, "remediation.executed", p.ID, p.IncidentID, "dry-run")
+	ev := "remediation.executed"
+	if !res.Success {
+		ev = "remediation.failed"
+	}
+	detail := "dry-run"
+	if !res.DryRun {
+		detail = "applied"
+	}
+	s.appendAudit(ctx, cluster.TenantID, "controller:"+cluster.ID, ev, p.ID, p.IncidentID, detail)
 	return p, nil
 }
 
@@ -188,24 +241,4 @@ func (s *remediationService) SetPaused(ctx context.Context, tenantID string, pau
 	}
 	s.appendAudit(ctx, tenantID, actor, ev, "", "", "")
 	return p, nil
-}
-
-// execute performs the action. SLICE A: dry run only — it validates and records
-// the planned change but contacts no cluster. Slice B replaces this with the
-// in-cluster controller that captures before-state, applies, verifies, and can
-// roll back.
-func (s *remediationService) execute(p *RemediationProposal) {
-	spec, _ := lookupAction(p.Action)
-	start := s.now()
-	p.Execution = &ActionExecution{
-		StartedAt:         start,
-		FinishedAt:        s.now(),
-		DryRun:            true,
-		Success:           true,
-		PlannedChange:     spec.plan(p.Target),
-		BeforeState:       "(not captured in dry-run)",
-		Result:            "dry-run: validated against policy; no changes applied",
-		RollbackAvailable: spec.reversible,
-	}
-	p.Status = StatusExecuted
 }

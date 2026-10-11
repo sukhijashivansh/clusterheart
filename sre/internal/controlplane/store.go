@@ -26,10 +26,14 @@ type Cluster struct {
 	Environment    string
 	Region         string
 	AgentTokenHash string
-	CreatedAt      time.Time
-	LastHeartbeat  *time.Time
-	AgentVersion   string
-	K8sVersion     string
+	// RemediationTokenHash is set only when an operator opts the cluster into
+	// remediation (separate identity from the observe agent). Empty => no
+	// in-cluster executor is authorized.
+	RemediationTokenHash string
+	CreatedAt            time.Time
+	LastHeartbeat        *time.Time
+	AgentVersion         string
+	K8sVersion           string
 }
 
 // Store is the persistence boundary. It is an interface so the control plane can
@@ -39,6 +43,7 @@ type Store interface {
 	CreateCluster(ctx context.Context, c Cluster) error
 	GetCluster(ctx context.Context, clusterID string) (Cluster, error)
 	ListClusters(ctx context.Context, tenantID string) ([]Cluster, error)
+	SetRemediationTokenHash(ctx context.Context, clusterID, hash string) error
 	RecordHeartbeat(ctx context.Context, clusterID string, hb contract.Heartbeat, at time.Time) error
 	SaveSnapshots(ctx context.Context, clusterID string, snaps []contract.ClusterSnapshot) error
 	LatestSnapshot(ctx context.Context, clusterID string) (*contract.ClusterSnapshot, error)
@@ -67,6 +72,18 @@ func (m *memStore) CreateCluster(_ context.Context, c Cluster) error {
 		return errors.New("cluster already exists")
 	}
 	m.clusters[c.ID] = c
+	return nil
+}
+
+func (m *memStore) SetRemediationTokenHash(_ context.Context, clusterID, hash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.clusters[clusterID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.RemediationTokenHash = hash
+	m.clusters[clusterID] = c
 	return nil
 }
 

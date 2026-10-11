@@ -1,14 +1,20 @@
 # ClusterHeart Autonomous SRE — `sre/` module
 
-One Go module, two binaries:
+One Go module, three binaries:
 
 - `cmd/controlplane` — multi-tenant API: cluster registration, agent heartbeats,
-  telemetry ingestion, operator read-back.
+  telemetry ingestion, incident detection, remediation policy/approval/audit,
+  operator read-back. Never touches a cluster directly.
 - `cmd/agent` — in-cluster, read-only collector that forwards bounded cluster-health
   snapshots to the control plane.
+- `cmd/remediation` — in-cluster, narrowly-privileged controller (opt-in, separate
+  credential) that pulls already-approved typed actions, executes them (dry-run or
+  real per policy), verifies, and reports back. No detection, no AI, no arbitrary
+  commands.
 
-**Milestone 1 status: observe-only plumbing.** No detection, AI, policy, or
-remediation yet — see `../docs/autonomous-sre/implementation-plan.md`.
+**Status:** observe (M1) → deterministic detection (M2 slice A) → remediation
+safety spine + in-cluster executor (M3 slices A/B). See
+`../docs/autonomous-sre/implementation-plan.md` for what is / isn't done.
 
 ## Local development
 
@@ -63,10 +69,44 @@ Agent:
 | `KUBECONFIG` | path; empty → in-cluster config |
 | `COLLECT_INTERVAL` | e.g. `30s` (min `5s`) |
 
-## In-cluster install (agent, observe-only)
+## Remediation controller (opt-in)
 
-See `../deploy/k8s/agent/agent.yaml` — read-only RBAC, hardened securityContext.
-Create the `clusterheart-agent` Secret with the registration values first.
+A cluster is opted into remediation by minting a SEPARATE remediation token
+(shown once), distinct from the observe-agent token:
+
+```bash
+curl -s -X POST localhost:9100/api/v1/clusters/clu_.../remediation-token \
+  -H "Authorization: Bearer dev-admin" | jq
+# -> { "clusterId": "clu_...", "remediationToken": "..." }
+```
+
+Run the controller against a kubeconfig cluster. It polls for already-approved
+actions, executes them (dry-run or real per policy), verifies, and reports back:
+
+```bash
+CONTROLPLANE_URL=http://localhost:9100 \
+CLUSTER_ID=clu_... REMEDIATION_TOKEN=... \
+KUBECONFIG=$HOME/.kube/config \
+go run ./cmd/remediation
+```
+
+| Env | Meaning |
+|---|---|
+| `CONTROLPLANE_URL` | control-plane base URL (required) |
+| `CLUSTER_ID`, `REMEDIATION_TOKEN` | from the mint call above (required) |
+| `KUBECONFIG` | path; empty → in-cluster config |
+| `POLL_INTERVAL` | e.g. `15s` (min `5s`) |
+
+## In-cluster install
+
+Agent (observe-only): see `../deploy/k8s/agent/agent.yaml` — read-only RBAC,
+hardened securityContext. Create the `clusterheart-agent` Secret with the
+registration values first.
+
+Remediation controller (opt-in): see `../deploy/k8s/remediation/remediation.yaml`
+— separate ServiceAccount, `get,update` on Deployments/StatefulSets/DaemonSets
+only. Create the `clusterheart-remediation` Secret with the mint-call values
+first.
 
 ## Build & test
 
@@ -79,6 +119,13 @@ go test ./...
 ## Tested vs. not (be honest)
 - **Tested:** control-plane HTTP flow (register/heartbeat/telemetry/list) via
   httptest + a compiled-binary smoke run; tenant isolation; version/bounds
-  validation; redaction; backoff/jitter.
-- **Not yet tested against a live cluster:** `agent.Collector.Snapshot` (needs a
-  real kube API). Verify on a disposable kind/minikube cluster before relying on it.
+  validation; redaction; backoff/jitter. Deterministic detectors + incident
+  lifecycle. Remediation policy (allow/deny, cooldown, concurrency, production
+  downgrade, kill-switch) + approval→pending→report flow. The **executor** against
+  a `fake.Clientset`: RolloutRestart apply + verify, dry-run, not-found,
+  verification-failure, unsupported kind, StatefulSet.
+- **Not yet tested against a live cluster:** `agent.Collector.Snapshot` and
+  `remediation.Executor` (both need a real kube API). Verify on a disposable
+  kind/minikube cluster before relying on them.
+- **In-memory only:** remediation proposals/policy/audit — a control-plane
+  restart loses in-flight proposals. Mongo persistence is the next slice.

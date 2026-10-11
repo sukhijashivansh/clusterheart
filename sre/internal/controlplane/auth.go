@@ -88,6 +88,27 @@ func (s *Server) requireAgent(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// requireRemediator authenticates the in-cluster remediation controller with
+// the cluster's SEPARATE remediation token (distinct from the observe agent
+// token). Only set when an operator has opted the cluster into remediation.
+func (s *Server) requireRemediator(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		clusterID := r.Header.Get("X-Cluster-ID")
+		tok := bearer(r)
+		if clusterID == "" || tok == "" {
+			writeErr(w, http.StatusUnauthorized, "remediation credentials required")
+			return
+		}
+		c, err := s.store.GetCluster(r.Context(), clusterID)
+		if err != nil || c.RemediationTokenHash == "" || !constantEq(hashToken(tok), c.RemediationTokenHash) {
+			writeErr(w, http.StatusUnauthorized, "invalid remediation credentials")
+			return
+		}
+		ctx := context.WithValue(r.Context(), clusterCtxKey, c)
+		next(w, r.WithContext(ctx))
+	}
+}
+
 // clusterFromCtx returns the authenticated cluster pinned by requireAgent.
 func clusterFromCtx(ctx context.Context) (Cluster, error) {
 	c, ok := ctx.Value(clusterCtxKey).(Cluster)

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"clusterheart/sre/internal/contract"
 )
 
 // --- request shapes ------------------------------------------------------
@@ -208,6 +210,81 @@ func (s *Server) setPause(w http.ResponseWriter, r *http.Request, paused bool) {
 		return
 	}
 	writeJSON(w, http.StatusOK, pol)
+}
+
+// --- remediation controller protocol ------------------------------------
+
+// handleMintRemediationToken opts a cluster into remediation by issuing a
+// separate remediation token (shown once). Until this is called, no in-cluster
+// executor is authorized for the cluster.
+func (s *Server) handleMintRemediationToken(w http.ResponseWriter, r *http.Request) {
+	clusterID := r.PathValue("id")
+	if _, err := s.store.GetCluster(r.Context(), clusterID); err != nil {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	token, hash, err := mintAgentToken()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not mint remediation token")
+		return
+	}
+	if err := s.store.SetRemediationTokenHash(r.Context(), clusterID, hash); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not store remediation token")
+		return
+	}
+	s.log.Info("remediation enabled for cluster", "clusterId", clusterID)
+	writeJSON(w, http.StatusCreated, contract.RemediationTokenResponse{ClusterID: clusterID, RemediationToken: token})
+}
+
+// handlePendingRemediation returns this cluster's approved work queue.
+func (s *Server) handlePendingRemediation(w http.ResponseWriter, r *http.Request) {
+	c, err := clusterFromCtx(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	ps, err := s.remediation.PendingForCluster(r.Context(), c.TenantID, c.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not list pending actions")
+		return
+	}
+	actions := make([]contract.PendingAction, 0, len(ps))
+	for _, p := range ps {
+		dryRun := p.Decision != nil && p.Decision.Mode == ModeDryRun
+		actions = append(actions, contract.PendingAction{
+			ProposalID: p.ID, Action: string(p.Action),
+			Target:         contract.ActionTarget{Kind: p.Target.Kind, Namespace: p.Target.Namespace, Name: p.Target.Name},
+			Params:         p.Params,
+			DryRun:         dryRun,
+			TimeoutSeconds: 120,
+		})
+	}
+	writeJSON(w, http.StatusOK, contract.PendingActionsResponse{Actions: actions})
+}
+
+// handleReportResult records the controller's outcome for an approved action.
+func (s *Server) handleReportResult(w http.ResponseWriter, r *http.Request) {
+	c, err := clusterFromCtx(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	var res contract.ActionResult
+	if err := decode(r, &res); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid result body")
+		return
+	}
+	p, err := s.remediation.ReportResult(r.Context(), c, r.PathValue("id"), res)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		writeErr(w, http.StatusNotFound, "proposal not found for this cluster")
+	case errors.Is(err, errConflict):
+		writeErr(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, "could not record result")
+	default:
+		writeJSON(w, http.StatusOK, p)
+	}
 }
 
 func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {

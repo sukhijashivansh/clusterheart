@@ -41,11 +41,13 @@ Slice A (safety spine) — done & tested on this branch. **No live cluster mutat
 - [x] Append-only **audit trail** for every decision + (dry-run) execution; tenant-scoped.
 - [x] Tested: policy allow/deny, approval + dry-run execution, unknown/invalid action rejection, kill-switch, cooldown, production downgrade, reject flow, tenant isolation, audit. Runtime E2E through the HTTP binary.
 
-Slice B (the executor) — not started:
-- [ ] In-cluster **Remediation Controller** binary (`cmd/remediation`) with a separate narrow `remediate` ServiceAccount + RBAC manifest.
-- [ ] Real `RolloutRestart` via client-go; precondition + resourceVersion (optimistic concurrency) checks immediately before apply; before-state capture.
-- [ ] Post-action health verification; rollback for reversible actions; failure handling → `failed` status.
-- [ ] Mongo persistence for proposals/policy/audit (currently in-memory).
+Slice B (the executor) — done & tested on this branch. Execution now reaches a real cluster via a separate, narrowly-privileged controller; the control plane itself still never touches a cluster.
+- [x] In-cluster **Remediation Controller** binary (`cmd/remediation`) with a separate narrow `remediate` ServiceAccount + RBAC manifest (`deploy/k8s/remediation/` — `get,update` on Deployments/StatefulSets/DaemonSets only).
+- [x] Separate per-cluster **remediation token** (distinct identity from the observe agent), minted on explicit opt-in (`POST /clusters/{id}/remediation-token`); controller pull/report protocol (`GET /remediation/pending`, `POST /remediation/{id}/result`).
+- [x] Real `RolloutRestart` via client-go for Deployment/StatefulSet/DaemonSet; resourceVersion (optimistic concurrency) check immediately before apply; before-state capture; dry-run validated against the API server (no persisted change).
+- [x] Post-action health verification (rollout completion for Deployments); failure handling → `failed` status; cross-cluster/replay report rejection. Rollback availability recorded (restart is reversible); automatic rollback execution deferred to M4.
+- [x] Tested: apply + verify, dry-run (no verification), not-found, verification-failure → failed, unsupported kind/resource rejected, StatefulSet apply; control-plane side approval→pending→report (success + failure), replay/cross-cluster rejection, cooldown keyed on reported execution time.
+- [ ] Mongo persistence for proposals/policy/audit (currently in-memory — a control-plane restart loses in-flight proposals). Carried into M3 Slice C.
 
 ## Milestone 4 — Guarded Autonomy
 - [ ] Allowlisted automatic execution; circuit breakers, loop detection, cooldowns.
