@@ -28,6 +28,7 @@ type Server struct {
 	incidents   IncidentStore
 	engine      *Engine
 	remediation *remediationService
+	diagnosis   *diagnosisService
 	adminToken  string
 	log         *slog.Logger
 	now         func() time.Time
@@ -35,18 +36,21 @@ type Server struct {
 
 // NewServer constructs a control-plane server. adminToken guards operator
 // endpoints; it must be non-empty in production (enforced by the caller). The
-// remediation stores (proposals/policy/audit) are injected so the caller can
-// choose Mongo (durable) or in-memory (local dev / tests).
-func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol PolicyStore, audit AuditStore, adminToken string, log *slog.Logger) *Server {
+// remediation + diagnosis stores are injected so the caller can choose Mongo
+// (durable) or in-memory (local dev / tests). External AI for diagnosis is
+// opt-in via env (newLLMDiagnoser returns nil when unconfigured → deterministic).
+func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol PolicyStore, audit AuditStore, diag DiagnosisStore, adminToken string, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
 	remSvc := newRemediationService(rem, pol, audit, incidents, store, log)
+	diagSvc := newDiagnosisService(diag, incidents, newLLMDiagnoser())
 	return &Server{
 		store:       store,
 		incidents:   incidents,
 		engine:      newEngine(incidents, log),
 		remediation: remSvc,
+		diagnosis:   diagSvc,
 		adminToken:  adminToken,
 		log:         log,
 		now:         time.Now,
@@ -61,6 +65,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
+	// AI root-cause analysis (deterministic by default; external AI opt-in).
+	mux.HandleFunc("POST /api/v1/incidents/{id}/diagnose", s.requireAdmin(s.handleDiagnose))
+	mux.HandleFunc("GET /api/v1/incidents/{id}/diagnosis", s.requireAdmin(s.handleGetDiagnosis))
 	// Remediation (deterministic policy, approvals, dry-run execution, audit).
 	mux.HandleFunc("POST /api/v1/incidents/{id}/proposals", s.requireAdmin(s.handleCreateProposal))
 	mux.HandleFunc("GET /api/v1/proposals", s.requireAdmin(s.handleListProposals))
@@ -252,6 +259,44 @@ func (s *Server) handleGetIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, inc)
+}
+
+// handleDiagnose runs (or re-runs) root-cause analysis for an incident.
+func (s *Server) handleDiagnose(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	dg, err := s.diagnosis.Diagnose(r.Context(), tenantID, r.PathValue("id"))
+	if err == ErrNotFound {
+		writeErr(w, http.StatusNotFound, "incident not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not diagnose incident")
+		return
+	}
+	writeJSON(w, http.StatusOK, dg)
+}
+
+// handleGetDiagnosis returns the latest stored diagnosis for an incident.
+func (s *Server) handleGetDiagnosis(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	dg, err := s.diagnosis.Get(r.Context(), tenantID, r.PathValue("id"))
+	if err == ErrNotFound {
+		writeErr(w, http.StatusNotFound, "no diagnosis yet for this incident")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not load diagnosis")
+		return
+	}
+	writeJSON(w, http.StatusOK, dg)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {

@@ -111,6 +111,26 @@ func (s *server) handleSREIncidents(w http.ResponseWriter, r *http.Request) {
 	s.sreForward(w, r, http.MethodGet, "/api/v1/incidents", extra, nil)
 }
 
+// handleSREIncidentItem handles /api/sre/incidents/{id}/diagnose (POST) and
+// /api/sre/incidents/{id}/diagnosis (GET).
+func (s *server) handleSREIncidentItem(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/sre/incidents/")
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 || parts[0] == "" {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	id, sub := parts[0], parts[1]
+	switch {
+	case sub == "diagnose" && r.Method == http.MethodPost:
+		s.sreForward(w, r, http.MethodPost, "/api/v1/incidents/"+url.PathEscape(id)+"/diagnose", nil, nil)
+	case sub == "diagnosis" && r.Method == http.MethodGet:
+		s.sreForward(w, r, http.MethodGet, "/api/v1/incidents/"+url.PathEscape(id)+"/diagnosis", nil, nil)
+	default:
+		writeErr(w, http.StatusNotFound, "not found")
+	}
+}
+
 func (s *server) handleSREProposals(w http.ResponseWriter, r *http.Request) {
 	extra := url.Values{}
 	if st := strings.TrimSpace(r.URL.Query().Get("status")); st != "" {

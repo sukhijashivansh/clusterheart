@@ -329,6 +329,7 @@ func main() {
 	// Autonomous SRE control-plane proxy (incidents + remediation approval queue).
 	mux.HandleFunc("/api/sre/config", s.handleSREConfig)
 	mux.HandleFunc("/api/sre/incidents", s.handleSREIncidents)
+	mux.HandleFunc("/api/sre/incidents/", s.handleSREIncidentItem)
 	mux.HandleFunc("/api/sre/proposals", s.handleSREProposals)
 	mux.HandleFunc("/api/sre/proposals/", s.handleSREProposalItem)
 	mux.HandleFunc("/api/sre/policy", s.handleSREPolicy)

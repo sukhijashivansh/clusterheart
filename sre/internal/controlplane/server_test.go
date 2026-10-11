@@ -17,7 +17,8 @@ const adminTok = "admin-secret-test-token"
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := NewServer(NewMemStore(), NewMemIncidentStore(),
-		NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(), adminTok, nil)
+		NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(),
+		NewMemDiagnosisStore(), adminTok, nil)
 	return httptest.NewServer(srv.Routes())
 }
 

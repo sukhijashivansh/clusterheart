@@ -129,6 +129,45 @@ func TestMongoPolicyDefaultAndPersist(t *testing.T) {
 	}
 }
 
+func TestMongoDiagnosisUpsertAndScope(t *testing.T) {
+	uri := os.Getenv("MONGO_TEST_URI")
+	if uri == "" {
+		t.Skip("MONGO_TEST_URI not set; skipping Mongo integration test")
+	}
+	ctx := context.Background()
+	db, err := ConnectMongo(ctx, uri, "chtest_dg_"+time.Now().Format("150405_000000"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Drop(context.Background()) })
+	store, err := NewMongoDiagnosisStore(ctx, db)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	d := Diagnosis{
+		ID: "dg_1", IncidentID: "inc_1", TenantID: "t1", Summary: "crash loop",
+		Hypotheses: []Hypothesis{{Cause: "bad config", Confidence: ConfidenceHigh, Supporting: []string{"backoff"}}},
+		RecommendedAction: "RolloutRestart", RecommendedActionable: true,
+		RecommendedTarget: &TargetRef{Kind: "Deployment", Namespace: "web", Name: "api"},
+		Source:            "deterministic", CreatedAt: time.Now(),
+	}
+	if err := store.Put(ctx, d); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	// Upsert (one per incident): a second Put replaces, not duplicates.
+	d.Summary = "updated"
+	if err := store.Put(ctx, d); err != nil {
+		t.Fatalf("re-put: %v", err)
+	}
+	got, err := store.GetByIncident(ctx, "t1", "inc_1")
+	if err != nil || got.Summary != "updated" || got.RecommendedTarget == nil || got.RecommendedTarget.Name != "api" {
+		t.Fatalf("round-trip lost data: %+v (err %v)", got, err)
+	}
+	if _, err := store.GetByIncident(ctx, "t2", "inc_1"); err != ErrNotFound {
+		t.Fatalf("cross-tenant read should be ErrNotFound, got %v", err)
+	}
+}
+
 func TestMongoAuditAppendAndScope(t *testing.T) {
 	ctx, _, _, audit := mongoStores(t)
 	_ = audit.Append(ctx, AuditEvent{ID: "a1", TenantID: "t1", At: time.Now(), Actor: "x", Event: "proposal.created"})

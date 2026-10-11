@@ -26,11 +26,17 @@ Slice A (detection) — done & tested on this branch:
 - [x] Defense-in-depth redaction at the control-plane ingestion boundary (not just the agent).
 - [x] Incident API (list + get), tenant-scoped; unit-tested + runtime E2E (create → dedup → resolve → redaction).
 
-Slice B (remaining in M2) — not started:
+Slice B (AI root-cause analysis) — done & tested on this branch:
+- [x] **AI RCA** attaches an evidence-backed `Diagnosis` to an incident (summary, measured observed-facts, ranked hypotheses with supporting/contradicting evidence, recommended action, risks, verification criteria, rollback, confidence). Facts vs. inferred hypotheses kept distinct.
+- [x] **Provider abstraction** (`Diagnoser`): a deterministic diagnoser (always on, default, covers the 5 detected types) + an opt-in external-AI diagnoser (OpenAI/OpenRouter-style, env-gated). External AI disabled unless configured; on any error/invalid output the service **falls back** to deterministic (graceful degradation).
+- [x] **Safety**: AI returns schema-validated structured JSON only — never shell/patches; a recommended executable action must be a known action type and is **forced** onto the incident's own workload (a hallucinated action/target is neutralised to advisory "investigate"). A diagnosis NEVER creates/authorizes a remediation — the policy-checked proposal+approval path is still required. Telemetry is wrapped as untrusted DATA (prompt-injection hardening) and re-redacted before inference. Model/promptVersion/latency recorded.
+- [x] Durable `DiagnosisStore` (mem + Mongo, one-per-incident upsert, tenant-scoped). Endpoints `POST /incidents/{id}/diagnose` + `GET /incidents/{id}/diagnosis`. Surfaced in the dashboard (incidents view → "diagnose" → readable RCA). Tested: deterministic per-type, LLM parse/validate/fallback/injection (stubbed chat, no network), forged-action/target rejection, Mongo round-trip, HTTP E2E; dashboard proxy unit-tested.
+
+Slice C (remaining detection work in M2) — not started:
 - [ ] Probe-failure + missing-telemetry/agent-down detectors.
 - [ ] Cross-signal correlation (group by node/namespace/dependency); cascading-failure + symptom-vs-cause heuristics.
-- [ ] Explicit confidence field; maintenance-window suppression; alert inhibition.
-- [ ] **AI RCA path** emitting schema-validated structured proposals (never free-form patches/shell); provider abstraction + redaction + "telemetry is data, not instructions".
+- [ ] Maintenance-window suppression; alert inhibition.
+- [ ] Evaluation harness measuring diagnostic quality / false-diagnosis rate against a labelled set (spec §15, §21).
 
 **Live-cluster validation (2026-10-11):** M1–M3 were exercised end-to-end on a
 real `kind` cluster (Kubernetes v1.31.0) with a Mongo-backed control plane —

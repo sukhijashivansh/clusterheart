@@ -2774,7 +2774,7 @@ function renderIncidents() {
   const q = ($("#sre-inc-search").value || "").toLowerCase();
   const rows = (sreState._incidents || []).filter(i =>
     !q || [i.type, i.workload, i.namespace, i.title].some(x => String(x || "").toLowerCase().includes(q)));
-  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="8" class="dim" style="padding:14px">no incidents</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="9" class="dim" style="padding:14px">no incidents</td></tr>`; return; }
   tbody.innerHTML = rows.map(i => `
     <tr class="sre-row" data-id="${sreEsc(i.id)}">
       <td>${sevBadge(i.severity)}</td>
@@ -2785,11 +2785,59 @@ function renderIncidents() {
       <td class="dim">${sreTime(i.firstSeen)}</td>
       <td class="dim">${sreTime(i.lastSeen)}</td>
       <td>${statusBadge(i.status)}</td>
+      <td class="act"><button class="btn sre-diagnose" data-id="${sreEsc(i.id)}">diagnose</button></td>
     </tr>`).join("");
-  $$("#sre-inc-tbody .sre-row").forEach(tr => tr.addEventListener("click", () => {
+  $$("#sre-inc-tbody .sre-row").forEach(tr => tr.addEventListener("click", e => {
+    if (e.target.closest("button")) return;
     const inc = (sreState._incidents || []).find(x => x.id === tr.dataset.id);
     if (inc) openModal(`incident · ${inc.type}`, JSON.stringify(inc, null, 2));
   }));
+  $$("#sre-inc-tbody .sre-diagnose").forEach(b => b.addEventListener("click", () => diagnoseIncident(b.dataset.id, b)));
+}
+
+// diagnoseIncident runs AI root-cause analysis for an incident and renders the
+// evidence-backed diagnosis. Advisory only — it does not create a remediation.
+async function diagnoseIncident(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "diagnosing…"; }
+  try {
+    const r = await fetch(`/api/sre/incidents/${encodeURIComponent(id)}/diagnose`, { method: "POST" });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `${r.status}`);
+    openModal("root-cause analysis", formatDiagnosis(await r.json()));
+  } catch (e) {
+    setMsg("diagnose failed: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "diagnose"; }
+  }
+}
+
+// formatDiagnosis renders a Diagnosis as readable text for the <pre> modal,
+// keeping measured facts and inferred hypotheses clearly separated.
+function formatDiagnosis(d) {
+  const L = [];
+  const src = d.source === "llm" ? `AI (${d.model || "llm"}, ${d.promptVersion || ""})` : "deterministic rules";
+  L.push(`SUMMARY`, `  ${d.summary || "—"}`, "");
+  L.push(`SOURCE: ${src}   CONFIDENCE: ${(d.confidence || "—").toUpperCase()}` + (d.latencyMs ? `   (${d.latencyMs} ms)` : ""), "");
+  L.push("OBSERVED FACTS (measured)");
+  (d.observedFacts || []).forEach(f => L.push(`  • ${f}`));
+  L.push("", "HYPOTHESES (inferred, most likely first)");
+  (d.hypotheses || []).forEach((h, i) => {
+    L.push(`  ${i + 1}. [${(h.confidence || "?").toUpperCase()}] ${h.cause}`);
+    (h.supporting || []).forEach(s => L.push(`        + ${s}`));
+    (h.contradicting || []).forEach(s => L.push(`        - ${s}`));
+  });
+  L.push("", "RECOMMENDED");
+  if (d.recommendedActionable) {
+    const t = d.recommendedTarget || {};
+    L.push(`  action: ${d.recommendedAction}  →  ${t.kind}/${t.namespace}/${t.name}`);
+    L.push(`  (advisory — still requires a policy-checked proposal + approval; it is NOT auto-applied)`);
+  } else {
+    L.push(`  ${d.recommendedAction || "investigate"} (no automatic action)`);
+  }
+  L.push("", "RISKS", `  ${d.risks || "—"}`);
+  L.push("", "VERIFICATION");
+  (d.verificationCriteria || []).forEach(v => L.push(`  • ${v}`));
+  L.push("", "ROLLBACK", `  ${d.rollback || "—"}`);
+  return L.join("\n");
 }
 
 // ---------- remediation approval queue ----------
