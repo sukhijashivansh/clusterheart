@@ -92,6 +92,16 @@ func (s *mongoRemediationStore) ActiveCount(ctx context.Context, clusterID strin
 	return int(n), err
 }
 
+func (s *mongoRemediationStore) RecentFailuresForTarget(ctx context.Context, clusterID string, t TargetRef, since time.Time) (int, error) {
+	n, err := s.coll.CountDocuments(ctx, bson.M{
+		"clusterId": clusterID, "target.kind": t.Kind,
+		"target.namespace": t.Namespace, "target.name": t.Name,
+		"status":               string(StatusFailed),
+		"execution.finishedAt": bson.M{"$gte": since},
+	})
+	return int(n), err
+}
+
 func (s *mongoRemediationStore) LastExecutionForTarget(ctx context.Context, clusterID string, t TargetRef) (*time.Time, error) {
 	var p RemediationProposal
 	err := s.coll.FindOne(ctx,

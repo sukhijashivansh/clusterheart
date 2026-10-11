@@ -18,19 +18,27 @@ type Policy struct {
 	MaxConcurrent         int                 `json:"maxConcurrent" bson:"maxConcurrent"`
 	PerWorkloadCooldown   time.Duration       `json:"perWorkloadCooldown" bson:"perWorkloadCooldown"`
 	Paused                bool                `json:"paused" bson:"paused"` // emergency kill switch
+	// Circuit breaker / loop detection (spec §8): once a target has accumulated
+	// CircuitBreakerFailures failed remediations within CircuitBreakerWindow, new
+	// proposals for that target are denied until the window passes — so a
+	// recurring incident cannot drive an endless restart loop. Zero disables it.
+	CircuitBreakerFailures int           `json:"circuitBreakerFailures" bson:"circuitBreakerFailures"`
+	CircuitBreakerWindow   time.Duration `json:"circuitBreakerWindow" bson:"circuitBreakerWindow"`
 }
 
 // DefaultPolicy returns the safe default for a new tenant.
 func DefaultPolicy(tenantID string) Policy {
 	return Policy{
-		TenantID:              tenantID,
-		Mode:                  ModeApprovalRequired,
-		AllowedActions:        map[ActionType]bool{ActionRolloutRestart: true},
-		NamespaceAllowlist:    nil, // nothing actionable until an operator opts in
-		ProtectedEnvironments: []string{"production", "prod"},
-		MaxConcurrent:         1,
-		PerWorkloadCooldown:   10 * time.Minute,
-		Paused:                false,
+		TenantID:               tenantID,
+		Mode:                   ModeApprovalRequired,
+		AllowedActions:         map[ActionType]bool{ActionRolloutRestart: true},
+		NamespaceAllowlist:     nil, // nothing actionable until an operator opts in
+		ProtectedEnvironments:  []string{"production", "prod"},
+		MaxConcurrent:          1,
+		PerWorkloadCooldown:    10 * time.Minute,
+		Paused:                 false,
+		CircuitBreakerFailures: 3,
+		CircuitBreakerWindow:   30 * time.Minute,
 	}
 }
 
@@ -55,9 +63,10 @@ func (p Policy) isProtected(env string) bool {
 // policyInput carries the live state the engine needs for rate/concurrency/
 // cooldown checks (supplied by the service from the store).
 type policyInput struct {
-	environment   string
-	activeCount   int
-	lastForTarget *time.Time
+	environment    string
+	activeCount    int
+	lastForTarget  *time.Time
+	recentFailures int // failed remediations for this target within the breaker window
 }
 
 // policyEngine evaluates proposals deterministically. It never calls an LLM.
@@ -86,6 +95,9 @@ func (policyEngine) Evaluate(pol Policy, action ActionType, target TargetRef, in
 	}
 	if pol.PerWorkloadCooldown > 0 && in.lastForTarget != nil && now.Sub(*in.lastForTarget) < pol.PerWorkloadCooldown {
 		deny("cooldown is active for this target")
+	}
+	if pol.CircuitBreakerFailures > 0 && in.recentFailures >= pol.CircuitBreakerFailures {
+		deny("circuit breaker is open: too many recent failed remediations for this target")
 	}
 
 	mode := pol.Mode

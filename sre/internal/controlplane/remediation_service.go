@@ -55,7 +55,13 @@ func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID s
 	}
 	active, _ := s.rem.ActiveCount(ctx, clusterID)
 	last, _ := s.rem.LastExecutionForTarget(ctx, clusterID, target)
-	return s.engine.Evaluate(pol, action, target, policyInput{environment: env, activeCount: active, lastForTarget: last}, s.now())
+	now := s.now()
+	failures := 0
+	if pol.CircuitBreakerFailures > 0 && pol.CircuitBreakerWindow > 0 {
+		failures, _ = s.rem.RecentFailuresForTarget(ctx, clusterID, target, now.Add(-pol.CircuitBreakerWindow))
+	}
+	return s.engine.Evaluate(pol, action, target,
+		policyInput{environment: env, activeCount: active, lastForTarget: last, recentFailures: failures}, now)
 }
 
 // CreateProposal validates and records a proposal, evaluates policy, and either

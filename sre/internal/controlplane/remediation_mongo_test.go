@@ -90,6 +90,24 @@ func TestMongoProposalRoundTripAndQueries(t *testing.T) {
 	if err != nil || len(ps) != 1 {
 		t.Fatalf("want 1 executed proposal, got %d (err %v)", len(ps), err)
 	}
+
+	// Circuit-breaker input: a failed proposal for the target is counted within
+	// the window and excluded when the window starts after it finished.
+	failFin := time.Now().Truncate(time.Millisecond)
+	if err := rem.Create(ctx, &RemediationProposal{
+		ID: "rem_2", IncidentID: "inc_1", TenantID: "t1", ClusterID: "cluA",
+		Action: ActionRolloutRestart, Target: tgt, Status: StatusFailed,
+		CreatedAt: time.Now(),
+		Execution: &ActionExecution{StartedAt: failFin, FinishedAt: failFin, Success: false, Error: "boom"},
+	}); err != nil {
+		t.Fatalf("create failed proposal: %v", err)
+	}
+	if n, _ := rem.RecentFailuresForTarget(ctx, "cluA", tgt, failFin.Add(-time.Minute)); n != 1 {
+		t.Fatalf("want 1 recent failure in window, got %d", n)
+	}
+	if n, _ := rem.RecentFailuresForTarget(ctx, "cluA", tgt, failFin.Add(time.Minute)); n != 0 {
+		t.Fatalf("want 0 failures outside window, got %d", n)
+	}
 }
 
 func TestMongoPolicyDefaultAndPersist(t *testing.T) {

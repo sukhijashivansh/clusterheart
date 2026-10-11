@@ -59,9 +59,14 @@ Slice C (durable state) — done & tested on this branch:
 - [x] Integration-tested against a real MongoDB (gated on `MONGO_TEST_URI`, skipped in the hermetic suite): proposal round-trip + tenant scoping, `ActiveCount`, `LastExecutionForTarget` sort, `map[ActionType]bool` policy round-trip, audit scoping.
 
 ## Milestone 4 — Guarded Autonomy
-- [ ] Allowlisted automatic execution; circuit breakers, loop detection, cooldowns.
-- [ ] Emergency pause / kill switch (org/cluster/workload); global automation pause.
-- [ ] Failure-injection tests for the catalog.
+Slice A (guardrails) — done & tested on this branch:
+- [x] Allowlisted automatic execution (mode=auto → proposal created pre-approved → the in-cluster controller applies it; established in M3 slice B). Per-workload cooldown (M3 slice A) and max-concurrent caps already enforced deterministically.
+- [x] **Circuit breaker / loop detection**: once a target accumulates N failed remediations within a window (default 3 / 30m, policy-configurable), further proposals for that target are denied — a recurring incident can no longer drive an endless restart loop. Store-backed failure count (mem + Mongo), evaluated in the deterministic engine; unit-tested (breaker opens, other targets unaffected) + Mongo-integration-tested.
+- [x] Emergency pause / kill switch at the **tenant** level + global per-tenant automation pause (M3 slice A).
+
+Slice B (remaining) — not started:
+- [ ] Cluster- and workload-scoped kill switches (currently tenant-scoped only).
+- [ ] Failure-injection test matrix across the catalog (spec §19 scenarios) as the action set grows beyond RolloutRestart.
 
 ## Milestone 5 — Advanced
 - [ ] Multi-cluster incident correlation; SLOs/error budgets; runbooks; notifications (Slack/PagerDuty/email).

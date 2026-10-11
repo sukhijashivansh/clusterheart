@@ -26,13 +26,15 @@ type decisionRequest struct {
 }
 
 type policyRequest struct {
-	Mode                       Mode         `json:"mode"`
-	AllowedActions             []ActionType `json:"allowedActions"`
-	NamespaceAllowlist         []string     `json:"namespaceAllowlist"`
-	ProtectedEnvironments      []string     `json:"protectedEnvironments"`
-	MaxConcurrent              int          `json:"maxConcurrent"`
-	PerWorkloadCooldownSeconds int          `json:"perWorkloadCooldownSeconds"`
-	Paused                     bool         `json:"paused"`
+	Mode                        Mode         `json:"mode"`
+	AllowedActions              []ActionType `json:"allowedActions"`
+	NamespaceAllowlist          []string     `json:"namespaceAllowlist"`
+	ProtectedEnvironments       []string     `json:"protectedEnvironments"`
+	MaxConcurrent               int          `json:"maxConcurrent"`
+	PerWorkloadCooldownSeconds  int          `json:"perWorkloadCooldownSeconds"`
+	Paused                      bool         `json:"paused"`
+	CircuitBreakerFailures      int          `json:"circuitBreakerFailures"`
+	CircuitBreakerWindowSeconds int          `json:"circuitBreakerWindowSeconds"`
 }
 
 // --- handlers ------------------------------------------------------------
@@ -179,14 +181,16 @@ func (s *Server) handlePutPolicy(w http.ResponseWriter, r *http.Request) {
 		allowed[a] = true
 	}
 	pol := Policy{
-		TenantID:              tenantID,
-		Mode:                  req.Mode,
-		AllowedActions:        allowed,
-		NamespaceAllowlist:    req.NamespaceAllowlist,
-		ProtectedEnvironments: req.ProtectedEnvironments,
-		MaxConcurrent:         req.MaxConcurrent,
-		PerWorkloadCooldown:   time.Duration(req.PerWorkloadCooldownSeconds) * time.Second,
-		Paused:                req.Paused,
+		TenantID:               tenantID,
+		Mode:                   req.Mode,
+		AllowedActions:         allowed,
+		NamespaceAllowlist:     req.NamespaceAllowlist,
+		ProtectedEnvironments:  req.ProtectedEnvironments,
+		MaxConcurrent:          req.MaxConcurrent,
+		PerWorkloadCooldown:    time.Duration(req.PerWorkloadCooldownSeconds) * time.Second,
+		Paused:                 req.Paused,
+		CircuitBreakerFailures: req.CircuitBreakerFailures,
+		CircuitBreakerWindow:   time.Duration(req.CircuitBreakerWindowSeconds) * time.Second,
 	}
 	if err := s.remediation.PutPolicy(r.Context(), pol, "operator:api"); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not save policy")

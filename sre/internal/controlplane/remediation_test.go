@@ -106,6 +106,61 @@ func TestApprovalThenControllerExecutes(t *testing.T) {
 	}
 }
 
+func TestCircuitBreakerOpensAfterRepeatedFailures(t *testing.T) {
+	svc, inc := setupRemediation(t, "staging")
+	ctx := context.Background()
+	// Isolate the breaker from the per-workload cooldown and concurrency cap so
+	// the test exercises only the failure-count guard.
+	pol := DefaultPolicy("t1")
+	pol.NamespaceAllowlist = []string{"web"}
+	pol.PerWorkloadCooldown = 0
+	pol.MaxConcurrent = 0
+	pol.CircuitBreakerFailures = 3
+	pol.CircuitBreakerWindow = 30 * time.Minute
+	if err := svc.PutPolicy(ctx, pol, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Three failed remediations for the same target.
+	for i := 0; i < 3; i++ {
+		p, err := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
+		if err != nil {
+			t.Fatalf("iter %d create: %v", i, err)
+		}
+		if p.Status != StatusProposed {
+			t.Fatalf("iter %d: want proposed, got %s (%v)", i, p.Status, p.Decision.Reasons)
+		}
+		if _, err := svc.Approve(ctx, "t1", p.ID, "boss"); err != nil {
+			t.Fatalf("iter %d approve: %v", i, err)
+		}
+		now := time.Now()
+		if _, err := svc.ReportResult(ctx, testCluster, p.ID, contract.ActionResult{
+			Success: false, StartedAt: now, FinishedAt: now, Error: "boom",
+		}); err != nil {
+			t.Fatalf("iter %d report: %v", i, err)
+		}
+	}
+
+	// The fourth proposal for the same target must trip the breaker.
+	p, err := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, deploymentTarget, nil, "", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Status != StatusBlocked || !containsSubstr(p.Decision.Reasons, "circuit breaker") {
+		t.Fatalf("want circuit-breaker block, got %s %v", p.Status, p.Decision.Reasons)
+	}
+
+	// A different target is unaffected by this target's breaker.
+	other := TargetRef{Kind: "Deployment", Namespace: "web", Name: "other"}
+	p2, err := svc.CreateProposal(ctx, "t1", inc, ActionRolloutRestart, other, nil, "", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.Status != StatusProposed {
+		t.Fatalf("other target should not be blocked, got %s %v", p2.Status, p2.Decision.Reasons)
+	}
+}
+
 func TestControllerFailureReportMarksFailed(t *testing.T) {
 	svc, inc := setupRemediation(t, "staging")
 	allowNamespace(t, svc, ModeApprovalRequired)

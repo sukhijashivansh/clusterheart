@@ -35,6 +35,9 @@ type RemediationStore interface {
 	List(ctx context.Context, tenantID, status string) ([]RemediationProposal, error)
 	ActiveCount(ctx context.Context, clusterID string) (int, error)
 	LastExecutionForTarget(ctx context.Context, clusterID string, t TargetRef) (*time.Time, error)
+	// RecentFailuresForTarget counts failed remediations for a target whose
+	// execution finished at or after `since` (circuit-breaker input).
+	RecentFailuresForTarget(ctx context.Context, clusterID string, t TargetRef, since time.Time) (int, error)
 }
 
 // --- in-memory implementations ------------------------------------------
@@ -103,6 +106,21 @@ func (s *memRemediationStore) ActiveCount(_ context.Context, clusterID string) (
 	for _, p := range s.m {
 		if p.ClusterID == clusterID && p.Status == StatusApproved && p.Execution == nil {
 			n++ // approved but not yet finished == in flight
+		}
+	}
+	return n, nil
+}
+
+func (s *memRemediationStore) RecentFailuresForTarget(_ context.Context, clusterID string, t TargetRef, since time.Time) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	n := 0
+	for _, p := range s.m {
+		if p.ClusterID != clusterID || p.Target != t || p.Status != StatusFailed || p.Execution == nil {
+			continue
+		}
+		if !p.Execution.FinishedAt.Before(since) {
+			n++
 		}
 	}
 	return n, nil
