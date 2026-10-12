@@ -100,7 +100,8 @@ matching its design system (no new framework).
 - [x] Server-side proxy (`app/sre.go`, `/api/sre/*`): keeps the control-plane **admin token server-side** (never in the renderer) and **pins the tenant** (a forged `tenantId` is ignored); unconfigured → explicit "not configured" notice, never fabricated data; upstream status/errors passed through.
 - [x] Tested: proxy unit tests (token-not-leaked, tenant-pinned, approve forwarding, unknown-action reject, 503 when unconfigured, upstream error passthrough) + a live run of the real dashboard binary against the real control plane (config/incidents/proposals/approve/pause/resume/audit all verified over HTTP).
 - [x] AI-diagnosis rendering + **one-click "propose fix"**: the incidents view can run RCA and, when the diagnosis is actionable, create a policy-checked proposal in one click (`POST /incidents/{id}/propose` — pre-fills action+target from the diagnosis but still goes through CreateProposal, so policy/approval are never bypassed; non-actionable → 422). Closes the loop diagnose → propose → approve → execute from the UI. HTTP-tested (actionable → 201 proposed; ImagePullBackOff → 422).
-- [ ] Slice C (planned): live execution status streaming, before/after diff, dry-run output panel, cluster/global overview.
+- [x] **Global Overview** (§14) + self-stats (§17): `GET /api/v1/stats` aggregates tenant-scoped counts (clusters total/connected, incidents by status/severity/type, proposals by status, policy mode/paused) — all measured. Dashboard "SRE overview" view renders it as cards. HTTP-tested.
+- [ ] Slice D (planned): live execution status streaming, before/after diff, dry-run output panel.
 
 ## Operational modes (spec §20) — rollout
 Observe (M1) → Diagnose (M2) → Recommend (M2/3) → Approval-Required (M3) → Guarded Autonomy (M4) → Emergency Pause (M4).

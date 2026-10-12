@@ -103,6 +103,10 @@ func (s *server) handleSREConfig(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+func (s *server) handleSREStats(w http.ResponseWriter, r *http.Request) {
+	s.sreForward(w, r, http.MethodGet, "/api/v1/stats", nil, nil)
+}
+
 func (s *server) handleSREIncidents(w http.ResponseWriter, r *http.Request) {
 	extra := url.Values{}
 	if st := strings.TrimSpace(r.URL.Query().Get("status")); st != "" {

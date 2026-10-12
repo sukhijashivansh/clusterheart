@@ -2507,6 +2507,7 @@ function switchView(v) {
   if (v === "load") populateTraffic();
   if (v === "nodes") armCapacityCooldown();
   if (v === "rightsizing") loadRightsizing();
+  if (v === "sre-overview") { wireSRE(); loadSREOverview(); }
   if (v === "incidents") { wireSRE(); loadIncidents(); }
   if (v === "remediation") { wireSRE(); loadRemediation(); }
 }
@@ -2951,9 +2952,57 @@ async function togglePause() {
   } catch (e) { setMsg("could not change pause state: " + e.message); }
 }
 
+// ---------- SRE overview ----------
+async function loadSREOverview() {
+  const notice = $("#sre-ov-notice"), cards = $("#sre-ov-cards"), meta = $("#sre-ov-meta");
+  const cfg = await sreConfig();
+  if (!cfg.configured) { cards.innerHTML = ""; meta.textContent = ""; showNotice(notice, "warn", sreUnconfiguredMsg()); return; }
+  hideNotice(notice);
+  meta.textContent = "loading…";
+  try {
+    const s = await jget("/api/sre/stats");
+    meta.textContent = `tenant ${cfg.tenantId}`;
+    renderOverview(s);
+  } catch (e) {
+    cards.innerHTML = ""; meta.textContent = "";
+    showNotice(notice, "err", "could not load overview: " + e.message);
+  }
+}
+function renderOverview(s) {
+  const cl = s.clusters || {}, inc = s.incidents || {}, pr = s.proposals || {}, pol = s.policy || {};
+  const sev = inc.openBySeverity || {}, pst = pr.byStatus || {};
+  const kv = (label, val, cls) => `<div class="sre-ov-kv"><span class="sre-ov-n ${cls || ""}">${val}</span><span class="sre-ov-l">${label}</span></div>`;
+  const byType = Object.entries(inc.openByType || {}).sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => `<div class="sre-ov-row"><span>${sreEsc(t)}</span><span class="dim">${n}</span></div>`).join("") || `<div class="dim">none</div>`;
+  const openCount = (inc.byStatus || {}).open || 0;
+  const pausedBadge = pol.paused ? `<span class="sre-badge st-blocked">PAUSED</span>` : `<span class="sre-badge st-executed">${sreEsc(pol.mode || "—")}</span>`;
+  $("#sre-ov-cards").innerHTML = `
+    <div class="finops-card"><div class="card-head"><span class="title">clusters</span></div>
+      <div class="card-body sre-ov-grid">
+        ${kv("connected", (cl.connected || 0), "ok")}
+        ${kv("registered", (cl.total || 0))}
+        ${kv("remediation", pausedBadge)}
+      </div></div>
+    <div class="finops-card"><div class="card-head"><span class="title">open incidents</span></div>
+      <div class="card-body sre-ov-grid">
+        ${kv("total open", openCount, openCount ? "bad" : "ok")}
+        ${kv("high", (sev.high || 0), (sev.high ? "bad" : ""))}
+        ${kv("medium", (sev.medium || 0), (sev.medium ? "warn" : ""))}
+      </div>
+      <div class="sre-ov-list">${byType}</div></div>
+    <div class="finops-card"><div class="card-head"><span class="title">remediation queue</span></div>
+      <div class="card-body sre-ov-grid">
+        ${kv("proposed", (pst.proposed || 0), (pst.proposed ? "warn" : ""))}
+        ${kv("executed", (pst.executed || 0), "ok")}
+        ${kv("failed", (pst.failed || 0), (pst.failed ? "bad" : ""))}
+        ${kv("blocked", (pst.blocked || 0))}
+      </div></div>`;
+}
+
 function wireSRE() {
   if (sreWired) return;
   sreWired = true;
+  $("#sre-ov-refresh").addEventListener("click", loadSREOverview);
   $("#sre-inc-refresh").addEventListener("click", loadIncidents);
   $("#sre-inc-status").addEventListener("change", loadIncidents);
   $("#sre-inc-search").addEventListener("input", renderIncidents);

@@ -75,6 +75,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
+	mux.HandleFunc("GET /api/v1/stats", s.requireAdmin(s.handleStats))
 	// AI root-cause analysis (deterministic by default; external AI opt-in).
 	mux.HandleFunc("POST /api/v1/incidents/{id}/diagnose", s.requireAdmin(s.handleDiagnose))
 	mux.HandleFunc("GET /api/v1/incidents/{id}/diagnosis", s.requireAdmin(s.handleGetDiagnosis))
@@ -410,6 +411,46 @@ func (s *Server) sweepAgentHealth(ctx context.Context, now time.Time) {
 			})
 		}
 	}
+}
+
+// handleStats aggregates a tenant-scoped overview of the platform's own state
+// (spec §14 Global Overview / §17 self-observability) — all measured, nothing
+// fabricated.
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	ctx := r.Context()
+	clusters, _ := s.store.ListClusters(ctx, tenantID)
+	connected := 0
+	for _, c := range clusters {
+		if c.LastHeartbeat != nil && s.now().Sub(*c.LastHeartbeat) < staleAfter {
+			connected++
+		}
+	}
+	incs, _ := s.incidents.ListIncidents(ctx, tenantID, "")
+	incByStatus, incBySeverity, incByType := map[string]int{}, map[string]int{}, map[string]int{}
+	for _, i := range incs {
+		incByStatus[i.Status]++
+		if i.Status == "open" {
+			incBySeverity[i.Severity]++
+			incByType[string(i.Type)]++
+		}
+	}
+	props, _ := s.remediation.ListProposals(ctx, tenantID, "")
+	propByStatus := map[string]int{}
+	for _, p := range props {
+		propByStatus[string(p.Status)]++
+	}
+	pol, _ := s.remediation.GetPolicy(ctx, tenantID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clusters":  map[string]any{"total": len(clusters), "connected": connected},
+		"incidents": map[string]any{"total": len(incs), "byStatus": incByStatus, "openBySeverity": incBySeverity, "openByType": incByType},
+		"proposals": map[string]any{"total": len(props), "byStatus": propByStatus},
+		"policy":    map[string]any{"mode": pol.Mode, "paused": pol.Paused},
+	})
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {

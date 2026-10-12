@@ -264,3 +264,42 @@ func TestProposeFromDiagnosisHTTP(t *testing.T) {
 		t.Fatalf("propose(imagepull): want 422, got %d", code)
 	}
 }
+
+func TestStatsHTTP(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "tenantS", "eks")
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{
+			{Namespace: "web", Pod: "a", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"},
+			{Namespace: "web", Pod: "b", Owner: "Deployment/img", Container: "img", Type: contract.ProblemImagePullBackOff, Message: "y"},
+		},
+	}}}
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry want 202, got %d", code)
+	}
+	code, body := do(t, http.MethodGet, ts.URL+"/api/v1/stats?tenantId=tenantS", adminTok, "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("stats want 200, got %d: %s", code, body)
+	}
+	var st struct {
+		Clusters  map[string]int            `json:"clusters"`
+		Incidents map[string]map[string]int `json:"incidents"`
+	}
+	// incidents has mixed types; decode loosely.
+	var raw map[string]any
+	_ = json.Unmarshal(body, &raw)
+	_ = json.Unmarshal(body, &st)
+	if st.Clusters["total"] != 1 {
+		t.Fatalf("want 1 cluster, got %v", st.Clusters)
+	}
+	inc := raw["incidents"].(map[string]any)
+	sev := inc["openBySeverity"].(map[string]any)
+	if int(sev["high"].(float64)) != 1 || int(sev["medium"].(float64)) != 1 {
+		t.Fatalf("expected 1 high + 1 medium open, got %v", sev)
+	}
+	if int(inc["total"].(float64)) != 2 {
+		t.Fatalf("expected 2 incidents, got %v", inc["total"])
+	}
+}

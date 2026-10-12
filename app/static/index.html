@@ -39,6 +39,7 @@
     <a href="#" class="nav" data-view="finops">finops</a>
     <a href="#" class="nav" data-view="load">traffic</a>
     <a href="#" class="nav" data-view="gemini">AI</a>
+    <a href="#" class="nav" data-view="sre-overview">SRE overview</a>
     <a href="#" class="nav" data-view="incidents">incidents</a>
     <a href="#" class="nav" data-view="remediation">remediation</a>
 
@@ -335,6 +336,18 @@
         <button id="gemini-send" class="btn primary">send</button>
       </div>
       <div id="gemini-err" class="err"></div>
+    </section>
+
+    <!-- SRE OVERVIEW (global summary) -->
+    <section id="view-sre-overview" class="view">
+      <div class="toolbar">
+        <span class="title">autonomous SRE — overview</span>
+        <span class="grow"></span>
+        <span id="sre-ov-meta" class="dim"></span>
+        <button id="sre-ov-refresh" class="btn">refresh</button>
+      </div>
+      <div id="sre-ov-notice" class="panel hidden"></div>
+      <div id="sre-ov-cards" class="scroll-y"></div>
     </section>
 
     <!-- INCIDENTS VIEW (Autonomous SRE control plane) -->
