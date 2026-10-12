@@ -84,8 +84,11 @@ Slice B — partly done on this branch:
 Slice A (notifications) — done & tested on this branch:
 - [x] **Notifications**: `Notifier` abstraction + Slack incoming-webhook and generic JSON webhook (env-gated: `SRE_SLACK_WEBHOOK_URL`, `SRE_WEBHOOK_URL`; no-op when unset). Fire-and-forget (never blocks/fails detection or remediation; delivery failures logged). Emitted on **incident.opened** (deduped — once per incident via the store's created-signal, not per occurrence → no storms) and on **remediation.executed/failed**. Tested: Slack + generic send (httptest), no-op default, once-per-incident dedup.
 
-Slice B (remaining) — not started:
-- [ ] Multi-cluster incident correlation; SLOs/error budgets; runbooks; PagerDuty/email routing + maintenance-window muting.
+Slice B (runbooks) — done & tested on this branch:
+- [x] **Runbooks** (§12): operator-authored, versioned playbooks (one per tenant+incidentType → typed action + params + enabled flag). `GET/PUT /api/v1/runbooks`; action+params validated on save (unknown action rejected); version auto-increments. An enabled runbook takes precedence over the AI recommendation in propose-from-diagnosis, but the **target is always the incident's own workload** and proposing still flows through policy-checked CreateProposal — a runbook cannot bypass policy/approval. Durable (mem + Mongo). HTTP-tested (reject bad action, versioning, Scale-runbook overrides AI's RolloutRestart).
+
+Slice C (remaining) — not started:
+- [ ] Multi-cluster incident correlation; SLOs/error budgets; PagerDuty/email routing + maintenance-window muting.
 - [ ] FinOps integration (reuse existing cost engine); diagnostic-quality eval harness.
 
 ## Milestone 6 — Production Hardening

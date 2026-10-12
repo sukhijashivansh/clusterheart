@@ -18,7 +18,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := NewServer(NewMemStore(), NewMemIncidentStore(),
 		NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(),
-		NewMemDiagnosisStore(), adminTok, nil)
+		NewMemDiagnosisStore(), NewMemRunbookStore(), adminTok, nil)
 	return httptest.NewServer(srv.Routes())
 }
 
@@ -301,5 +301,57 @@ func TestStatsHTTP(t *testing.T) {
 	}
 	if int(inc["total"].(float64)) != 2 {
 		t.Fatalf("expected 2 incidents, got %v", inc["total"])
+	}
+}
+
+func TestRunbookSaveValidateAndPrecedence(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "tenantR", "eks")
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{{Namespace: "web", Pod: "a", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}},
+	}}}
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry want 202, got %d", code)
+	}
+	// Allow the namespace + Scale action so a runbook-driven Scale isn't blocked.
+	pol := map[string]any{"mode": "approval-required", "allowedActions": []string{"RolloutRestart", "Scale"},
+		"namespaceAllowlist": []string{"web"}, "maxConcurrent": 5, "maxReplicas": 10}
+	if code, _ := do(t, http.MethodPut, ts.URL+"/api/v1/policy?tenantId=tenantR", adminTok, "", pol); code != http.StatusOK {
+		t.Fatal("policy put failed")
+	}
+
+	// Invalid runbook (unknown action) is rejected.
+	bad := map[string]any{"incidentType": "CrashLoopBackOff", "action": "Nuke", "enabled": true}
+	if code, _ := do(t, http.MethodPut, ts.URL+"/api/v1/runbooks?tenantId=tenantR", adminTok, "", bad); code != http.StatusBadRequest {
+		t.Fatalf("unknown action runbook should be 400, got %d", code)
+	}
+	// Valid runbook: CrashLoopBackOff → Scale to 4 (overrides the AI's RolloutRestart).
+	rb := map[string]any{"incidentType": "CrashLoopBackOff", "action": "Scale", "params": map[string]string{"replicas": "4"}, "enabled": true}
+	code, body := do(t, http.MethodPut, ts.URL+"/api/v1/runbooks?tenantId=tenantR", adminTok, "", rb)
+	if code != http.StatusOK {
+		t.Fatalf("valid runbook put want 200, got %d: %s", code, body)
+	}
+	var saved Runbook
+	_ = json.Unmarshal(body, &saved)
+	if saved.Version != 1 || saved.ID == "" {
+		t.Fatalf("runbook not versioned: %+v", saved)
+	}
+
+	// Find the incident, then propose — the runbook must win over the AI rec.
+	_, ib := do(t, http.MethodGet, ts.URL+"/api/v1/incidents?tenantId=tenantR&status=open", adminTok, "", nil)
+	var il struct {
+		Incidents []Incident `json:"incidents"`
+	}
+	_ = json.Unmarshal(ib, &il)
+	if len(il.Incidents) != 1 {
+		t.Fatalf("want 1 incident, got %d", len(il.Incidents))
+	}
+	_, pb := do(t, http.MethodPost, ts.URL+"/api/v1/incidents/"+il.Incidents[0].ID+"/propose?tenantId=tenantR", adminTok, "", nil)
+	var p RemediationProposal
+	_ = json.Unmarshal(pb, &p)
+	if p.Action != ActionScale || p.Params["replicas"] != "4" || p.Target.Name != "api" {
+		t.Fatalf("runbook should drive a Scale(4) on Deployment/api, got %+v", p)
 	}
 }

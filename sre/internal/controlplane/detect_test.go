@@ -126,7 +126,7 @@ func TestAgentDownSweep(t *testing.T) {
 	store := NewMemStore()
 	inc := NewMemIncidentStore()
 	srv := NewServer(store, inc, NewMemRemediationStore(), NewMemPolicyStore(),
-		NewMemAuditStore(), NewMemDiagnosisStore(), "admin", nil)
+		NewMemAuditStore(), NewMemDiagnosisStore(), NewMemRunbookStore(), "admin", nil)
 	ctx := context.Background()
 	now := time.Now()
 

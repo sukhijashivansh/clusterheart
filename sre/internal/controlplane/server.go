@@ -31,6 +31,7 @@ type Server struct {
 	engine      *Engine
 	remediation *remediationService
 	diagnosis   *diagnosisService
+	runbooks    RunbookStore
 	notifier    Notifier
 	adminToken  string
 	log         *slog.Logger
@@ -47,7 +48,7 @@ const agentDownAfter = 3 * time.Minute
 // remediation + diagnosis stores are injected so the caller can choose Mongo
 // (durable) or in-memory (local dev / tests). External AI for diagnosis is
 // opt-in via env (newLLMDiagnoser returns nil when unconfigured → deterministic).
-func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol PolicyStore, audit AuditStore, diag DiagnosisStore, adminToken string, log *slog.Logger) *Server {
+func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol PolicyStore, audit AuditStore, diag DiagnosisStore, runbooks RunbookStore, adminToken string, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -60,6 +61,7 @@ func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol P
 		engine:      newEngine(incidents, notifier, log),
 		remediation: remSvc,
 		diagnosis:   diagSvc,
+		runbooks:    runbooks,
 		notifier:    notifier,
 		adminToken:  adminToken,
 		log:         log,
@@ -92,6 +94,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/policy/pause", s.requireAdmin(s.handlePausePolicy))
 	mux.HandleFunc("POST /api/v1/policy/resume", s.requireAdmin(s.handleResumePolicy))
 	mux.HandleFunc("GET /api/v1/audit", s.requireAdmin(s.handleListAudit))
+	mux.HandleFunc("GET /api/v1/runbooks", s.requireAdmin(s.handleListRunbooks))
+	mux.HandleFunc("PUT /api/v1/runbooks", s.requireAdmin(s.handlePutRunbook))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/remediation-token", s.requireAdmin(s.handleMintRemediationToken))
 	// In-cluster remediation controller (separate remediate credential).
 	mux.HandleFunc("GET /api/v1/remediation/pending", s.requireRemediator(s.handlePendingRemediation))
@@ -335,18 +339,77 @@ func (s *Server) handleProposeFromDiagnosis(w http.ResponseWriter, r *http.Reque
 		writeErr(w, http.StatusInternalServerError, "could not diagnose incident")
 		return
 	}
-	if !dg.RecommendedActionable || dg.RecommendedTarget == nil {
+	// Default to the AI recommendation.
+	action, params, target := dg.RecommendedAction, map[string]string(nil), dg.RecommendedTarget
+	rationale := "from AI diagnosis: " + dg.Summary
+	actionable := dg.RecommendedActionable && dg.RecommendedTarget != nil
+
+	// An enabled operator runbook for this incident's type takes precedence. The
+	// target is always the incident's own workload (never runbook-supplied).
+	if s.runbooks != nil {
+		if inc, ierr := s.incidents.GetIncident(r.Context(), tenantID, id); ierr == nil {
+			if rb, rerr := s.runbooks.GetForType(r.Context(), tenantID, string(inc.Type)); rerr == nil && rb.Enabled {
+				kind, name := splitWorkload(inc.Workload)
+				action, params = string(rb.Action), rb.Params
+				target = &TargetRef{Kind: kind, Namespace: inc.Namespace, Name: name}
+				rationale = fmt.Sprintf("from runbook v%d (%s)", rb.Version, rb.IncidentType)
+				actionable = true
+			}
+		}
+	}
+	if !actionable || target == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no automatic action recommended for this incident; investigate")
 		return
 	}
 	p, err := s.remediation.CreateProposal(r.Context(), tenantID, id,
-		ActionType(dg.RecommendedAction), *dg.RecommendedTarget, nil,
-		"from AI diagnosis: "+dg.Summary, "operator:dashboard")
+		ActionType(action), *target, params, rationale, "operator:dashboard")
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, p)
+}
+
+func (s *Server) handleListRunbooks(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	rbs, err := s.runbooks.List(r.Context(), tenantID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not list runbooks")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runbooks": rbs})
+}
+
+func (s *Server) handlePutRunbook(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	var rb Runbook
+	if err := decode(r, &rb); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid runbook body")
+		return
+	}
+	rb.TenantID = tenantID
+	rb.UpdatedAt = s.now()
+	if rb.UpdatedBy == "" {
+		rb.UpdatedBy = "operator:api"
+	}
+	if err := validateRunbook(rb); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, err := s.runbooks.Upsert(r.Context(), rb)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not save runbook")
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
 }
 
 // RunAgentHealthSweeps periodically checks for clusters that have stopped
