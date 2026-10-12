@@ -121,3 +121,45 @@ func TestIncidentTenantIsolation(t *testing.T) {
 		t.Fatalf("GetIncident cross-tenant should be ErrNotFound, got %v", err)
 	}
 }
+
+func TestAgentDownSweep(t *testing.T) {
+	store := NewMemStore()
+	inc := NewMemIncidentStore()
+	srv := NewServer(store, inc, NewMemRemediationStore(), NewMemPolicyStore(),
+		NewMemAuditStore(), NewMemDiagnosisStore(), "admin", nil)
+	ctx := context.Background()
+	now := time.Now()
+
+	// A cluster that has never connected must NOT be alarmed.
+	_ = store.CreateCluster(ctx, Cluster{ID: "cNew", TenantID: "t1", Name: "new"})
+	// A connected-but-stale cluster (last heartbeat well beyond the threshold).
+	old := now.Add(-10 * time.Minute)
+	_ = store.CreateCluster(ctx, Cluster{ID: "cStale", TenantID: "t1", Name: "stale", LastHeartbeat: &old})
+	// A healthy cluster (recent heartbeat).
+	fresh := now.Add(-5 * time.Second)
+	_ = store.CreateCluster(ctx, Cluster{ID: "cOk", TenantID: "t1", Name: "ok", LastHeartbeat: &fresh})
+
+	srv.sweepAgentHealth(ctx, now)
+
+	incs, _ := inc.ListIncidents(ctx, "t1", "open")
+	if len(incs) != 1 || incs[0].Type != contract.ProblemAgentDown || incs[0].ClusterID != "cStale" {
+		t.Fatalf("expected one AgentDown for cStale, got %+v", incs)
+	}
+
+	// Sweeping again must not open a duplicate (dedup via fingerprint).
+	srv.sweepAgentHealth(ctx, now.Add(time.Minute))
+	open, _ := inc.ListIncidents(ctx, "t1", "open")
+	if len(open) != 1 {
+		t.Fatalf("sweep must not duplicate AgentDown, got %d", len(open))
+	}
+
+	// Recovery: telemetry resumes → the normal resolve pass clears AgentDown
+	// (its fingerprint isn't in the live fault set).
+	eng := newEngine(inc, nil, nil)
+	if err := eng.Reconcile(ctx, "t1", "cStale", snapWithProblems(now.Add(2*time.Minute), nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := inc.ListIncidents(ctx, "t1", "open"); len(open) != 0 {
+		t.Fatalf("AgentDown should resolve when telemetry resumes, still open: %+v", open)
+	}
+}

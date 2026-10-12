@@ -5,7 +5,9 @@
 package controlplane
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -29,10 +31,16 @@ type Server struct {
 	engine      *Engine
 	remediation *remediationService
 	diagnosis   *diagnosisService
+	notifier    Notifier
 	adminToken  string
 	log         *slog.Logger
 	now         func() time.Time
 }
+
+// agentDownAfter is how long without a heartbeat (from a previously-connected
+// cluster) before the control plane raises an AgentDown incident. It is beyond
+// the UI "connected" window (staleAfter) so brief blips don't alarm.
+const agentDownAfter = 3 * time.Minute
 
 // NewServer constructs a control-plane server. adminToken guards operator
 // endpoints; it must be non-empty in production (enforced by the caller). The
@@ -52,6 +60,7 @@ func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol P
 		engine:      newEngine(incidents, notifier, log),
 		remediation: remSvc,
 		diagnosis:   diagSvc,
+		notifier:    notifier,
 		adminToken:  adminToken,
 		log:         log,
 		now:         time.Now,
@@ -337,6 +346,70 @@ func (s *Server) handleProposeFromDiagnosis(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusCreated, p)
+}
+
+// RunAgentHealthSweeps periodically checks for clusters that have stopped
+// reporting and raises AgentDown incidents, so the platform never silently
+// claims a cluster is healthy while it is actually blind (spec §17). It returns
+// when ctx is cancelled.
+func (s *Server) RunAgentHealthSweeps(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 60 * time.Second
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.sweepAgentHealth(ctx, s.now())
+		}
+	}
+}
+
+// sweepAgentHealth performs one agent-liveness pass. A cluster that has never
+// connected (nil heartbeat) is not alarmed; one whose last heartbeat is older
+// than agentDownAfter gets an open AgentDown incident. Recovery is handled
+// automatically: when telemetry resumes, the normal ResolveMissing pass resolves
+// the AgentDown incident (its fingerprint isn't in the live fault set).
+func (s *Server) sweepAgentHealth(ctx context.Context, now time.Time) {
+	clusters, err := s.store.AllClusters(ctx)
+	if err != nil {
+		s.log.Error("agent-health sweep could not list clusters", "err", err)
+		return
+	}
+	for _, c := range clusters {
+		if c.LastHeartbeat == nil {
+			continue // never connected — nothing to compare against
+		}
+		age := now.Sub(*c.LastHeartbeat)
+		if age <= agentDownAfter {
+			continue
+		}
+		obs := observation{
+			fingerprint: fingerprint(c.ID, "", "", "", contract.ProblemAgentDown),
+			typ:         contract.ProblemAgentDown,
+			severity:    severityFor(contract.ProblemAgentDown),
+			title:       fmt.Sprintf("AgentDown: no telemetry from cluster %s", c.Name),
+			evidence: EvidenceItem{
+				ObservedAt: now, Ref: c.ID, Reason: string(contract.ProblemAgentDown),
+				Message: fmt.Sprintf("no heartbeat for %s (last seen %s)", age.Round(time.Second), c.LastHeartbeat.UTC().Format(time.RFC3339)),
+			},
+		}
+		created, err := s.incidents.UpsertObservation(ctx, c.TenantID, c.ID, now, obs)
+		if err != nil {
+			s.log.Error("could not raise AgentDown incident", "clusterId", c.ID, "err", err)
+			continue
+		}
+		if created {
+			s.log.Warn("cluster went silent", "clusterId", c.ID, "ageSeconds", int(age.Seconds()))
+			s.notifier.Notify(Notification{
+				Kind: "incident.opened", Severity: obs.severity, Title: obs.title,
+				Detail: obs.evidence.Message, TenantID: c.TenantID, ClusterID: c.ID,
+			})
+		}
+	}
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {

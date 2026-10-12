@@ -74,6 +74,10 @@ const (
 	ProblemImagePullBackOff ProblemType = "ImagePullBackOff"
 	ProblemUnschedulable    ProblemType = "Unschedulable"
 	ProblemRolloutStuck     ProblemType = "RolloutStuck"
+	// ProblemAgentDown is raised by the CONTROL PLANE (not the agent) when a
+	// previously-connected cluster stops sending telemetry — so the platform
+	// never silently reports a cluster healthy while it is actually blind.
+	ProblemAgentDown ProblemType = "AgentDown"
 )
 
 // PodProblem is a measured fault on a pod/container (from pod status).

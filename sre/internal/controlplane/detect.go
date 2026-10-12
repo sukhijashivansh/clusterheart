@@ -34,7 +34,7 @@ func newEngine(incidents IncidentStore, notifier Notifier, log *slog.Logger) *En
 // deterministic; they can later be tuned per-policy.
 func severityFor(t contract.ProblemType) string {
 	switch t {
-	case contract.ProblemOOMKilled, contract.ProblemCrashLoopBackOff, contract.ProblemRolloutStuck:
+	case contract.ProblemOOMKilled, contract.ProblemCrashLoopBackOff, contract.ProblemRolloutStuck, contract.ProblemAgentDown:
 		return "high"
 	case contract.ProblemImagePullBackOff, contract.ProblemUnschedulable:
 		return "medium"

@@ -90,6 +90,12 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// Background self-monitoring: raise AgentDown incidents for clusters that go
+	// silent. Stops when sweepCtx is cancelled at shutdown.
+	sweepCtx, stopSweeps := context.WithCancel(context.Background())
+	defer stopSweeps()
+	go srv.RunAgentHealthSweeps(sweepCtx, 60*time.Second)
+
 	go func() {
 		log.Info("control plane listening", "addr", addr)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -103,6 +109,7 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	log.Info("shutting down")
+	stopSweeps()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(ctx)

@@ -127,6 +127,22 @@ func (s *mongoStore) ListClusters(ctx context.Context, tenantID string) ([]Clust
 	return out, nil
 }
 
+func (s *mongoStore) AllClusters(ctx context.Context) ([]Cluster, error) {
+	cur, err := s.clusters.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	var docs []clusterDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+	out := make([]Cluster, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, docToCluster(d))
+	}
+	return out, nil
+}
+
 func (s *mongoStore) RecordHeartbeat(ctx context.Context, clusterID string, hb contract.Heartbeat, at time.Time) error {
 	set := bson.M{"lastHeartbeat": at, "agentVersion": hb.AgentVersion}
 	if hb.K8sVersion != "" {

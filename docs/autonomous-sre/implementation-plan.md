@@ -32,8 +32,9 @@ Slice B (AI root-cause analysis) — done & tested on this branch:
 - [x] **Safety**: AI returns schema-validated structured JSON only — never shell/patches; a recommended executable action must be a known action type and is **forced** onto the incident's own workload (a hallucinated action/target is neutralised to advisory "investigate"). A diagnosis NEVER creates/authorizes a remediation — the policy-checked proposal+approval path is still required. Telemetry is wrapped as untrusted DATA (prompt-injection hardening) and re-redacted before inference. Model/promptVersion/latency recorded.
 - [x] Durable `DiagnosisStore` (mem + Mongo, one-per-incident upsert, tenant-scoped). Endpoints `POST /incidents/{id}/diagnose` + `GET /incidents/{id}/diagnosis`. Surfaced in the dashboard (incidents view → "diagnose" → readable RCA). Tested: deterministic per-type, LLM parse/validate/fallback/injection (stubbed chat, no network), forged-action/target rejection, Mongo round-trip, HTTP E2E; dashboard proxy unit-tested.
 
-Slice C (remaining detection work in M2) — not started:
-- [ ] Probe-failure + missing-telemetry/agent-down detectors.
+Slice C (remaining detection work in M2) — partly done on this branch:
+- [x] **Agent-down / missing-telemetry detection** (spec §5, §17): a control-plane background sweep (`RunAgentHealthSweeps`) raises an `AgentDown` incident when a previously-connected cluster stops heartbeating beyond `agentDownAfter` (3m) — so the platform never silently reports a silent cluster as healthy. Deduped by fingerprint; auto-resolves when telemetry resumes (normal resolve pass). Notifies on open. Needs `Store.AllClusters` (mem + Mongo). Unit-tested (never-connected not alarmed, stale → one incident, dedup, recovery).
+- [ ] Probe-failure detector.
 - [ ] Cross-signal correlation (group by node/namespace/dependency); cascading-failure + symptom-vs-cause heuristics.
 - [ ] Maintenance-window suppression; alert inhibition.
 - [ ] Evaluation harness measuring diagnostic quality / false-diagnosis rate against a labelled set (spec §15, §21).

@@ -43,6 +43,9 @@ type Store interface {
 	CreateCluster(ctx context.Context, c Cluster) error
 	GetCluster(ctx context.Context, clusterID string) (Cluster, error)
 	ListClusters(ctx context.Context, tenantID string) ([]Cluster, error)
+	// AllClusters returns every registered cluster across tenants (for the
+	// control plane's own background sweeps, e.g. agent-down detection).
+	AllClusters(ctx context.Context) ([]Cluster, error)
 	SetRemediationTokenHash(ctx context.Context, clusterID, hash string) error
 	RecordHeartbeat(ctx context.Context, clusterID string, hb contract.Heartbeat, at time.Time) error
 	SaveSnapshots(ctx context.Context, clusterID string, snaps []contract.ClusterSnapshot) error
@@ -105,6 +108,16 @@ func (m *memStore) ListClusters(_ context.Context, tenantID string) ([]Cluster, 
 		if c.TenantID == tenantID {
 			out = append(out, c)
 		}
+	}
+	return out, nil
+}
+
+func (m *memStore) AllClusters(_ context.Context) ([]Cluster, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]Cluster, 0, len(m.clusters))
+	for _, c := range m.clusters {
+		out = append(out, c)
 	}
 	return out, nil
 }
