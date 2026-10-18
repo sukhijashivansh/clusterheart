@@ -1585,7 +1585,7 @@ td.pct-cool { color: var(--green); }
    size the body to its content instead (keep the grid's flex-end so the stat
    labels stay on one baseline). */
 #sre-ov-cards .card-body { min-height: 0; }
-.sre-ov-grid { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+.sre-ov-grid { display: flex; gap: 48px; flex-wrap: wrap; align-items: flex-end; }
 .sre-ov-kv { display: flex; flex-direction: column; gap: 2px; }
 .sre-ov-n { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
 .sre-ov-n.ok { color: var(--green); }
