@@ -1587,6 +1587,11 @@ td.pct-cool { color: var(--green); }
 
 /* ---------- SRE overview ---------- */
 #sre-ov-cards { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+/* These reuse .finops-card, whose body has min-height:120 for chart content.
+   For stat cards that leaves a big empty gap above the bottom-aligned stats —
+   size the body to its content instead (keep the grid's flex-end so the stat
+   labels stay on one baseline). */
+#sre-ov-cards .card-body { min-height: 0; }
 .sre-ov-grid { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
 .sre-ov-kv { display: flex; flex-direction: column; gap: 2px; }
 .sre-ov-n { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
@@ -1594,5 +1599,8 @@ td.pct-cool { color: var(--green); }
 .sre-ov-n.warn { color: var(--yellow); }
 .sre-ov-n.bad { color: var(--red); }
 .sre-ov-l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.sre-ov-list { margin-top: 10px; border-top: 1px solid var(--border-lt); padding-top: 8px; }
+/* The list is a sibling of .card-body, so it has no padding of its own — match
+   the body's horizontal padding (18px) and add bottom spacing so it isn't
+   flush against (and clipped by) the card's bottom edge. */
+.sre-ov-list { margin: 10px 18px 0; padding: 8px 0 16px; border-top: 1px solid var(--border-lt); }
 .sre-ov-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12.5px; }
