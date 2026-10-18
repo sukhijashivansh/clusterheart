@@ -147,9 +147,6 @@
             <div class="grid md:grid-cols-3 border-t border-l border-neutral-200 reveal">
                 <!-- Pods -->
                 <div class="border-b border-r border-neutral-200 p-6 sm:p-8 hover:bg-neutral-50 transition-colors">
-                    <div class="w-11 h-11 bg-black text-white flex items-center justify-center mb-6">
-                        <i class="fa-solid fa-box"></i>
-                    </div>
                     <h3 class="text-xl font-bold text-black mb-5">Pods, Live</h3>
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
@@ -169,9 +166,6 @@
 
                 <!-- Jobs -->
                 <div class="border-b border-r border-neutral-200 p-6 sm:p-8 hover:bg-neutral-50 transition-colors">
-                    <div class="w-11 h-11 bg-black text-white flex items-center justify-center mb-6">
-                        <i class="fa-solid fa-gears"></i>
-                    </div>
                     <h3 class="text-xl font-bold text-black mb-5">Jobs</h3>
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
@@ -191,9 +185,6 @@
 
                 <!-- Nodes -->
                 <div class="border-b border-r border-neutral-200 p-6 sm:p-8 hover:bg-neutral-50 transition-colors">
-                    <div class="w-11 h-11 bg-black text-white flex items-center justify-center mb-6">
-                        <i class="fa-solid fa-server"></i>
-                    </div>
                     <h3 class="text-xl font-bold text-black mb-5">Nodes</h3>
                     <ul class="space-y-4 text-sm text-neutral-600 leading-relaxed">
                         <li class="flex gap-3">
@@ -303,21 +294,18 @@
                     <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-8 sm:mb-10">Ask your cluster anything</h2>
                     <ul class="space-y-8">
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-robot"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Full cluster context</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Understands your workloads, metrics, events, and cost. No copy-pasting YAML into a chatbot.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-magnifying-glass"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Answers from live data</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Runs read-only kubectl (get, describe, logs, top) so answers come from your cluster, not guesses.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-lock"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Read-only, bring your own key</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Every mutating command is refused. Plug in Gemini or OpenRouter. Free models work out of the box.</p>
@@ -332,21 +320,18 @@
                     <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-8 sm:mb-10">Recommend &amp; apply</h2>
                     <ul class="space-y-8">
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-chart-line"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Based on real usage, not guesses</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Samples CPU/memory every 30s over a 6h window and sizes to p95 + peak, so spiky apps never get starved.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-gauge-high"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">Clear verdicts</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">OK / UPSIZE CPU / UPSIZE MEM / DOWNSIZE, each with a concrete suggested request.</p>
                             </div>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-9 h-9 shrink-0 border border-neutral-700 flex items-center justify-center"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
                             <div>
                                 <h4 class="font-bold mb-1.5">One-click apply</h4>
                                 <p class="text-sm text-neutral-400 leading-relaxed">Patch the new request straight to the owning workload. No YAML editing.</p>
