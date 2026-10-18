@@ -2683,7 +2683,7 @@ function init() {
   $("#shell-modal").addEventListener("click", e => { if (e.target.id === "shell-modal") closeShell(); });
   $("#container-cancel").addEventListener("click", () => $("#container-modal").classList.add("hidden"));
 
-  ["pod-table", "job-table", "rs-table"].forEach(id => makeResizable(document.getElementById(id)));
+  ["pod-table", "job-table", "rs-table", "sre-inc-table", "sre-prop-table"].forEach(id => makeResizable(document.getElementById(id)));
 
   bindKeys();
   switchView("pods");
@@ -2914,12 +2914,12 @@ function renderProposals() {
       : "";
     return `
       <tr class="sre-row" data-id="${sreEsc(p.id)}">
-        <td>${statusBadge(p.status)}</td>
-        <td>${sreEsc(p.action)}</td>
-        <td>${target}</td>
-        <td>${sevBadge(p.riskClass)}</td>
-        <td class="sre-rationale">${sreEsc(p.rationale || "—")}</td>
-        <td>${result}</td>
+        <td class="st">${statusBadge(p.status)}</td>
+        <td class="actn">${sreEsc(p.action)}</td>
+        <td class="tgt" title="${target}">${target}</td>
+        <td class="sev">${sevBadge(p.riskClass)}</td>
+        <td class="sre-rationale" title="${sreEsc(p.rationale || "")}">${sreEsc(p.rationale || "—")}</td>
+        <td class="res">${result}</td>
         <td class="act">${actions}</td>
       </tr>`;
   }).join("");

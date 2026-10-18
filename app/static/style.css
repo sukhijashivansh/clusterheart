@@ -1546,10 +1546,21 @@ td.pct-cool { color: var(--green); }
 .hpa-pill-metric { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.02em; }
 
 /* ---------- Autonomous SRE: incidents + remediation ---------- */
-#sre-inc-table th.sev, #sre-prop-table th.sev { width: 92px; }
-#sre-prop-table th.act, #sre-prop-table td.act { width: 150px; text-align: right; white-space: nowrap; }
+#sre-inc-table th.sev { width: 92px; }
 .sre-row { cursor: pointer; }
-.sre-rationale { color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Remediation table: pin each column (border-box) so the whole table fits the
+   ~1270px content area without the approve/reject buttons spilling past the
+   table edge. RATIONALE is the single flexible column (ellipsis-truncated);
+   RESULT wraps. Columns stay draggable via makeResizable (auto layout). */
+#sre-prop-table td.st,   #sre-prop-table th.st   { width: 104px; min-width: 104px; max-width: 104px; overflow: visible; white-space: nowrap; }
+#sre-prop-table td.actn, #sre-prop-table th.actn { width: 116px; min-width: 116px; max-width: 116px; overflow: visible; white-space: nowrap; }
+#sre-prop-table td.sev,  #sre-prop-table th.sev  { width: 78px;  min-width: 78px;  max-width: 78px;  overflow: visible; white-space: nowrap; }
+#sre-prop-table td.tgt,  #sre-prop-table th.tgt  { width: 205px; min-width: 205px; max-width: 205px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sre-prop-table td.res,  #sre-prop-table th.res  { width: 175px; min-width: 175px; max-width: 175px; white-space: normal; overflow: hidden; }
+#sre-prop-table td.act,  #sre-prop-table th.act  { width: 184px; min-width: 184px; max-width: 184px; text-align: right; white-space: nowrap; overflow: visible; }
+#sre-prop-table td.act .btn + .btn { margin-left: 6px; }
+.sre-rationale { color: var(--muted); max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sre-badge {
   display: inline-block; padding: 1px 8px; border-radius: 999px;
