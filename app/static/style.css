@@ -1546,8 +1546,16 @@ td.pct-cool { color: var(--green); }
 .hpa-pill-metric { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.02em; }
 
 /* ---------- Autonomous SRE: incidents + remediation ---------- */
-#sre-inc-table th.sev { width: 92px; }
 .sre-row { cursor: pointer; }
+
+/* Incidents table: size the SEVERITY pill column (the base th,td max-width:0
+   otherwise collapses it to a clipped sliver) and the AI RCA actions column so
+   the diagnose + propose buttons fit inside instead of spilling off-screen. */
+#sre-inc-table th.sev, #sre-inc-table td.sev { width: 100px; min-width: 100px; max-width: 100px; overflow: visible; white-space: nowrap; }
+#sre-inc-table th.act, #sre-inc-table td.act { width: 178px; min-width: 178px; max-width: 178px; text-align: right; white-space: nowrap; overflow: visible; }
+#sre-inc-table td.act .btn + .btn { margin-left: 6px; }
+/* Compact action buttons so both fit inside the actions column. */
+#sre-inc-table td.act .btn, #sre-prop-table td.act .btn { padding: 4px 10px; }
 
 /* Remediation table: pin each column (border-box) so the whole table fits the
    ~1270px content area without the approve/reject buttons spilling past the
@@ -1603,4 +1611,11 @@ td.pct-cool { color: var(--green); }
    the body's horizontal padding (18px) and add bottom spacing so it isn't
    flush against (and clipped by) the card's bottom edge. */
 .sre-ov-list { margin: 10px 18px 0; padding: 8px 0 16px; border-top: 1px solid var(--border-lt); }
-.sre-ov-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12.5px; }
+.sre-ov-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 12.5px; }
+.sre-ov-row + .sre-ov-row { border-top: 1px solid var(--border-lt); }
+.sre-ov-type { display: inline-flex; align-items: center; gap: 9px; }
+.sre-ov-count { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 24px; text-align: right; }
+.sev-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.sev-dot.sev-high, .sev-dot.sev-critical { background: var(--red); }
+.sev-dot.sev-medium { background: var(--yellow); }
+.sev-dot.sev-low, .sev-dot.sev-info { background: var(--green); }

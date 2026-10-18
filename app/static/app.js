@@ -2778,7 +2778,7 @@ function renderIncidents() {
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="9" class="dim" style="padding:14px">no incidents</td></tr>`; return; }
   tbody.innerHTML = rows.map(i => `
     <tr class="sre-row" data-id="${sreEsc(i.id)}">
-      <td>${sevBadge(i.severity)}</td>
+      <td class="sev">${sevBadge(i.severity)}</td>
       <td>${sreEsc(i.type)}</td>
       <td>${sreEsc(i.workload || "—")}</td>
       <td class="c-ns">${sreEsc(i.namespace || "—")}</td>
@@ -2788,7 +2788,7 @@ function renderIncidents() {
       <td>${statusBadge(i.status)}</td>
       <td class="act">
         <button class="btn sre-diagnose" data-id="${sreEsc(i.id)}">diagnose</button>
-        <button class="btn sre-propose" data-id="${sreEsc(i.id)}" title="turn the AI recommendation into a policy-checked proposal">propose fix</button>
+        <button class="btn sre-propose" data-id="${sreEsc(i.id)}" title="turn the AI recommendation into a policy-checked proposal">propose</button>
       </td>
     </tr>`).join("");
   $$("#sre-inc-tbody .sre-row").forEach(tr => tr.addEventListener("click", e => {
@@ -2814,7 +2814,7 @@ async function proposeFix(id, btn) {
   } catch (e) {
     setMsg("propose failed: " + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "propose fix"; }
+    if (btn) { btn.disabled = false; btn.textContent = "propose"; }
   }
 }
 
@@ -2972,8 +2972,14 @@ function renderOverview(s) {
   const cl = s.clusters || {}, inc = s.incidents || {}, pr = s.proposals || {}, pol = s.policy || {};
   const sev = inc.openBySeverity || {}, pst = pr.byStatus || {};
   const kv = (label, val, cls) => `<div class="sre-ov-kv"><span class="sre-ov-n ${cls || ""}">${val}</span><span class="sre-ov-l">${label}</span></div>`;
+  // Severity per incident type — mirrors severityFor() in
+  // sre/internal/controlplane/detect.go (stable, deterministic).
+  const SEV_BY_TYPE = { OOMKilled: "high", CrashLoopBackOff: "high", RolloutStuck: "high", AgentDown: "high", ImagePullBackOff: "medium", Unschedulable: "medium" };
   const byType = Object.entries(inc.openByType || {}).sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => `<div class="sre-ov-row"><span>${sreEsc(t)}</span><span class="dim">${n}</span></div>`).join("") || `<div class="dim">none</div>`;
+    .map(([t, n]) => {
+      const sv = SEV_BY_TYPE[t] || "medium";
+      return `<div class="sre-ov-row"><span class="sre-ov-type"><i class="sev-dot sev-${sv}"></i>${sreEsc(t)}</span><span class="sre-ov-count">${n}</span></div>`;
+    }).join("") || `<div class="dim" style="padding:4px 0">none</div>`;
   const openCount = (inc.byStatus || {}).open || 0;
   const pausedBadge = pol.paused ? `<span class="sre-badge st-blocked">PAUSED</span>` : `<span class="sre-badge st-executed">${sreEsc(pol.mode || "—")}</span>`;
   $("#sre-ov-cards").innerHTML = `
