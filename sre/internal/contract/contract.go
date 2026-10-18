@@ -50,12 +50,56 @@ type TelemetryBatch struct {
 // ClusterSnapshot is a point-in-time, bounded summary of cluster health. It is
 // intentionally aggregate (counts, not full object dumps) so the primary store
 // never becomes a raw-telemetry sink. Deep evidence is fetched on demand later.
+//
+// Problems are bounded lists of measured, per-object fault signals (not
+// diagnoses). The control plane turns these facts into incidents; the agent
+// never decides what is an incident.
 type ClusterSnapshot struct {
-	CollectedAt time.Time       `json:"collectedAt"`
-	Nodes       NodeSummary     `json:"nodes"`
-	Pods        PodSummary      `json:"pods"`
-	Warnings    []WarningEvent  `json:"warnings"`    // recent warning events (bounded)
-	Workloads   WorkloadSummary `json:"workloads"`
+	CollectedAt      time.Time         `json:"collectedAt"`
+	Nodes            NodeSummary       `json:"nodes"`
+	Pods             PodSummary        `json:"pods"`
+	Warnings         []WarningEvent    `json:"warnings"` // recent warning events (bounded)
+	Workloads        WorkloadSummary   `json:"workloads"`
+	PodProblems      []PodProblem      `json:"podProblems,omitempty"`
+	WorkloadProblems []WorkloadProblem `json:"workloadProblems,omitempty"`
+}
+
+// ProblemType enumerates the deterministic fault signals the agent reports.
+// These are symptoms derived from Kubernetes object status — never root causes.
+type ProblemType string
+
+const (
+	ProblemCrashLoopBackOff ProblemType = "CrashLoopBackOff"
+	ProblemOOMKilled        ProblemType = "OOMKilled"
+	ProblemImagePullBackOff ProblemType = "ImagePullBackOff"
+	ProblemUnschedulable    ProblemType = "Unschedulable"
+	ProblemRolloutStuck     ProblemType = "RolloutStuck"
+	// ProblemAgentDown is raised by the CONTROL PLANE (not the agent) when a
+	// previously-connected cluster stops sending telemetry — so the platform
+	// never silently reports a cluster healthy while it is actually blind.
+	ProblemAgentDown ProblemType = "AgentDown"
+)
+
+// PodProblem is a measured fault on a pod/container (from pod status).
+type PodProblem struct {
+	Namespace    string      `json:"namespace"`
+	Pod          string      `json:"pod"`
+	Owner        string      `json:"owner,omitempty"`     // kind/name of the pod's controller, if any
+	Container    string      `json:"container,omitempty"` // for container-level problems
+	Node         string      `json:"node,omitempty"`
+	Type         ProblemType `json:"type"`
+	RestartCount int32       `json:"restartCount,omitempty"`
+	Message      string      `json:"message"` // redacted upstream
+}
+
+// WorkloadProblem is a measured fault on a controller object (e.g. a Deployment
+// rollout that exceeded its progress deadline).
+type WorkloadProblem struct {
+	Namespace string      `json:"namespace"`
+	Kind      string      `json:"kind"`
+	Name      string      `json:"name"`
+	Type      ProblemType `json:"type"`
+	Message   string      `json:"message"` // redacted upstream
 }
 
 type NodeSummary struct {
@@ -108,4 +152,55 @@ type ClusterStatus struct {
 // ErrorResponse is the uniform error envelope.
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+// --- remediation controller protocol ------------------------------------
+//
+// The in-cluster remediation controller authenticates with its OWN per-cluster
+// token (separate from the observe agent), pulls approved actions for its
+// cluster, executes them with the narrow remediate ServiceAccount, and reports
+// the outcome. The control plane never contacts a cluster itself.
+
+// RemediationTokenResponse returns the one-time remediation token (operator API).
+type RemediationTokenResponse struct {
+	ClusterID        string `json:"clusterId"`
+	RemediationToken string `json:"remediationToken"`
+}
+
+// ActionTarget identifies the object an action operates on.
+type ActionTarget struct {
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+// PendingAction is an approved action handed to the controller for execution.
+// DryRun is resolved by the control plane from policy (mode=dry-run => true).
+type PendingAction struct {
+	ProposalID     string            `json:"proposalId"`
+	Action         string            `json:"action"`
+	Target         ActionTarget      `json:"target"`
+	Params         map[string]string `json:"params,omitempty"`
+	DryRun         bool              `json:"dryRun"`
+	TimeoutSeconds int               `json:"timeoutSeconds"`
+}
+
+// PendingActionsResponse is the controller's work queue for its cluster.
+type PendingActionsResponse struct {
+	Actions []PendingAction `json:"actions"`
+}
+
+// ActionResult is what the controller reports back after executing (or
+// dry-running) an action.
+type ActionResult struct {
+	Success            bool      `json:"success"`
+	DryRun             bool      `json:"dryRun"`
+	BeforeState        string    `json:"beforeState"`
+	PlannedChange      string    `json:"plannedChange"`
+	Result             string    `json:"result"`
+	VerificationPassed *bool     `json:"verificationPassed,omitempty"`
+	RollbackAvailable  bool      `json:"rollbackAvailable"`
+	Error              string    `json:"error,omitempty"`
+	StartedAt          time.Time `json:"startedAt"`
+	FinishedAt         time.Time `json:"finishedAt"`
 }

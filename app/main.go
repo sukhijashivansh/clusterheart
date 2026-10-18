@@ -185,6 +185,10 @@ type server struct {
 
 	// hist is the MongoDB-backed usage sampler; nil when Mongo is unreachable.
 	hist *history
+
+	// sre proxies to the Autonomous SRE control plane (keeps the admin token
+	// server-side). Always non-nil; .configured() is false until env is set.
+	sre *sreProxy
 }
 
 // clients returns a consistent snapshot of the current kube/metrics clients
@@ -299,6 +303,7 @@ func main() {
 		pfs:        map[string]*pfEntry{},
 	}
 	s.initHistory()
+	s.sre = newSREProxy()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/pods", s.handlePods)
@@ -321,6 +326,17 @@ func main() {
 	mux.HandleFunc("/api/owner/", s.handlePatchResources)
 	mux.HandleFunc("/api/contexts", s.handleContexts)
 	mux.HandleFunc("/api/contexts/switch", s.handleSwitchContext)
+	// Autonomous SRE control-plane proxy (incidents + remediation approval queue).
+	mux.HandleFunc("/api/sre/config", s.handleSREConfig)
+	mux.HandleFunc("/api/sre/stats", s.handleSREStats)
+	mux.HandleFunc("/api/sre/incidents", s.handleSREIncidents)
+	mux.HandleFunc("/api/sre/incidents/", s.handleSREIncidentItem)
+	mux.HandleFunc("/api/sre/proposals", s.handleSREProposals)
+	mux.HandleFunc("/api/sre/proposals/", s.handleSREProposalItem)
+	mux.HandleFunc("/api/sre/policy", s.handleSREPolicy)
+	mux.HandleFunc("/api/sre/policy/pause", s.handleSREPolicyPause)
+	mux.HandleFunc("/api/sre/policy/resume", s.handleSREPolicyResume)
+	mux.HandleFunc("/api/sre/audit", s.handleSREAudit)
 
 	// Dev mode: serve ./static live from disk so frontend edits show up on a
 	// browser refresh with no rebuild. Set KUBEPULSE_DEV=1 (optionally

@@ -139,6 +139,28 @@ again. The server can keep running.
 
 ## Feature setup
 
+### Autonomous SRE (incidents + remediation views)
+
+The dashboard's **incidents** and **remediation** views talk to the Autonomous
+SRE control plane (`sre/cmd/controlplane`) through a server-side proxy — the
+admin token stays in the dashboard process, never the renderer, and the UI is
+pinned to one tenant. Point the dashboard at a running control plane with three
+env vars (unset → the views show a clear "not configured" notice, never fake
+data):
+
+```bash
+( cd app && CONTROLPLANE_URL=http://127.0.0.1:9100 \
+    CONTROLPLANE_ADMIN_TOKEN=dev-admin \
+    SRE_TENANT_ID=acme \
+    go build -o clusterheart-app . && ./clusterheart-app )
+```
+
+Or pass the same three vars through the Electron launch (step 3 above). To stand
+up the control plane itself, see `sre/README.md`. The **incidents** view lists
+detected incidents (click a row for full evidence); the **remediation** view is
+the approval queue — approve/reject proposed actions and an emergency
+pause/resume (kill switch) for the tenant.
+
 ### AWS cost panel (FinOps → AWS Daily Spend)
 
 The cost panel runs `aws ce get-cost-and-usage`. It authenticates using the

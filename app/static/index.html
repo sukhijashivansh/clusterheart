@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>clusterheart</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='%233B5BDB'%3E%3Ccircle cx='50' cy='50' r='15'/%3E%3Ccircle cx='50' cy='15' r='10.5'/%3E%3Ccircle cx='80.3' cy='32.5' r='10.5'/%3E%3Ccircle cx='80.3' cy='67.5' r='10.5'/%3E%3Ccircle cx='50' cy='85' r='10.5'/%3E%3Ccircle cx='19.7' cy='67.5' r='10.5'/%3E%3Ccircle cx='19.7' cy='32.5' r='10.5'/%3E%3C/g%3E%3C/svg%3E" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,7 +13,7 @@
 </head>
 <body>
 <header id="topbar">
-  <div class="brand"><span class="pulse"></span>clusterheart</div>
+  <div class="brand"><svg class="brand-logo" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="15"/><circle cx="50" cy="15" r="10.5"/><circle cx="80.3" cy="32.5" r="10.5"/><circle cx="80.3" cy="67.5" r="10.5"/><circle cx="50" cy="85" r="10.5"/><circle cx="19.7" cy="67.5" r="10.5"/><circle cx="19.7" cy="32.5" r="10.5"/></svg>clusterheart</div>
   <div class="ctx-switcher" title="kubeconfig context">
     <span class="k">context</span>
     <select id="ctx-select" class="sel"></select>
@@ -39,6 +40,9 @@
     <a href="#" class="nav" data-view="finops">finops</a>
     <a href="#" class="nav" data-view="load">traffic</a>
     <a href="#" class="nav" data-view="gemini">AI</a>
+    <a href="#" class="nav" data-view="sre-overview">SRE overview</a>
+    <a href="#" class="nav" data-view="incidents">incidents</a>
+    <a href="#" class="nav" data-view="remediation">remediation</a>
 
     <div id="row-help" class="hint">
       <div class="hint-title">pod shortcuts</div>
@@ -333,6 +337,95 @@
         <button id="gemini-send" class="btn primary">send</button>
       </div>
       <div id="gemini-err" class="err"></div>
+    </section>
+
+    <!-- SRE OVERVIEW (global summary) -->
+    <section id="view-sre-overview" class="view">
+      <div class="toolbar">
+        <span class="title">autonomous SRE — overview</span>
+        <span class="grow"></span>
+        <span id="sre-ov-meta" class="dim"></span>
+        <button id="sre-ov-refresh" class="btn">refresh</button>
+      </div>
+      <div id="sre-ov-notice" class="panel hidden"></div>
+      <div id="sre-ov-cards" class="scroll-y"></div>
+    </section>
+
+    <!-- INCIDENTS VIEW (Autonomous SRE control plane) -->
+    <section id="view-incidents" class="view">
+      <div class="toolbar">
+        <span class="title">incidents</span>
+        <span class="sep"></span>
+        <span class="filter-label">status</span>
+        <select id="sre-inc-status" class="sel">
+          <option value="open">open</option>
+          <option value="resolved">resolved</option>
+          <option value="">all</option>
+        </select>
+        <span class="sep"></span>
+        <input id="sre-inc-search" class="input" placeholder="filter type / workload / namespace" />
+        <span class="grow"></span>
+        <span id="sre-inc-meta" class="dim"></span>
+        <button id="sre-inc-refresh" class="btn">refresh</button>
+      </div>
+      <div id="sre-inc-notice" class="panel hidden"></div>
+      <div class="table-wrap">
+        <table id="sre-inc-table">
+          <thead>
+            <tr>
+              <th class="sev">SEVERITY</th>
+              <th>TYPE</th>
+              <th>WORKLOAD</th>
+              <th class="c-ns">NAMESPACE</th>
+              <th class="num">COUNT</th>
+              <th>FIRST SEEN</th>
+              <th>LAST SEEN</th>
+              <th>STATUS</th>
+              <th class="act">AI RCA</th>
+            </tr>
+          </thead>
+          <tbody id="sre-inc-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- REMEDIATION VIEW (approval queue + kill switch) -->
+    <section id="view-remediation" class="view">
+      <div class="toolbar">
+        <span class="title">remediation</span>
+        <span class="sep"></span>
+        <span class="filter-label">status</span>
+        <select id="sre-prop-status" class="sel">
+          <option value="">all</option>
+          <option value="proposed">proposed</option>
+          <option value="approved">approved</option>
+          <option value="executed">executed</option>
+          <option value="failed">failed</option>
+          <option value="blocked">blocked</option>
+          <option value="rejected">rejected</option>
+        </select>
+        <span class="grow"></span>
+        <span id="sre-policy-meta" class="dim"></span>
+        <button id="sre-pause-btn" class="btn danger" title="emergency stop: block all automated remediation for this tenant">pause automation</button>
+        <button id="sre-prop-refresh" class="btn">refresh</button>
+      </div>
+      <div id="sre-prop-notice" class="panel hidden"></div>
+      <div class="table-wrap">
+        <table id="sre-prop-table">
+          <thead>
+            <tr>
+              <th class="st">STATUS</th>
+              <th class="actn">ACTION</th>
+              <th class="tgt">TARGET</th>
+              <th class="sev">RISK</th>
+              <th>RATIONALE</th>
+              <th class="res">RESULT</th>
+              <th class="act">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="sre-prop-tbody"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 </div>

@@ -10,10 +10,10 @@ func TestRedact(t *testing.T) {
 	cases := map[string]string{
 		"authorization: Bearer abc123.def-456 failed":  "[REDACTED]",
 		"token=supersecretvalue in config":             "[REDACTED]",
-		"connect postgres://user:p4ssw0rd@db:5432/app":  "[REDACTED]",
-		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload":  "[REDACTED]",
-		"key AKIAIOSFODNN7EXAMPLE leaked":                "[REDACTED]",
-		"paged alice@example.com about the outage":      "[REDACTED]",
+		"connect postgres://user:p4ssw0rd@db:5432/app": "[REDACTED]",
+		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload": "[REDACTED]",
+		"key AKIAIOSFODNN7EXAMPLE leaked":              "[REDACTED]",
+		"paged alice@example.com about the outage":     "[REDACTED]",
 	}
 	for in, mustContain := range cases {
 		got := Redact(in)

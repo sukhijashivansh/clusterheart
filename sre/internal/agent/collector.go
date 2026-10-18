@@ -7,10 +7,12 @@ package agent
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"clusterheart/sre/internal/contract"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -24,6 +26,9 @@ const maxWarnings = 50
 // highRestartThreshold is the per-pod restart count above which a pod is counted
 // as "restart pressure". This is a symptom signal only, not a diagnosis.
 const highRestartThreshold = 5
+
+// maxProblems bounds how many fault signals a snapshot carries.
+const maxProblems = 200
 
 // Collector reads cluster state.
 type Collector struct {
@@ -95,11 +100,96 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 		if podRestarts(p) >= highRestartThreshold {
 			snap.Pods.HighRestart++
 		}
+		if len(snap.PodProblems) < maxProblems {
+			snap.PodProblems = append(snap.PodProblems, detectPodProblems(p)...)
+		}
+	}
+	if len(snap.PodProblems) > maxProblems {
+		snap.PodProblems = snap.PodProblems[:maxProblems]
 	}
 
 	snap.Workloads = c.workloadCounts(ctx)
+	snap.WorkloadProblems = c.deploymentProblems(ctx)
 	snap.Warnings = c.warnings(ctx)
 	return snap, nil
+}
+
+// detectPodProblems derives measured fault signals from a pod's status. These
+// are symptoms (CrashLoopBackOff, OOMKilled, ImagePullBackOff, Unschedulable),
+// not diagnoses.
+func detectPodProblems(p *corev1.Pod) []contract.PodProblem {
+	owner := ownerWorkload(p)
+	node := p.Spec.NodeName
+	var out []contract.PodProblem
+	add := func(t contract.ProblemType, container, msg string, restarts int32) {
+		out = append(out, contract.PodProblem{
+			Namespace: p.Namespace, Pod: p.Name, Owner: owner, Container: container,
+			Node: node, Type: t, RestartCount: restarts, Message: Redact(msg),
+		})
+	}
+
+	for _, cs := range p.Status.ContainerStatuses {
+		if w := cs.State.Waiting; w != nil {
+			switch w.Reason {
+			case "CrashLoopBackOff":
+				add(contract.ProblemCrashLoopBackOff, cs.Name, w.Message, cs.RestartCount)
+			case "ImagePullBackOff", "ErrImagePull":
+				add(contract.ProblemImagePullBackOff, cs.Name, w.Message, cs.RestartCount)
+			}
+		}
+		if t := cs.LastTerminationState.Terminated; t != nil && t.Reason == "OOMKilled" {
+			add(contract.ProblemOOMKilled, cs.Name, t.Message, cs.RestartCount)
+		}
+	}
+
+	if p.Status.Phase == corev1.PodPending {
+		for _, cond := range p.Status.Conditions {
+			if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse && cond.Reason == "Unschedulable" {
+				add(contract.ProblemUnschedulable, "", cond.Message, 0)
+			}
+		}
+	}
+	return out
+}
+
+// ownerWorkload returns a stable "Kind/Name" for the pod's controlling workload.
+// ReplicaSet owners are collapsed to their Deployment (RS names are
+// "<deployment>-<hash>") so incidents stay stable across rollouts.
+func ownerWorkload(p *corev1.Pod) string {
+	for _, o := range p.OwnerReferences {
+		if o.Controller == nil || !*o.Controller {
+			continue
+		}
+		if o.Kind == "ReplicaSet" {
+			if i := strings.LastIndex(o.Name, "-"); i > 0 {
+				return "Deployment/" + o.Name[:i]
+			}
+		}
+		return o.Kind + "/" + o.Name
+	}
+	return ""
+}
+
+// deploymentProblems reports deployments whose rollout exceeded its progress
+// deadline (Progressing=False, reason=ProgressDeadlineExceeded).
+func (c *Collector) deploymentProblems(ctx context.Context) []contract.WorkloadProblem {
+	ds, err := c.clientset.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil
+	}
+	var out []contract.WorkloadProblem
+	for i := range ds.Items {
+		d := &ds.Items[i]
+		for _, cond := range d.Status.Conditions {
+			if cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse && cond.Reason == "ProgressDeadlineExceeded" {
+				out = append(out, contract.WorkloadProblem{
+					Namespace: d.Namespace, Kind: "Deployment", Name: d.Name,
+					Type: contract.ProblemRolloutStuck, Message: Redact(cond.Message),
+				})
+			}
+		}
+	}
+	return out
 }
 
 func (c *Collector) workloadCounts(ctx context.Context) contract.WorkloadSummary {
