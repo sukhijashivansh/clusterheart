@@ -407,10 +407,21 @@ function renderJobTable() {
 // Drag a header's right edge to resize a column; double-click the edge to
 // auto-fit it to the widest value. Widths are driven by a <colgroup> (the
 // reliable way to size table-layout:fixed columns), frozen to pixels on first
-// interaction, and persisted per table — so long pod/job names can be read in
-// full (the table grows and the wrapper scrolls rather than truncating).
-function makeResizable(table) {
+// interaction, and persisted per table.
+//
+// Two modes:
+//   default  — the table grows and the wrapper scrolls (pods/jobs: long names
+//              can be read in full).
+//   { fill }  — the table always spans its wrapper: a drag trades width between
+//              the two columns either side of the divider (total constant), and
+//              the columns rescale to the wrapper on window resize, so the last
+//              column always stays flush with the right edge.
+const COL_MIN = 56;
+
+function makeResizable(table, opts) {
   if (!table || !table.tHead) return;
+  const fill = !!(opts && opts.fill);
+  if (fill) table.dataset.fillResize = "1";
   const ths = Array.from(table.tHead.rows[0].cells);
 
   let cg = table.querySelector("colgroup");
@@ -425,16 +436,23 @@ function makeResizable(table) {
   if (saved && saved.length === cols.length) {
     cols.forEach((c, i) => { c.style.width = saved[i] + "px"; });
     table.dataset.frozen = "1";
-    setTableWidth(table, cols);
+    if (fill) rescaleToWrap(table, cols); else setTableWidth(table, cols);
   }
 
   ths.forEach((th, i) => {
+    // In fill mode the last column has no neighbour to its right to trade with,
+    // so its right edge (the table edge) gets no grip.
+    if (fill && i === ths.length - 1) return;
     const grip = document.createElement("span");
     grip.className = "col-resizer";
     grip.addEventListener("mousedown", e => startColResize(e, table, cols, i, grip));
     grip.addEventListener("dblclick", e => { e.preventDefault(); autoFitCol(table, cols, i); });
     th.appendChild(grip);
   });
+
+  if (fill) {
+    window.addEventListener("resize", () => { if (table.dataset.frozen) rescaleToWrap(table, cols); });
+  }
 }
 
 function freezeCols(table, cols) {
@@ -451,16 +469,56 @@ function setTableWidth(table, cols) {
   if (total) table.style.width = total + "px";
 }
 
+// Fill mode: freeze the live column widths, then normalise them so they sum to
+// exactly the wrapper width (the table spans its container, no right-side gap).
+function freezeColsFill(table, cols) {
+  if (!table.dataset.frozen) {
+    const ths = table.tHead.rows[0].cells;
+    cols.forEach((c, i) => { c.style.width = ths[i].offsetWidth + "px"; });
+    table.dataset.frozen = "1";
+  }
+  rescaleToWrap(table, cols);
+}
+
+// Scale the current column widths proportionally so they fill the wrapper
+// exactly, pinning the table to that width. Preserves relative proportions, so
+// it also keeps the fit after a window resize.
+function rescaleToWrap(table, cols) {
+  const wrapW = table.parentElement ? table.parentElement.clientWidth : 0;
+  let ws = cols.map(c => parseFloat(c.style.width) || 0);
+  const sum = ws.reduce((a, b) => a + b, 0);
+  if (sum <= 0 || wrapW <= 0) return;
+  ws = ws.map(w => Math.max(1, (w * wrapW) / sum));
+  // Absorb rounding into the last column so the sum is exactly wrapW.
+  const drift = wrapW - ws.reduce((a, b) => a + b, 0);
+  ws[ws.length - 1] += drift;
+  cols.forEach((c, i) => { c.style.width = Math.round(ws[i]) + "px"; });
+  table.style.width = wrapW + "px";
+}
+
 function startColResize(e, table, cols, i, grip) {
   e.preventDefault();
-  freezeCols(table, cols);
+  const fill = table.dataset.fillResize === "1";
+  if (fill) freezeColsFill(table, cols); else freezeCols(table, cols);
   const startX = e.clientX;
   const startW = parseFloat(cols[i].style.width) || table.tHead.rows[0].cells[i].offsetWidth;
+  // Fill mode trades width with the next column so the total stays constant.
+  const j = i + 1;
+  const startP = fill ? (parseFloat(cols[j].style.width) || table.tHead.rows[0].cells[j].offsetWidth) : 0;
+  const pairTotal = startW + startP;
   document.body.classList.add("col-resizing");
   grip.classList.add("dragging");
   const move = ev => {
-    cols[i].style.width = Math.max(48, startW + (ev.clientX - startX)) + "px";
-    setTableWidth(table, cols);
+    const dx = ev.clientX - startX;
+    if (fill) {
+      const wi = Math.max(COL_MIN, Math.min(pairTotal - COL_MIN, startW + dx));
+      cols[i].style.width = wi + "px";
+      cols[j].style.width = (pairTotal - wi) + "px";
+      // table width unchanged — the pair's sum is constant
+    } else {
+      cols[i].style.width = Math.max(48, startW + dx) + "px";
+      setTableWidth(table, cols);
+    }
   };
   const up = () => {
     document.removeEventListener("mousemove", move);
@@ -498,6 +556,18 @@ function measureCol(table, i) {
 }
 
 function autoFitCol(table, cols, i) {
+  if (table.dataset.fillResize === "1") {
+    // Fit column i to its content, taking/giving the difference from the next
+    // column so the table stays full width.
+    freezeColsFill(table, cols);
+    const j = i + 1;
+    const pairTotal = (parseFloat(cols[i].style.width) || 0) + (parseFloat(cols[j].style.width) || 0);
+    const wi = Math.max(COL_MIN, Math.min(pairTotal - COL_MIN, measureCol(table, i)));
+    cols[i].style.width = wi + "px";
+    cols[j].style.width = (pairTotal - wi) + "px";
+    saveCols(table, cols);
+    return;
+  }
   freezeCols(table, cols);
   cols[i].style.width = measureCol(table, i) + "px";
   setTableWidth(table, cols);
@@ -2683,7 +2753,9 @@ function init() {
   $("#shell-modal").addEventListener("click", e => { if (e.target.id === "shell-modal") closeShell(); });
   $("#container-cancel").addEventListener("click", () => $("#container-modal").classList.add("hidden"));
 
-  ["pod-table", "job-table", "rs-table", "sre-inc-table", "sre-prop-table"].forEach(id => makeResizable(document.getElementById(id)));
+  ["pod-table", "job-table", "rs-table"].forEach(id => makeResizable(document.getElementById(id)));
+  // SRE tables stay full width (last column flush right) even after a drag.
+  ["sre-inc-table", "sre-prop-table"].forEach(id => makeResizable(document.getElementById(id), { fill: true }));
 
   bindKeys();
   switchView("pods");
