@@ -1610,7 +1610,9 @@ td.pct-cool { color: var(--green); }
 /* The list is a sibling of .card-body, so it has no padding of its own — match
    the body's horizontal padding (18px) and add bottom spacing so it isn't
    flush against (and clipped by) the card's bottom edge. */
-.sre-ov-list { margin: 10px 18px 0; padding: 8px 0 16px; border-top: 1px solid var(--border-lt); }
+/* Sit the divider with balanced spacing: the body's 16px bottom padding above
+   it, ~14px below — instead of a lopsided 26px/8px gap. */
+.sre-ov-list { margin: 0 18px; padding: 14px 0 16px; border-top: 1px solid var(--border-lt); }
 .sre-ov-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 12.5px; }
 .sre-ov-row + .sre-ov-row { border-top: 1px solid var(--border-lt); }
 .sre-ov-type { display: inline-flex; align-items: center; gap: 9px; }
