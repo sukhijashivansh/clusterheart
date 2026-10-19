@@ -10,7 +10,7 @@
 # Clusterheart
 ### See your cluster. Fix it. Right-size it. Ask AI.
 
-- One app: pods, jobs, nodes, cost, AI, and resource patching
+- One application: pods, jobs, nodes, cost, AI, and resource patching
 - Zero cluster footprint - runs against your existing kubeconfig
 - Your credentials never leave your machine
 
