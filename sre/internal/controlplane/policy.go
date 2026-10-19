@@ -26,7 +26,7 @@ type Policy struct {
 	PausedWorkloads []string `json:"pausedWorkloads,omitempty" bson:"pausedWorkloads,omitempty"`
 	// Circuit breaker / loop detection (spec §8): once a target has accumulated
 	// CircuitBreakerFailures failed remediations within CircuitBreakerWindow, new
-	// proposals for that target are denied until the window passes — so a
+	// proposals for that target are denied until the window passes - so a
 	// recurring incident cannot drive an endless restart loop. Zero disables it.
 	CircuitBreakerFailures int           `json:"circuitBreakerFailures" bson:"circuitBreakerFailures"`
 	CircuitBreakerWindow   time.Duration `json:"circuitBreakerWindow" bson:"circuitBreakerWindow"`

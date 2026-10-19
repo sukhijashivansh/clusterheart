@@ -1,6 +1,6 @@
 // Package contract defines the wire types exchanged between the Kubernetes
 // agent and the control plane. These are deliberately small, versioned JSON
-// payloads — telemetry is treated as UNTRUSTED input and may never carry an
+// payloads - telemetry is treated as UNTRUSTED input and may never carry an
 // authorization decision or a policy override. Anything an agent reports is a
 // measured fact about a cluster, nothing more.
 package contract
@@ -65,7 +65,7 @@ type ClusterSnapshot struct {
 }
 
 // ProblemType enumerates the deterministic fault signals the agent reports.
-// These are symptoms derived from Kubernetes object status — never root causes.
+// These are symptoms derived from Kubernetes object status - never root causes.
 type ProblemType string
 
 const (
@@ -75,7 +75,7 @@ const (
 	ProblemUnschedulable    ProblemType = "Unschedulable"
 	ProblemRolloutStuck     ProblemType = "RolloutStuck"
 	// ProblemAgentDown is raised by the CONTROL PLANE (not the agent) when a
-	// previously-connected cluster stops sending telemetry — so the platform
+	// previously-connected cluster stops sending telemetry - so the platform
 	// never silently reports a cluster healthy while it is actually blind.
 	ProblemAgentDown ProblemType = "AgentDown"
 )

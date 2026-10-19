@@ -19,7 +19,7 @@ const Version = "0.1.0"
 
 // maxBuffer bounds how many snapshots the agent holds during a control-plane
 // outage. Oldest snapshots are dropped first (bounded telemetry, no unbounded
-// memory growth — spec §3B, §18).
+// memory growth - spec §3B, §18).
 const maxBuffer = 60
 
 // Client talks to the control plane as a single registered cluster.

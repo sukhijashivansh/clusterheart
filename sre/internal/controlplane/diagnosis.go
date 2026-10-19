@@ -3,13 +3,13 @@ package controlplane
 // AI-assisted root-cause analysis (spec §6, §15). Design rules enforced here:
 //
 //   - The AI only ever produces a STRUCTURED, schema-validated Diagnosis. It
-//     never emits shell or patches, and a recommended action is advisory only —
+//     never emits shell or patches, and a recommended action is advisory only -
 //     it does NOT create or authorize a remediation. A human/policy still runs
 //     the deterministic CreateProposal path, so a hallucinated target can never
 //     cause a mutation.
 //   - A DETERMINISTIC diagnoser is always available and is the default. External
 //     AI is opt-in (disabled unless configured) and, on any error, the service
-//     falls back to the deterministic result — graceful degradation.
+//     falls back to the deterministic result - graceful degradation.
 //   - Telemetry (evidence messages) is treated as untrusted DATA, never
 //     instructions (injection hardening lives in the LLM diagnoser).
 //   - Every diagnosis distinguishes measured FACTS from inferred HYPOTHESES.
@@ -114,7 +114,7 @@ func (d deterministicDiagnoser) Diagnose(_ context.Context, inc Incident) (Diagn
 		dg.RecommendedAction, dg.RecommendedActionable = "investigate", false
 		dg.Risks = "A restart only defers the next OOM. Raising the limit without headroom analysis can mask a leak or starve the node."
 		dg.VerificationCriteria = []string{"no further OOMKilled events", "working-set stays below the limit under normal load"}
-		dg.Rollback = "N/A — recommend investigation (memory rightsizing) rather than an automatic mutation."
+		dg.Rollback = "N/A - recommend investigation (memory rightsizing) rather than an automatic mutation."
 	case contract.ProblemImagePullBackOff:
 		dg.Summary = fmt.Sprintf("%s cannot pull its image in %s.", inc.Workload, inc.Namespace)
 		dg.Hypotheses = []Hypothesis{
@@ -122,9 +122,9 @@ func (d deterministicDiagnoser) Diagnose(_ context.Context, inc Incident) (Diagn
 			{Cause: "Registry authentication/imagePullSecret is missing or expired.", Confidence: ConfidenceMedium, Supporting: []string{"pull denied by registry"}},
 		}
 		dg.RecommendedAction, dg.RecommendedActionable = "investigate", false
-		dg.Risks = "A rollout restart will NOT fix a bad image reference or missing pull secret — fix the manifest/secret first."
+		dg.Risks = "A rollout restart will NOT fix a bad image reference or missing pull secret - fix the manifest/secret first."
 		dg.VerificationCriteria = []string{"image pulls succeed", "pods leave ImagePullBackOff"}
-		dg.Rollback = "N/A — manifest/secret fix required."
+		dg.Rollback = "N/A - manifest/secret fix required."
 	case contract.ProblemUnschedulable:
 		dg.Summary = fmt.Sprintf("Pods for %s cannot be scheduled in %s.", inc.Workload, inc.Namespace)
 		dg.Hypotheses = []Hypothesis{
@@ -134,7 +134,7 @@ func (d deterministicDiagnoser) Diagnose(_ context.Context, inc Incident) (Diagn
 		dg.RecommendedAction, dg.RecommendedActionable = "investigate", false
 		dg.Risks = "Restarting won't create capacity. Adding nodes or relaxing constraints should be deliberate."
 		dg.VerificationCriteria = []string{"pending pods get scheduled", "no Unschedulable events"}
-		dg.Rollback = "N/A — capacity/scheduling change required."
+		dg.Rollback = "N/A - capacity/scheduling change required."
 	case contract.ProblemRolloutStuck:
 		dg.Summary = fmt.Sprintf("Rollout of %s is stuck in %s: the new revision is not becoming healthy.", inc.Workload, inc.Namespace)
 		dg.Hypotheses = []Hypothesis{
@@ -270,7 +270,7 @@ func (s *diagnosisService) Get(ctx context.Context, tenantID, incidentID string)
 }
 
 // validateDiagnosis enforces the safety contract on any (possibly AI-produced)
-// diagnosis: required fields present, and — critically — a recommended
+// diagnosis: required fields present, and - critically - a recommended
 // EXECUTABLE action must be a known action type targeting THIS incident's
 // workload. Anything else is downgraded to a non-actionable "investigate", so
 // the AI can never smuggle an arbitrary action/target into the UI.
@@ -296,7 +296,7 @@ func validateDiagnosis(d *Diagnosis, inc Incident) error {
 			d.RecommendedActionable, d.RecommendedAction, d.RecommendedTarget = false, "investigate", nil
 		} else {
 			kind, name := splitWorkload(inc.Workload)
-			// Force the target to the incident's own workload — never trust a
+			// Force the target to the incident's own workload - never trust a
 			// model-supplied target.
 			d.RecommendedTarget = &TargetRef{Kind: kind, Namespace: inc.Namespace, Name: name}
 		}

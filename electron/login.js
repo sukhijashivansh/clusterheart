@@ -33,7 +33,7 @@ async function attemptLogin(email, password) {
     show('pending');
     return;
   }
-  say('Approved — starting…', 'ok');
+  say('Approved - starting…', 'ok');
   await boot();
 }
 
@@ -57,7 +57,7 @@ $('recheck').addEventListener('click', async () => {
   const r = await window.clusterheart.resume();
   $('recheck').disabled = false;
   if (r.approved) { await boot(); return; }
-  // still pending — leave the view as-is
+  // still pending - leave the view as-is
 });
 $('signout').addEventListener('click', async () => {
   await window.clusterheart.logout(); // clears token, reloads login.html

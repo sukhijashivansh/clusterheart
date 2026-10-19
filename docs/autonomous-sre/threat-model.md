@@ -1,15 +1,15 @@
-# ClusterHeart Autonomous SRE — Threat Model (living)
+# ClusterHeart Autonomous SRE - Threat Model (living)
 
 Scope grows with the implementation. This reflects Milestone 1 (observe-only
 control plane + agent) and flags what later milestones must address.
 
 ## Trust boundaries
-1. **Agent ↔ Control plane** — crosses the network / tenant boundary. Highest risk.
-2. **Telemetry ↔ Reasoning** — telemetry is attacker-influenceable (logs, events,
+1. **Agent ↔ Control plane** - crosses the network / tenant boundary. Highest risk.
+2. **Telemetry ↔ Reasoning** - telemetry is attacker-influenceable (logs, events,
    annotations). It must never authorize actions or alter policy.
-3. **Reasoning (AI) ↔ Execution** — the AI proposes; deterministic code decides and
+3. **Reasoning (AI) ↔ Execution** - the AI proposes; deterministic code decides and
    executes. The AI has no credentials to mutate a cluster.
-4. **Observe SA ↔ Remediate SA** — separate identities; remediation installed only on opt-in.
+4. **Observe SA ↔ Remediate SA** - separate identities; remediation installed only on opt-in.
 
 ## Milestone-1 threats & mitigations (implemented)
 | Threat | Mitigation | Status |
@@ -25,12 +25,12 @@ control plane + agent) and flags what later milestones must address.
 | Thundering-herd reconnect | Exponential backoff + jitter | Implemented + tested |
 
 ## Known gaps / deferred (must address before production automation)
-- **mTLS + per-cluster certs** — currently bearer-over-TLS. (M6)
-- **Admin authz** — single bootstrap admin token; integrate with the account
+- **mTLS + per-cluster certs** - currently bearer-over-TLS. (M6)
+- **Admin authz** - single bootstrap admin token; integrate with the account
   server / RBAC and per-tenant admin scoping. (M2+)
-- **Prompt injection** — no AI yet; when added, telemetry is data-only, never
+- **Prompt injection** - no AI yet; when added, telemetry is data-only, never
   instructions; structured output schemas; policy decisions independent of the model. (M2)
-- **Remediation safety** — no mutation exists yet; the full guardrail subsystem
+- **Remediation safety** - no mutation exists yet; the full guardrail subsystem
   (policy engine, approvals, rate limits, circuit breakers, kill switch,
   rollback, verification) lands with M3/M4 before any action is executable.
 - **Signed agent updates**, **replay protection (nonce/timestamp)**, **rate

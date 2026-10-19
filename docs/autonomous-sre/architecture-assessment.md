@@ -1,4 +1,4 @@
-# ClusterHeart Autonomous SRE — Architecture Assessment
+# ClusterHeart Autonomous SRE - Architecture Assessment
 
 Status: living document. Grounded in the repository as of this branch.
 
@@ -15,7 +15,7 @@ Status: living document. Grounded in the repository as of this branch.
 ### Current `app/` capabilities (verified)
 - **Read-mostly** API (20 routes): pods, jobs, nodes, hpas, namespaces, stats, rightsizing, costs, gemini (AI), shell (exec), port-forward, contexts.
 - **Mutating surface is tiny**: pod `Delete` and a namespace "cleanse"; plus `exec` / `port-forward` access. Rightsizing is **recommend-only** (no `Patch`/`Update`/`Scale` in the backend).
-- **RBAC**: a single combined ClusterRole (read + exec + delete) — not the separated observe/execute model the spec requires.
+- **RBAC**: a single combined ClusterRole (read + exec + delete) - not the separated observe/execute model the spec requires.
 - **AI**: `/api/gemini` → direct Gemini/OpenRouter call. No structured-action schema, no validation, no guardrails.
 - **Auth**: the backend trusts localhost / in-cluster; it has no multi-tenant authn/authz of its own.
 
@@ -56,7 +56,7 @@ Key invariants (enforced in code, not convention):
 `app/` already has working, battle-tested client-go collection, in-cluster deploy, a usage time-series, and an AI integration. The agent reuses its collection patterns; rightsizing math and the dashboard remain valuable. The re-platform wraps these in the control-plane/agent trust model rather than rewriting them.
 
 ## 5. Data stores
-- **MongoDB** is already the project's datastore (account server + usage history). The control plane reuses it for tenants, clusters, agents, incidents, proposals, approvals, executions, and audit — consistent with existing conventions.
+- **MongoDB** is already the project's datastore (account server + usage history). The control plane reuses it for tenants, clusters, agents, incidents, proposals, approvals, executions, and audit - consistent with existing conventions.
 - Raw logs/metrics are **not** dumped into the primary DB. Incidents reference bounded evidence snapshots; long-horizon metrics/logs are delegated to purpose-built backends (Prometheus/OTel/Loki) via integrations in a later phase.
 
 ## 6. Security posture (summary; full threat model: `threat-model.md`)

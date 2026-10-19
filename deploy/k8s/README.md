@@ -6,7 +6,7 @@ runs as a pod, reads the cluster through a ServiceAccount + RBAC (no kubeconfig,
 no credentials leave anywhere), and serves the UI to a browser.
 
 > ⚠️ **No authentication.** These manifests put the dashboard behind no login.
-> Keep it private — reach it via `kubectl port-forward` or a VPN/internal
+> Keep it private - reach it via `kubectl port-forward` or a VPN/internal
 > LoadBalancer only. Don't expose it to the public internet as-is.
 
 ## 1. Build the image
@@ -36,7 +36,7 @@ minikube image load clusterheart:latest             # minikube
 
 ```bash
 kubectl apply -f deploy/k8s/clusterheart.yaml
-kubectl apply -f deploy/k8s/mongo.yaml   # optional — rightsizing history
+kubectl apply -f deploy/k8s/mongo.yaml   # optional - rightsizing history
 kubectl -n clusterheart rollout status deploy/clusterheart
 ```
 
@@ -48,7 +48,7 @@ open http://localhost:8088
 ```
 
 For a real URL on a cloud cluster, change the Service in `clusterheart.yaml` to
-`type: LoadBalancer` (ideally an *internal* LB), or front it with an Ingress —
+`type: LoadBalancer` (ideally an *internal* LB), or front it with an Ingress -
 add your own auth (OAuth2 proxy / basic auth) before exposing it more widely.
 
 ## What works in-cluster vs. desktop
@@ -58,7 +58,7 @@ add your own auth (OAuth2 proxy / basic auth) before exposing it more widely.
 | Pods / nodes / jobs / HPAs / stats | ✅ | via the ServiceAccount |
 | Logs, YAML, diagnose, shell, port-forward, load test | ✅ | `kubectl` is bundled in the image; auths via the mounted token |
 | Rightsizing history | ✅ | needs `mongo.yaml` (or point `MONGO_URI` at your own Mongo) |
-| Context switcher | ➖ | one cluster only (the one it lives in) — the dropdown is empty |
+| Context switcher | ➖ | one cluster only (the one it lives in) - the dropdown is empty |
 | AWS cost panel (FinOps) | ➖ | needs the `aws` CLI + credentials; omitted from the image. To enable, give the pod IAM via IRSA and add `aws` to the Dockerfile |
 | AI chat | ✅ | set the provider/key in the AI tab as usual |
 

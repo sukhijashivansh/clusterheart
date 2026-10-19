@@ -1,13 +1,13 @@
-# ClusterHeart Autonomous SRE — `sre/` module
+# ClusterHeart Autonomous SRE - `sre/` module
 
 One Go module, three binaries:
 
-- `cmd/controlplane` — multi-tenant API: cluster registration, agent heartbeats,
+- `cmd/controlplane` - multi-tenant API: cluster registration, agent heartbeats,
   telemetry ingestion, incident detection, remediation policy/approval/audit,
   operator read-back. Never touches a cluster directly.
-- `cmd/agent` — in-cluster, read-only collector that forwards bounded cluster-health
+- `cmd/agent` - in-cluster, read-only collector that forwards bounded cluster-health
   snapshots to the control plane.
-- `cmd/remediation` — in-cluster, narrowly-privileged controller (opt-in, separate
+- `cmd/remediation` - in-cluster, narrowly-privileged controller (opt-in, separate
   credential) that pulls already-approved typed actions, executes them (dry-run or
   real per policy), verifies, and reports back. No detection, no AI, no arbitrary
   commands.
@@ -102,12 +102,12 @@ go run ./cmd/remediation
 
 ## In-cluster install
 
-Agent (observe-only): see `../deploy/k8s/agent/agent.yaml` — read-only RBAC,
+Agent (observe-only): see `../deploy/k8s/agent/agent.yaml` - read-only RBAC,
 hardened securityContext. Create the `clusterheart-agent` Secret with the
 registration values first.
 
 Remediation controller (opt-in): see `../deploy/k8s/remediation/remediation.yaml`
-— separate ServiceAccount, `get,update` on Deployments/StatefulSets/DaemonSets
+- separate ServiceAccount, `get,update` on Deployments/StatefulSets/DaemonSets
 only. Create the `clusterheart-remediation` Secret with the mint-call values
 first.
 
@@ -127,7 +127,7 @@ go test ./...
   downgrade, kill-switch) + approval→pending→report flow. The **executor** against
   a `fake.Clientset`: RolloutRestart apply + verify, dry-run, not-found,
   verification-failure, unsupported kind, StatefulSet.
-- **Validated on a live `kind` cluster (Kubernetes v1.31.0):** the full loop —
+- **Validated on a live `kind` cluster (Kubernetes v1.31.0):** the full loop -
   agent collector → deterministic detection (CrashLoopBackOff/RolloutStuck) →
   policy → approval → controller → real `RolloutRestart` → verification (pass
   *and* fail paths) → durable audit, through a Mongo-backed control plane,

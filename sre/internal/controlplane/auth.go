@@ -62,8 +62,8 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // requireAgent authenticates a cluster agent and pins the request to that
-// cluster. Handlers downstream MUST use clusterFromCtx — never a cluster id
-// from the request body — so an agent for cluster A can never write as cluster
+// cluster. Handlers downstream MUST use clusterFromCtx - never a cluster id
+// from the request body - so an agent for cluster A can never write as cluster
 // B (tenant isolation at the trust boundary).
 func (s *Server) requireAgent(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

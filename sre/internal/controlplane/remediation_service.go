@@ -125,7 +125,7 @@ func (s *remediationService) Approve(ctx context.Context, tenantID, id, approver
 		return nil, fmt.Errorf("%w: proposal is %s, not awaiting approval", errConflict, p.Status)
 	}
 	// Preconditions can change between proposal and approval (pause, cooldown,
-	// concurrency) — re-evaluate deterministically.
+	// concurrency) - re-evaluate deterministically.
 	dec := s.evaluate(ctx, tenantID, p.ClusterID, p.Action, p.Target, p.Params)
 	now := s.now()
 	p.DecidedBy = approver

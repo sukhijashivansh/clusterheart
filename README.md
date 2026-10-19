@@ -4,14 +4,14 @@ A clean, git-free workspace with three parts:
 
 ```
 clusterheart/
-├── app/        the dashboard — Go binary that serves the web UI (reads LOCAL kubeconfig/SSO)
-├── electron/   the desktop app — login screen that gates the dashboard
-└── server/     the account server — real auth + your approve/revoke admin panel
+├── app/        the dashboard - Go binary that serves the web UI (reads LOCAL kubeconfig/SSO)
+├── electron/   the desktop app - login screen that gates the dashboard
+└── server/     the account server - real auth + your approve/revoke admin panel
 ```
 
 ## Download
 
-The desktop app is served **from the home page itself** — the server hosts the
+The desktop app is served **from the home page itself** - the server hosts the
 installers under `/downloads/` and the landing page's **Download** section links
 to them. The repo stays private; nothing is published to a public GitHub
 release.
@@ -46,7 +46,7 @@ Canonical download URLs the landing page links to:
 
 - **The user only ever learns their access status at login**, inside the app.
   Approved → the dashboard opens. Not approved → a "pending approval" screen.
-- The Go binary does all Kubernetes work **locally** — credentials never leave
+- The Go binary does all Kubernetes work **locally** - credentials never leave
   the machine. The server only handles accounts and approvals.
 - Passwords are bcrypt-hashed; sessions are signed tokens (cookie for the web
   pages, bearer token for the desktop app).
@@ -79,7 +79,7 @@ cd app
 go build -o clusterheart-app .
 ```
 
-(The Electron app spawns this. It needs a working kubeconfig — same as before.)
+(The Electron app spawns this. It needs a working kubeconfig - same as before.)
 
 ## 3. Run the desktop app
 
@@ -89,7 +89,7 @@ CLUSTERHEART_SERVER=http://127.0.0.1:9000 npm start
 ```
 
 - Sign in with an account. If it's **not approved yet**, you'll see the pending
-  screen — approve it at the server's `/admin`, then hit **Check again**.
+  screen - approve it at the server's `/admin`, then hit **Check again**.
 - Once approved, the dashboard boots.
 - **Account → Log out** in the menu bar returns to the login screen.
 - The session is remembered, so an approved user skips the login next launch

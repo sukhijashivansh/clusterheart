@@ -13,7 +13,7 @@ import (
 // executes. There is no path that turns free-form text into a cluster mutation.
 
 // ActionType enumerates the EXPLICITLY supported remediation actions. Anything
-// not in the registry is rejected — no arbitrary patches or shell.
+// not in the registry is rejected - no arbitrary patches or shell.
 type ActionType string
 
 const (
@@ -113,7 +113,7 @@ type RemediationProposal struct {
 	Status     ProposalStatus    `json:"status" bson:"status"`
 	Decision   *PolicyDecision   `json:"decision,omitempty" bson:"decision,omitempty"`
 	CreatedAt  time.Time         `json:"createdAt" bson:"createdAt"`
-	CreatedBy  string            `json:"createdBy" bson:"createdBy"` // "operator:<id>" or "system:<rule>" — never executes AI
+	CreatedBy  string            `json:"createdBy" bson:"createdBy"` // "operator:<id>" or "system:<rule>" - never executes AI
 	DecidedBy  string            `json:"decidedBy,omitempty" bson:"decidedBy,omitempty"`
 	DecidedAt  *time.Time        `json:"decidedAt,omitempty" bson:"decidedAt,omitempty"`
 	Execution  *ActionExecution  `json:"execution,omitempty" bson:"execution,omitempty"`

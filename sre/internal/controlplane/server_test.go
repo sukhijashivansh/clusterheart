@@ -339,7 +339,7 @@ func TestRunbookSaveValidateAndPrecedence(t *testing.T) {
 		t.Fatalf("runbook not versioned: %+v", saved)
 	}
 
-	// Find the incident, then propose — the runbook must win over the AI rec.
+	// Find the incident, then propose - the runbook must win over the AI rec.
 	_, ib := do(t, http.MethodGet, ts.URL+"/api/v1/incidents?tenantId=tenantR&status=open", adminTok, "", nil)
 	var il struct {
 		Incidents []Incident `json:"incidents"`

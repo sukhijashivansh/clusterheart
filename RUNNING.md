@@ -10,7 +10,7 @@ Clusterheart has three parts:
 |------|-----|-----------|------|
 | Account server | `server/` | auth + approve/revoke admin panel (MongoDB) | `127.0.0.1:9000` |
 | Dashboard binary | `app/` | Go web server that reads your **local** kubeconfig and serves the UI | random localhost port (spawned by the desktop app) |
-| Desktop app | `electron/` | Electron login gate that spawns the dashboard once you're approved | — |
+| Desktop app | `electron/` | Electron login gate that spawns the dashboard once you're approved | - |
 
 The flow: **desktop app → logs in against the account server → if approved,
 spawns the dashboard binary and points its window at it.** Kubernetes/AWS work
@@ -22,11 +22,11 @@ happens **locally** in the dashboard binary; credentials never leave the machine
 
 - **Go** 1.26+ (`go version`)
 - **Node** 20+ and npm (`node --version`)
-- **MongoDB** — the account server needs a connection string. `server/.env`
+- **MongoDB** - the account server needs a connection string. `server/.env`
   already points at a MongoDB Atlas cluster, so no local install is required.
 - **kubectl-style kubeconfig** at `~/.kube/config` for a cluster you can reach
   (the dashboard reads this).
-- **aws CLI** on PATH (`aws --version`) — only needed for the FinOps cost panel.
+- **aws CLI** on PATH (`aws --version`) - only needed for the FinOps cost panel.
 
 ---
 
@@ -66,10 +66,10 @@ go build -o clusterheart-app .
 ```
 
 Rebuild this **whenever you change anything in `app/`** (including
-`app/static/*` — the frontend is embedded into the binary at build time, so a
+`app/static/*` - the frontend is embedded into the binary at build time, so a
 CSS/JS edit doesn't show up until you rebuild).
 
-> **Tip — live frontend editing:** run the binary with `KUBEPULSE_DEV=1` and it
+> **Tip - live frontend editing:** run the binary with `KUBEPULSE_DEV=1` and it
 > serves `app/static` from disk (no rebuild needed on refresh):
 > `KUBEPULSE_DEV=1 ./clusterheart-app -addr 127.0.0.1:8088`, then open
 > `http://127.0.0.1:8088` in a browser. Good for iterating on the UI without the
@@ -87,7 +87,7 @@ before launching:
 docker compose up -d      # MongoDB on localhost:27017 (persistent volume)
 ```
 
-If MongoDB isn't reachable the dashboard still runs — the rightsizing tab just
+If MongoDB isn't reachable the dashboard still runs - the rightsizing tab just
 reports that history is unavailable. Overrides (env vars on the dashboard
 binary):
 
@@ -111,7 +111,7 @@ CLUSTERHEART_SERVER=http://127.0.0.1:9000 npm start
   skip the login next launch (until revoked or the 30-day token expires).
 - **Account → Log out** returns to the login screen.
 
-`CLUSTERHEART_SERVER` defaults to a hosted server if unset — always set it to
+`CLUSTERHEART_SERVER` defaults to a hosted server if unset - always set it to
 `http://127.0.0.1:9000` when running the local server.
 
 ---
@@ -142,7 +142,7 @@ again. The server can keep running.
 ### Autonomous SRE (incidents + remediation views)
 
 The dashboard's **incidents** and **remediation** views talk to the Autonomous
-SRE control plane (`sre/cmd/controlplane`) through a server-side proxy — the
+SRE control plane (`sre/cmd/controlplane`) through a server-side proxy - the
 admin token stays in the dashboard process, never the renderer, and the UI is
 pinned to one tenant. Point the dashboard at a running control plane with three
 env vars (unset → the views show a clear "not configured" notice, never fake
@@ -158,7 +158,7 @@ data):
 Or pass the same three vars through the Electron launch (step 3 above). To stand
 up the control plane itself, see `sre/README.md`. The **incidents** view lists
 detected incidents (click a row for full evidence); the **remediation** view is
-the approval queue — approve/reject proposed actions and an emergency
+the approval queue - approve/reject proposed actions and an emergency
 pause/resume (kill switch) for the tenant.
 
 ### AWS cost panel (FinOps → AWS Daily Spend)
@@ -166,7 +166,7 @@ pause/resume (kill switch) for the tenant.
 The cost panel runs `aws ce get-cost-and-usage`. It authenticates using the
 **same AWS profile your current kube context uses** (read from the context's
 `exec` auth block, e.g. `AWS_PROFILE=shivansh`). So if your cluster loads, costs
-should load too — **as long as that profile's credentials are valid**.
+should load too - **as long as that profile's credentials are valid**.
 
 If you see `NoCredentials` / a cost error:
 
@@ -181,18 +181,18 @@ Then click **load costs** again. (Cost Explorer calls cost ~$0.01 each.)
 
 ### AI chat (AI tab)
 
-Set everything in the **AI tab toolbar** — no env vars or restarts needed. Keys
+Set everything in the **AI tab toolbar** - no env vars or restarts needed. Keys
 are stored in the browser's `localStorage` (client-side only) and sent with each
 request:
 
-- **provider** — `gemini` or `openrouter`.
-- **api key** — paste your key (⌘V works; the app has an Edit menu). Stored
+- **provider** - `gemini` or `openrouter`.
+- **api key** - paste your key (⌘V works; the app has an Edit menu). Stored
   per-provider, shows **saved ✓**.
-- **model** *(OpenRouter)* — leave **blank** to use free models (no credits
+- **model** *(OpenRouter)* - leave **blank** to use free models (no credits
   needed). The server tries several `:free` models in order:
   `llama-3.3-70b → qwen3-next-80b → gpt-oss-20b → gemma-4-31b`. Or type any
   OpenRouter model id (e.g. a paid `anthropic/claude-*` if you have credits).
-- **max tokens** — reply-length cap. Blank = 1500. Lower it only if a paid model
+- **max tokens** - reply-length cap. Blank = 1500. Lower it only if a paid model
   says you can't afford the tokens.
 
 Env-var fallbacks still work for headless/dev use: `OPENROUTER_API_KEY`,
@@ -207,8 +207,8 @@ Env-var fallbacks still work for headless/dev use: `OPENROUTER_API_KEY`,
 | `Cannot reach the server` at login | Account server isn't running, or `CLUSTERHEART_SERVER` is wrong. Start step 1; set the env var to `http://127.0.0.1:9000`. |
 | Login says **pending** | Your account isn't approved. Approve it at `http://127.0.0.1:9000/admin`, then **Check again**. |
 | `connected to MongoDB` never prints | Bad `MONGO_URI` or no network to Atlas. |
-| Frontend change didn't show up | Rebuild `app/` (`go build -o clusterheart-app .`) and restart the desktop app — static is embedded. Or use `KUBEPULSE_DEV=1`. |
-| **Can't paste** the API key | Fixed — the app now has an Edit menu, so ⌘V works everywhere. If you're on an old build, restart the desktop app. |
+| Frontend change didn't show up | Rebuild `app/` (`go build -o clusterheart-app .`) and restart the desktop app - static is embedded. Or use `KUBEPULSE_DEV=1`. |
+| **Can't paste** the API key | Fixed - the app now has an Edit menu, so ⌘V works everywhere. If you're on an old build, restart the desktop app. |
 | Cost panel: `NoCredentials` | The kube context's AWS profile has no live creds. `aws sso login --profile <profile>`. |
 | AI: `no OpenRouter API key` | Paste a key in the AI tab's **api key** field. |
 | AI: `can only afford N tokens` | You're on a **paid** model with low OpenRouter credits. Clear the **model** field to use free models, or add credits, or lower **max tokens**. |

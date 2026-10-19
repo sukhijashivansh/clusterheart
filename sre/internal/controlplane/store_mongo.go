@@ -14,7 +14,7 @@ import (
 )
 
 // snapshotRetention bounds how long raw snapshots live in the primary store. A
-// TTL index prunes older documents — the DB is not a long-horizon telemetry
+// TTL index prunes older documents - the DB is not a long-horizon telemetry
 // sink (that is delegated to Prometheus/OTel later).
 const snapshotRetention = 24 * time.Hour
 

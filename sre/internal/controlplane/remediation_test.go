@@ -77,7 +77,7 @@ func TestApprovalThenControllerExecutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Approval does NOT execute in the control plane — it hands off to the controller.
+	// Approval does NOT execute in the control plane - it hands off to the controller.
 	if appr.Status != StatusApproved || appr.Execution != nil {
 		t.Fatalf("approval must not execute in control plane: status=%s", appr.Status)
 	}

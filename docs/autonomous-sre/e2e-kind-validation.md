@@ -98,7 +98,7 @@ healthy-api  executed  dryRun=false  verificationPassed=true   beforeState="reso
 crasher      failed    dryRun=false  verificationPassed=false  beforeState="resourceVersion=1760, replicas=1, restartedAt=\"\""  error="rollout did not become healthy within timeout"
 ```
 
-Live cluster (proof of real mutation — both annotations set, even for the one
+Live cluster (proof of real mutation - both annotations set, even for the one
 that failed verification):
 
 ```

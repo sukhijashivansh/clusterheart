@@ -12,7 +12,7 @@ import (
 
 // Engine turns measured fault signals (reported by agents) into deduplicated,
 // evidence-backed incidents with an open/resolved lifecycle. It is fully
-// deterministic — no AI is involved in detection. Telemetry is treated as data,
+// deterministic - no AI is involved in detection. Telemetry is treated as data,
 // never as instructions.
 type Engine struct {
 	incidents IncidentStore

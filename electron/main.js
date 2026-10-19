@@ -20,7 +20,7 @@ const os = require('os');
 
 const SERVER = (process.env.CLUSTERHEART_SERVER || 'https://www.clusterheart.com').replace(/\/+$/, '');
 
-// Never let a stray error take the whole app down silently — log it and fall
+// Never let a stray error take the whole app down silently - log it and fall
 // back to the login screen instead of the window vanishing.
 process.on('uncaughtException', (err) => {
   console.error('[clusterheart] uncaught exception:', err);

@@ -25,7 +25,7 @@ func main() {
 	mongoDB := envOr("MONGO_DB", "clusterheart")
 
 	if adminToken == "" {
-		log.Error("CONTROLPLANE_ADMIN_TOKEN is empty — operator endpoints are unreachable until it is set")
+		log.Error("CONTROLPLANE_ADMIN_TOKEN is empty - operator endpoints are unreachable until it is set")
 	}
 
 	var store controlplane.Store
@@ -36,7 +36,7 @@ func main() {
 	var diag controlplane.DiagnosisStore
 	var runbooks controlplane.RunbookStore
 	if mongoURI == "" {
-		log.Warn("MONGO_URI not set — using in-memory stores (NOT durable; local dev only)")
+		log.Warn("MONGO_URI not set - using in-memory stores (NOT durable; local dev only)")
 		store = controlplane.NewMemStore()
 		incidents = controlplane.NewMemIncidentStore()
 		rem = controlplane.NewMemRemediationStore()

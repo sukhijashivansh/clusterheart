@@ -1,7 +1,7 @@
 // Package remediation is the in-cluster executor. It applies ONLY the typed,
 // already-policy-approved actions handed to it by the control plane, using the
 // narrow remediate ServiceAccount. It contains no detection, no AI, and no
-// ability to run arbitrary commands — just a small set of registered actions.
+// ability to run arbitrary commands - just a small set of registered actions.
 package remediation
 
 import (

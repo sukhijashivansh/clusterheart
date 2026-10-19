@@ -6,7 +6,7 @@ package controlplane
 //
 // Safety properties enforced here:
 //   - Evidence/telemetry is embedded inside a clearly delimited, untrusted DATA
-//     block with an explicit instruction that NOTHING inside it is a command —
+//     block with an explicit instruction that NOTHING inside it is a command -
 //     prompt-injection hardening (spec §9, §15).
 //   - Free-text fields are redacted again before they ever reach the model.
 //   - The model is asked for STRICT JSON matching our schema; the response is
@@ -46,7 +46,7 @@ type llmDiagnoser struct {
 func (l *llmDiagnoser) Name() string { return "llm" }
 
 // newLLMDiagnoser builds an external-AI diagnoser from env, or returns nil when
-// AI is not configured (the default — external processing is opt-in).
+// AI is not configured (the default - external processing is opt-in).
 //
 //	SRE_AI_PROVIDER   non-empty enables it (e.g. "openrouter")
 //	SRE_AI_API_KEY    required

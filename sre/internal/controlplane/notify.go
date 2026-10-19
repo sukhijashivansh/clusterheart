@@ -1,7 +1,7 @@
 package controlplane
 
 // Outbound notifications (spec §11). Fire-and-forget: delivery never blocks or
-// fails a detection/remediation path — problems are logged. Channels are opt-in
+// fails a detection/remediation path - problems are logged. Channels are opt-in
 // via env; with none configured the notifier is a no-op. Notification content is
 // built from already-redacted incident/remediation fields.
 

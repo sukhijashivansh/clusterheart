@@ -1,6 +1,6 @@
 // Package controlplane implements the multi-tenant control-plane API: cluster
 // registration, agent heartbeats, telemetry ingestion, and read-back for
-// operators. Milestone 1 is observe-only plumbing — no detection, AI, policy,
+// operators. Milestone 1 is observe-only plumbing - no detection, AI, policy,
 // or remediation lives here yet (those are later milestones).
 package controlplane
 
@@ -231,14 +231,14 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 	for i := range batch.Snapshots {
 		sanitizeSnapshot(&batch.Snapshots[i])
 	}
-	// Telemetry is written ONLY for the authenticated cluster — never a cluster
+	// Telemetry is written ONLY for the authenticated cluster - never a cluster
 	// id taken from the request body (tenant isolation at the boundary).
 	if err := s.store.SaveSnapshots(r.Context(), c.ID, batch.Snapshots); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not store telemetry")
 		return
 	}
 	// Run deterministic detection on the latest snapshot. Detection failures must
-	// not fail ingestion — telemetry is already durably stored.
+	// not fail ingestion - telemetry is already durably stored.
 	if err := s.engine.reconcileLatest(r.Context(), c.TenantID, c.ID, batch.Snapshots); err != nil {
 		s.log.Error("incident reconcile failed", "clusterId", c.ID, "err", err)
 	}
@@ -317,7 +317,7 @@ func (s *Server) handleGetDiagnosis(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleProposeFromDiagnosis turns an incident's AI recommendation into a
-// remediation proposal — through the normal policy-checked CreateProposal path
+// remediation proposal - through the normal policy-checked CreateProposal path
 // (the diagnosis only pre-fills action+target; it never bypasses policy). If no
 // diagnosis exists yet, one is produced first.
 func (s *Server) handleProposeFromDiagnosis(w http.ResponseWriter, r *http.Request) {
@@ -445,7 +445,7 @@ func (s *Server) sweepAgentHealth(ctx context.Context, now time.Time) {
 	}
 	for _, c := range clusters {
 		if c.LastHeartbeat == nil {
-			continue // never connected — nothing to compare against
+			continue // never connected - nothing to compare against
 		}
 		age := now.Sub(*c.LastHeartbeat)
 		if age <= agentDownAfter {
@@ -477,7 +477,7 @@ func (s *Server) sweepAgentHealth(ctx context.Context, now time.Time) {
 }
 
 // handleStats aggregates a tenant-scoped overview of the platform's own state
-// (spec §14 Global Overview / §17 self-observability) — all measured, nothing
+// (spec §14 Global Overview / §17 self-observability) - all measured, nothing
 // fabricated.
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))

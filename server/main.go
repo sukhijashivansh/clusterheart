@@ -402,7 +402,7 @@ func main() {
 		adminEmails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 	}
 	if len(a.adminEmails) == 0 {
-		log.Println("WARNING: ADMIN_EMAILS is empty — nobody can reach /admin. Set it in server/.env")
+		log.Println("WARNING: ADMIN_EMAILS is empty - nobody can reach /admin. Set it in server/.env")
 	}
 
 	mux := http.NewServeMux()
@@ -417,7 +417,7 @@ func main() {
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
 
 	// Serve the desktop-app installers straight from this server (no GitHub
-	// release needed — the source stays private). Drop the .dmg/.exe/.AppImage
+	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage
 	// files into DOWNLOADS_DIR (default: ./downloads next to the binary).
 	downloadsDir := os.Getenv("DOWNLOADS_DIR")
 	if downloadsDir == "" {

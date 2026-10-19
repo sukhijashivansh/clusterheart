@@ -89,7 +89,7 @@ type Job struct {
 	Duration    string `json:"duration"`
 	Age         string `json:"age"`
 	Created     int64  `json:"created"`  // unix seconds; used to pick the latest run per job
-	Deadline    int64  `json:"deadline"` // activeDeadlineSeconds — time budget allocated, 0 if unset
+	Deadline    int64  `json:"deadline"` // activeDeadlineSeconds - time budget allocated, 0 if unset
 	OwnerKind   string `json:"ownerKind"`
 	OwnerName   string `json:"ownerName"`
 	Message     string `json:"message"`
@@ -144,7 +144,7 @@ type HPAMetric struct {
 }
 
 // HPACond mirrors an HPA status condition (AbleToScale/ScalingActive/
-// ScalingLimited) — the "why isn't it scaling" story lives here.
+// ScalingLimited) - the "why isn't it scaling" story lives here.
 type HPACond struct {
 	Type    string `json:"type"`
 	Status  string `json:"status"`
@@ -209,7 +209,7 @@ func (s *server) kubeconfigPath() string {
 
 // chatTurn is a single message in the chat conversation. Role is "user" or
 // "model" (we keep "model" rather than "assistant" because the frontend
-// pipeline was originally Gemini-only — translating to "assistant" happens
+// pipeline was originally Gemini-only - translating to "assistant" happens
 // inside the OpenAI-compatible call).
 type chatTurn struct {
 	Role string `json:"role"`
@@ -357,7 +357,7 @@ func main() {
 		}
 		// Embedded files have a zero modtime, so http.FileServer emits no
 		// Last-Modified/ETag and the Electron/Chromium renderer caches them
-		// indefinitely — a rebuilt binary would still show the old UI. Force
+		// indefinitely - a rebuilt binary would still show the old UI. Force
 		// no-cache so a relaunch always serves the current frontend.
 		mux.Handle("/", noCache(http.FileServer(http.FS(sub))))
 	}
@@ -468,7 +468,7 @@ func (s *server) handlePods(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Pending without a container-status reason almost always means the
-		// scheduler hasn't placed the pod yet — surface PodScheduled=False from
+		// scheduler hasn't placed the pod yet - surface PodScheduled=False from
 		// pod conditions (Unschedulable + the "0/N nodes available" detail).
 		if msg == "" && p.Status.Phase == corev1.PodPending {
 			for _, cond := range p.Status.Conditions {
@@ -542,7 +542,7 @@ func (s *server) handlePods(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	// Final fallback: if any pod still shows a bare phase name (Pending /
-	// Unknown / Failed with no container reason yet — e.g. FailedScheduling,
+	// Unknown / Failed with no container reason yet - e.g. FailedScheduling,
 	// FailedAttachVolume, FailedCreatePodSandBox, image-pull errors before the
 	// container status materialises), pull the latest Warning event per pod
 	// in one call and use its Reason + Message.
@@ -872,7 +872,7 @@ func (s *server) handleHPAs(w http.ResponseWriter, r *http.Request) {
 			} else if raw, ok := curRaw[m.Resource.Name]; ok {
 				met.Current = raw
 			} else {
-				met.Current = "—"
+				met.Current = "-"
 			}
 			hi.Metrics = append(hi.Metrics, met)
 		}
@@ -1051,13 +1051,13 @@ func (s *server) handlePod(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if restarts > 5 {
-			b.WriteString("  [!] High restarts — app likely crashing on init.\n")
+			b.WriteString("  [!] High restarts - app likely crashing on init.\n")
 		}
 		if pod.Status.Phase == "Pending" {
-			b.WriteString("  [!] Pending — check node capacity / PVC.\n")
+			b.WriteString("  [!] Pending - check node capacity / PVC.\n")
 		}
 		if pod.Status.Phase == "Running" && ready != total {
-			b.WriteString("  [!] Running but not Ready — readiness probe failing or app still starting.\n")
+			b.WriteString("  [!] Running but not Ready - readiness probe failing or app still starting.\n")
 		}
 		if restarts == 0 && pod.Status.Phase == "Running" && ready == total {
 			b.WriteString("  No issues detected.\n")
@@ -1111,8 +1111,8 @@ func (s *server) handleNamespaceOps(w http.ResponseWriter, r *http.Request) {
 // awsEnvFromKubeContext returns environment overrides (AWS_PROFILE / region)
 // pulled from the current kube context's exec-auth block, so `aws` subcommands
 // authenticate the same way kubectl does for this cluster. Without this, the
-// cost command runs against the default profile — which typically has no
-// credentials — and fails with NoCredentials even though the cluster is live.
+// cost command runs against the default profile - which typically has no
+// credentials - and fails with NoCredentials even though the cluster is live.
 // Returns nil when there's no kubeconfig file or the context uses no exec auth.
 func (s *server) awsEnvFromKubeContext() []string {
 	path := s.kubeconfigPath()
@@ -1181,7 +1181,7 @@ func (s *server) handleCosts(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(msg, "executable file not found") {
 			msg = "aws CLI not found on PATH"
 		} else if strings.Contains(msg, "NoCredentials") || strings.Contains(msg, "Unable to locate credentials") {
-			msg = "no AWS credentials for the active cluster's profile — run `aws sso login` (or `aws configure`) for it, then retry"
+			msg = "no AWS credentials for the active cluster's profile - run `aws sso login` (or `aws configure`) for it, then retry"
 		}
 		writeErr(w, 500, msg)
 		return
@@ -1220,7 +1220,7 @@ func friendlyAwsErr(stderr string, err error) string {
 		return "aws CLI not found on PATH"
 	}
 	if strings.Contains(msg, "NoCredentials") || strings.Contains(msg, "Unable to locate credentials") {
-		return "no AWS credentials for the active cluster's profile — run `aws sso login` (or `aws configure`) for it, then retry"
+		return "no AWS credentials for the active cluster's profile - run `aws sso login` (or `aws configure`) for it, then retry"
 	}
 	return msg
 }
@@ -1368,11 +1368,11 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 	duration := clampInt(body.DurationSeconds, 1, 300)
 
 	if _, err := exec.LookPath("jmeter"); err != nil {
-		writeErr(w, 400, "JMeter not found on PATH — install it with `brew install jmeter` (needs Java, which is present), then retry")
+		writeErr(w, 400, "JMeter not found on PATH - install it with `brew install jmeter` (needs Java, which is present), then retry")
 		return
 	}
 	if _, err := exec.LookPath("kubectl"); err != nil {
-		writeErr(w, 400, "kubectl not found on PATH — needed to reach the pod")
+		writeErr(w, 400, "kubectl not found on PATH - needed to reach the pod")
 		return
 	}
 
@@ -1383,7 +1383,7 @@ func (s *server) handleLoadTest(w http.ResponseWriter, r *http.Request) {
 
 	// Ephemeral port-forward to the pod; JMeter hammers the local relay, torn
 	// down as soon as the run finishes. (Load hits this one pod through the
-	// tunnel, not the Service — it measures single-pod capacity.)
+	// tunnel, not the Service - it measures single-pod capacity.)
 	local, err := freePort()
 	if err != nil {
 		writeErr(w, 500, "alloc local port: "+err.Error())
@@ -1539,7 +1539,7 @@ func lastLine(s string) string {
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
-// Endpoint is one HTTP(S) address the probe UI can pre-fill — discovered from
+// Endpoint is one HTTP(S) address the probe UI can pre-fill - discovered from
 // a pod's spec so the user doesn't have to know the port/path by heart.
 type Endpoint struct {
 	Scheme    string `json:"scheme"`
@@ -1601,7 +1601,7 @@ func (s *server) discoverEndpoints(ctx context.Context, ns, name string) ([]Endp
 		return p.IntValue()
 	}
 
-	// 1. HTTP health-check probes — the paths the app definitely answers.
+	// 1. HTTP health-check probes - the paths the app definitely answers.
 	for _, c := range pod.Spec.Containers {
 		probes := []struct {
 			kind  string
@@ -1627,7 +1627,7 @@ func (s *server) discoverEndpoints(ctx context.Context, ns, name string) ([]Endp
 		}
 	}
 
-	// 2. Prometheus scrape annotations — the metrics endpoint.
+	// 2. Prometheus scrape annotations - the metrics endpoint.
 	if ann := pod.Annotations; ann != nil {
 		if p := ann["prometheus.io/port"]; p != "" {
 			port, _ := strconv.Atoi(p)
@@ -1640,7 +1640,7 @@ func (s *server) discoverEndpoints(ctx context.Context, ns, name string) ([]Endp
 		}
 	}
 
-	// 3. Raw container ports at "/" — a catch-all when there's no probe.
+	// 3. Raw container ports at "/" - a catch-all when there's no probe.
 	for _, c := range pod.Spec.Containers {
 		for _, p := range c.Ports {
 			scheme := "http"
@@ -1655,7 +1655,7 @@ func (s *server) discoverEndpoints(ctx context.Context, ns, name string) ([]Endp
 		}
 	}
 
-	// 4. Services that select this pod — their targetPorts.
+	// 4. Services that select this pod - their targetPorts.
 	if svcs, err := k8s.CoreV1().Services(ns).List(ctx, metav1.ListOptions{}); err == nil {
 		for _, sv := range svcs.Items {
 			if len(sv.Spec.Selector) == 0 || !selectorMatches(sv.Spec.Selector, pod.Labels) {
@@ -1695,7 +1695,7 @@ func selectorMatches(sel, labels map[string]string) bool {
 // --- /api/probe  (connection timing breakdown) ---------------------------
 // POST {namespace, pod, port, scheme, path, samples}. Opens an ephemeral
 // kubectl port-forward to the pod, then times one or more HTTP requests
-// through it with net/http/httptrace — breaking each request into the same
+// through it with net/http/httptrace - breaking each request into the same
 // phases `curl -w` reports: DNS, TCP connect, TLS handshake, server-wait
 // (time to first byte), and content transfer. Returns per-sample rows plus
 // min/avg/max for each phase, then tears the port-forward down.
@@ -1778,7 +1778,7 @@ func (s *server) handleProbe(w http.ResponseWriter, r *http.Request) {
 	samples := clampInt(body.Samples, 1, 20)
 
 	if _, err := exec.LookPath("kubectl"); err != nil {
-		writeErr(w, 400, "kubectl not found on PATH — needed to reach the pod")
+		writeErr(w, 400, "kubectl not found on PATH - needed to reach the pod")
 		return
 	}
 
@@ -1931,7 +1931,7 @@ func probeOnce(ctx context.Context, target string) (ProbeSample, string) {
 }
 
 // waitLocalPort blocks until a TCP connection to 127.0.0.1:port succeeds or the
-// timeout / context elapses — i.e. the port-forward relay is accepting.
+// timeout / context elapses - i.e. the port-forward relay is accepting.
 func waitLocalPort(ctx context.Context, port int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -2015,7 +2015,7 @@ type LoadBucket struct {
 	Errors int     `json:"errors"`
 }
 
-// HistBucket is one response-time distribution band (e.g. "100–250ms").
+// HistBucket is one response-time distribution band (e.g. "100-250ms").
 type HistBucket struct {
 	Label string  `json:"label"`
 	Count int     `json:"count"`
@@ -2035,7 +2035,7 @@ func parseJTL(path string) (*LoadResult, error) {
 	rd.FieldsPerRecord = -1 // JTL rows vary (failureMessage may be empty/quoted)
 	header, err := rd.Read()
 	if err != nil {
-		return nil, fmt.Errorf("no results — target may be unreachable")
+		return nil, fmt.Errorf("no results - target may be unreachable")
 	}
 	col := map[string]int{}
 	for i, h := range header {
@@ -2081,7 +2081,7 @@ func parseJTL(path string) (*LoadResult, error) {
 	}
 	n := len(samples)
 	if n == 0 {
-		return nil, fmt.Errorf("no samples recorded — target may be unreachable")
+		return nil, fmt.Errorf("no samples recorded - target may be unreachable")
 	}
 
 	res := &LoadResult{
@@ -2112,7 +2112,7 @@ func parseJTL(path string) (*LoadResult, error) {
 
 	// Response-time distribution histogram (6 bands).
 	hBounds := []int64{100, 250, 500, 1000, 2000, 1 << 62}
-	hLabels := []string{"<100ms", "100–250", "250–500", "500–1s", "1–2s", ">2s"}
+	hLabels := []string{"<100ms", "100-250", "250-500", "500-1s", "1-2s", ">2s"}
 	hist := make([]HistBucket, len(hBounds))
 	for i, l := range hLabels {
 		hist[i].Label = l
@@ -2237,7 +2237,7 @@ const jmxTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 
 // --- /api/gemini ---
 // POST body: {"provider":"gemini|openrouter","namespace":"ns","pod":"name","history":[{"role":"user|model","text":"..."}]}
-// Endpoint name is historical — it now routes to either Gemini or OpenRouter
+// Endpoint name is historical - it now routes to either Gemini or OpenRouter
 // based on `provider` (default: "gemini"). Response shape is unchanged:
 // {"text":"..."} on success, {"error":"..."} on failure.
 func (s *server) handleGemini(w http.ResponseWriter, r *http.Request) {
@@ -2302,7 +2302,7 @@ func (s *server) handleGemini(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildChatSystemPrompt(clusterCtx, podCtx string) string {
-	sys := "OUTPUT FORMAT — THIS IS THE MOST IMPORTANT RULE. READ IT FIRST." +
+	sys := "OUTPUT FORMAT - THIS IS THE MOST IMPORTANT RULE. READ IT FIRST." +
 		"\nYour reply MUST be ONLY bullet lines. The very FIRST character of your reply MUST be `[`." +
 		"\nIf you start with any other character (a capital letter, a word, a heading, a sentence), you have failed." +
 		"\nDO NOT write paragraphs. DO NOT write introductory sentences. DO NOT write closing summaries. DO NOT write markdown headings (# ##). DO NOT use ordinary `- ` or `* ` bullets." +
@@ -2319,15 +2319,15 @@ func buildChatSystemPrompt(clusterCtx, podCtx string) string {
 		"\n    [+] Node `ip-10-0-12-44.ec2.internal` is Ready." +
 		"\n    [+] CPU usage 2% (39m of 1930m); memory 42% (1386Mi of 3297Mi)." +
 		"\n    [-] Namespaces: `dms-service` (9 pods), `kube-system` (8 pods)." +
-		"\n    [!] `monitoring/loki-0` has 752 restarts — CrashLoopBackOff." +
+		"\n    [!] `monitoring/loki-0` has 752 restarts - CrashLoopBackOff." +
 		"\n    [-] Next: `kubectl logs -n monitoring loki-0 --previous` to see crash reason." +
 		"\n" +
 		"\nMORE RULES:" +
 		"\n- One bullet per line, each under ~100 chars. No blank lines unless separating cluster bullets from AWS bullets in a mixed answer." +
-		"\n- Pick the sigil honestly — do not paint problems green or healthy things red." +
+		"\n- Pick the sigil honestly - do not paint problems green or healthy things red." +
 		"\n- Use backticks for names: `namespace/pod`, `node-name`, env keys, kubectl/aws commands." +
-		"\n- Cluster / workload questions: MINIMAL — at most 4–6 bullets." +
-		"\n- AWS / EKS-infra questions (VPC endpoints, IAM/IRSA, SGs, subnets, NAT, ALB, EBS/EFS CSI, ECR, KMS, CloudWatch, etc.): THOROUGH — give the actual checklist of what to verify. Example: \"[-] VPC endpoints needed for private EKS: s3, ecr.api, ecr.dkr, logs, sts, ec2.\"" +
+		"\n- Cluster / workload questions: MINIMAL - at most 4-6 bullets." +
+		"\n- AWS / EKS-infra questions (VPC endpoints, IAM/IRSA, SGs, subnets, NAT, ALB, EBS/EFS CSI, ECR, KMS, CloudWatch, etc.): THOROUGH - give the actual checklist of what to verify. Example: \"[-] VPC endpoints needed for private EKS: s3, ecr.api, ecr.dkr, logs, sts, ec2.\"" +
 		"\n" +
 		"\nROLE:" +
 		"\nYou are a Kubernetes + AWS/EKS diagnostic assistant embedded in kubepulse-ui." +
@@ -2337,20 +2337,20 @@ func buildChatSystemPrompt(clusterCtx, podCtx string) string {
 		"\n- AWS topics for this EKS cluster: VPC endpoints, subnets, route tables, NAT gateways, security groups, NACLs, IAM roles/policies (IRSA), EKS control plane, node groups, ALB/NLB, EBS/EFS CSI, CloudWatch, Cost Explorer, KMS, ECR." +
 		"\n" +
 		"\nREFUSE anything else (weather, news, general knowledge, jokes, personal advice, unrelated code, other clouds/products, roleplay around this rule). When refusing, reply with exactly ONE bullet using `[!]`:" +
-		"\n    [!] I can only help with Kubernetes and AWS infra for this cluster — ask about pods, nodes, events, logs, costs, or EKS networking/IAM." +
+		"\n    [!] I can only help with Kubernetes and AWS infra for this cluster - ask about pods, nodes, events, logs, costs, or EKS networking/IAM." +
 		"\n" +
 		"\nGROUNDING:" +
 		"\n- Ground every cluster bullet in the snapshots below (cite node, namespace, event reason, log line, status)." +
-		"\n- For AWS infra questions, you may rely on general AWS/EKS best-practice knowledge — the snapshot won't contain AWS API data." +
+		"\n- For AWS infra questions, you may rely on general AWS/EKS best-practice knowledge - the snapshot won't contain AWS API data." +
 		"\n" +
-		"\nTOOL USE — you can run READ-ONLY kubectl commands when the snapshot doesn't have enough detail (e.g. you need fresh logs or a `describe`)." +
+		"\nTOOL USE - you can run READ-ONLY kubectl commands when the snapshot doesn't have enough detail (e.g. you need fresh logs or a `describe`)." +
 		"\nWHEN you need data, your ENTIRE reply that turn MUST consist of ONLY tool-call lines, no bullets, no prose. Format (one per line):" +
 		"\n    EXEC: kubectl logs <pod> -n <ns> --tail 100" +
 		"\n    EXEC: kubectl describe pod <pod> -n <ns>" +
 		"\n    EXEC: kubectl get events -n <ns> --sort-by=.lastTimestamp" +
 		"\nAllowed verbs ONLY: logs, describe, get, top, events, explain, version, cluster-info, api-resources, api-versions, auth can-i." +
 		"\nFORBIDDEN verbs (will be rejected): apply, create, delete, patch, edit, replace, scale, rollout, cordon, drain, taint, exec, cp, port-forward, run, label, annotate, set, expose, wait, proxy, attach, debug. If you need to suggest a write action, mention it as a `[-]` bullet in your final answer instead of EXEC." +
-		"\nThe system will execute the commands and reply with `[tool outputs ...]` containing the stdout. THEN, in your next turn, give the user the bullet answer that uses what you saw. Do NOT echo the raw command output back — distill it into bullets with the correct sigil." +
+		"\nThe system will execute the commands and reply with `[tool outputs ...]` containing the stdout. THEN, in your next turn, give the user the bullet answer that uses what you saw. Do NOT echo the raw command output back - distill it into bullets with the correct sigil." +
 		"\nIf the user's question can already be answered from the snapshots below, skip EXEC and answer directly in bullets." +
 		"\nMax 3 tool-use rounds before you must finalize in bullets." +
 		"\n" +
@@ -2371,7 +2371,7 @@ func callGemini(parent context.Context, apiKey, sys string, history []chatTurn) 
 		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if apiKey == "" {
-		return "", 400, fmt.Errorf("no Gemini API key — add one via the key field in the AI tab (or set GEMINI_API_KEY)")
+		return "", 400, fmt.Errorf("no Gemini API key - add one via the key field in the AI tab (or set GEMINI_API_KEY)")
 	}
 	type part struct {
 		Text string `json:"text"`
@@ -2446,7 +2446,7 @@ func callOpenRouter(parent context.Context, apiKey, model string, maxTokens int,
 		apiKey = os.Getenv("OPENROUTER_API_KEY")
 	}
 	if apiKey == "" {
-		return "", 400, fmt.Errorf("no OpenRouter API key — add one via the key field in the AI tab (or set OPENROUTER_API_KEY)")
+		return "", 400, fmt.Errorf("no OpenRouter API key - add one via the key field in the AI tab (or set OPENROUTER_API_KEY)")
 	}
 	// Model priority: UI field > OPENROUTER_MODEL env > free defaults so chat
 	// works with a $0 balance. Paid models (e.g. anthropic/claude-sonnet-4.5)
@@ -2458,7 +2458,7 @@ func callOpenRouter(parent context.Context, apiKey, model string, maxTokens int,
 	}
 	var candidates []string
 	if model != "" {
-		candidates = []string{model} // explicit choice — respect it, no fallback
+		candidates = []string{model} // explicit choice - respect it, no fallback
 	} else {
 		candidates = []string{
 			"nex-agi/nex-n2.5-pro:free",
@@ -2501,7 +2501,7 @@ func callOpenRouter(parent context.Context, apiKey, model string, maxTokens int,
 		msgs = append(msgs, message{Role: role, Content: t.Text})
 	}
 	// Cap output so OpenRouter doesn't reserve the model's full 64K context for
-	// generation — bullet replies need ~500–800 tokens and pay-as-you-go
+	// generation - bullet replies need ~500-800 tokens and pay-as-you-go
 	// credit balances tend to fall below the default reservation. Priority:
 	// UI-supplied maxTokens > OPENROUTER_MAX_TOKENS env > default. A low value
 	// lets near-empty balances still get a (short) reply.
@@ -2585,24 +2585,24 @@ func callOpenRouter(parent context.Context, apiKey, model string, maxTokens int,
 			return text, status, nil
 		}
 		lastErr, lastStatus = err, status
-		// Definitive failure (auth/credit/bad key) — another model won't help.
+		// Definitive failure (auth/credit/bad key) - another model won't help.
 		if !retryable {
 			return "", status, err
 		}
-		// else: retryable — fall through to the next free model
+		// else: retryable - fall through to the next free model
 	}
 	// Exhausted the fallback list, every attempt was retryable-but-failed.
 	if len(candidates) > 1 {
-		return "", lastStatus, fmt.Errorf("all free models are busy right now — last: %v (free models are rate-limited; wait ~30s and retry, or pin a paid model in the model field)", lastErr)
+		return "", lastStatus, fmt.Errorf("all free models are busy right now - last: %v (free models are rate-limited; wait ~30s and retry, or pin a paid model in the model field)", lastErr)
 	}
 	return "", lastStatus, lastErr
 }
 
 // readOnlyKubectlVerbs is the strict allowlist of kubectl subcommands the
-// chat is permitted to execute. Any verb not in this list — apply, delete,
+// chat is permitted to execute. Any verb not in this list - apply, delete,
 // patch, edit, replace, scale, rollout, cordon, drain, taint, exec, cp,
 // port-forward, run, label, annotate, set, expose, wait, proxy, attach,
-// auth-reconcile, debug, etc. — is refused outright. `auth` is gated to
+// auth-reconcile, debug, etc. - is refused outright. `auth` is gated to
 // `auth can-i` only.
 var readOnlyKubectlVerbs = map[string]bool{
 	"logs":          true,
@@ -2620,7 +2620,7 @@ var readOnlyKubectlVerbs = map[string]bool{
 // runReadOnlyKubectl validates an allowlisted kubectl invocation and runs it.
 // The chat loop uses this to satisfy the model's EXEC: tool calls. We parse
 // the command with strings.Fields (so shell metachars never reach the shell
-// — kubectl is exec'd directly with args), enforce the verb allowlist, and
+// - kubectl is exec'd directly with args), enforce the verb allowlist, and
 // cap output so a chatty `kubectl logs` can't blow up the context window.
 func (s *server) runReadOnlyKubectl(ctx context.Context, cmdStr string) (string, error) {
 	trimmed := strings.TrimSpace(cmdStr)
@@ -2644,7 +2644,7 @@ func (s *server) runReadOnlyKubectl(ctx context.Context, cmdStr string) (string,
 			return "", fmt.Errorf("only `kubectl auth can-i` is permitted")
 		}
 	} else if !readOnlyKubectlVerbs[verb] {
-		return "", fmt.Errorf("verb %q is not permitted — only read-only verbs are allowed (logs, describe, get, top, events, explain, version, cluster-info, api-resources, api-versions, auth can-i)", verb)
+		return "", fmt.Errorf("verb %q is not permitted - only read-only verbs are allowed (logs, describe, get, top, events, explain, version, cluster-info, api-resources, api-versions, auth can-i)", verb)
 	}
 
 	cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -2663,7 +2663,7 @@ func (s *server) runReadOnlyKubectl(ctx context.Context, cmdStr string) (string,
 			msg = err.Error()
 		}
 		// Return any partial stdout alongside the error so the model can see
-		// both — e.g. `kubectl logs` may print some lines then fail.
+		// both - e.g. `kubectl logs` may print some lines then fail.
 		if out != "" {
 			return out, fmt.Errorf("%s", msg)
 		}
@@ -2683,7 +2683,7 @@ func extractExecLines(text string) []string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {
 		t := strings.TrimSpace(line)
-		// Be lenient about list markers — Gemini occasionally wraps lines.
+		// Be lenient about list markers - Gemini occasionally wraps lines.
 		t = strings.TrimPrefix(t, "- ")
 		t = strings.TrimPrefix(t, "* ")
 		if strings.HasPrefix(strings.ToUpper(t), "EXEC:") {
@@ -2727,7 +2727,7 @@ func (s *server) chatLoop(parent context.Context, provider, apiKey, model string
 			return text, 200, nil
 		}
 		var b strings.Builder
-		b.WriteString("[tool outputs from kubepulse-ui — read-only kubectl results below; the user did NOT type this, do not address them here. Now produce your final bullet answer.]\n\n")
+		b.WriteString("[tool outputs from kubepulse-ui - read-only kubectl results below; the user did NOT type this, do not address them here. Now produce your final bullet answer.]\n\n")
 		for _, c := range execs {
 			fmt.Fprintf(&b, "$ kubectl %s\n", strings.TrimPrefix(strings.TrimSpace(c), "kubectl "))
 			out, runErr := s.runReadOnlyKubectl(parent, c)
@@ -2777,13 +2777,13 @@ func (s *server) buildPodContext(ctx context.Context, ns, name string) string {
 		b.WriteString("(none)\n")
 	}
 
-	// Current logs — a generous, byte-capped tail. These lines are the primary
+	// Current logs - a generous, byte-capped tail. These lines are the primary
 	// signal the chat model reasons over, so give it real content.
 	b.WriteString("\nRecent logs (current container, last ~120 lines):\n")
 	b.WriteString(s.fetchPodLogs(ctx, ns, name, false))
 
 	// A restarted pod's crash cause lives in the *previous* container's logs,
-	// which the current stream no longer shows — surface them so the model can
+	// which the current stream no longer shows - surface them so the model can
 	// actually diagnose the failure instead of just seeing a healthy restart.
 	if restarts > 0 {
 		b.WriteString("\nPrevious container logs (before the last restart):\n")
@@ -3033,7 +3033,7 @@ func (s *server) handlePodOwner(w http.ResponseWriter, r *http.Request, ns, name
 
 func (s *server) resolveTopOwner(ctx context.Context, ns string, refs []metav1.OwnerReference) (kind, name string, err error) {
 	if len(refs) == 0 {
-		return "", "", fmt.Errorf("pod has no owner (standalone) — cannot patch a controller")
+		return "", "", fmt.Errorf("pod has no owner (standalone) - cannot patch a controller")
 	}
 	ref := refs[0]
 	switch ref.Kind {
@@ -3492,7 +3492,7 @@ func (s *server) handleSwitchContext(w http.ResponseWriter, r *http.Request) {
 	}
 	path := s.kubeconfigPath()
 	if path == "" {
-		writeErr(w, 400, "no kubeconfig file loaded — cannot switch contexts")
+		writeErr(w, 400, "no kubeconfig file loaded - cannot switch contexts")
 		return
 	}
 	apiCfg, err := clientcmd.LoadFromFile(path)

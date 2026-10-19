@@ -7,7 +7,7 @@ import (
 
 func render(w http.ResponseWriter, t *template.Template, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// Never let the browser cache these pages — a stale copy means old JS runs
+	// Never let the browser cache these pages - a stale copy means old JS runs
 	// against a new server (which is exactly how the signup page got "stuck").
 	w.Header().Set("Cache-Control", "no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
@@ -443,7 +443,7 @@ const homeBody = `{{define "body"}}
       <span class="dl-mac-title">macOS</span>
       <span class="dl-install-rec">Apple Silicon &amp; Intel</span>
     </div>
-    <p class="dl-mac-step">Open Terminal and run — it downloads, installs, and handles Gatekeeper in one step:</p>
+    <p class="dl-mac-step">Open Terminal and run - it downloads, installs, and handles Gatekeeper in one step:</p>
     <div class="dl-cmd-row">
       <code class="dl-cmd" id="install-cmd">curl -sL …/install.sh | bash</code>
       <button class="dl-copy" id="dl-copy-btn" title="Copy">
@@ -451,7 +451,7 @@ const homeBody = `{{define "body"}}
         <svg id="dl-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;color:var(--green)"><polyline points="20 6 9 17 4 12"/></svg>
       </button>
     </div>
-    <p class="dl-mac-manual">Manual install: <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">Apple Silicon .dmg</a> · <a href="/downloads/Clusterheart-macOS-Intel.dmg">Intel .dmg</a> — right-click → Open the first time.</p>
+    <p class="dl-mac-manual">Manual install: <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg">Apple Silicon .dmg</a> · <a href="/downloads/Clusterheart-macOS-Intel.dmg">Intel .dmg</a> - right-click → Open the first time.</p>
   </div>
 
   <div class="dl-other-grid">

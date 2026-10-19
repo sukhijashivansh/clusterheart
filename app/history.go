@@ -1,9 +1,9 @@
-// history.go — MongoDB-backed usage history and the rightsizing analysis built
+// history.go - MongoDB-backed usage history and the rightsizing analysis built
 // on top of it. A background sampler records per-workload CPU/memory usage
 // every sampleInterval; a TTL index prunes anything older than historyRetention
 // so we keep a rolling window a bit larger than the analysis window. The
 // rightsizing endpoint aggregates the last minWindow of samples and recommends
-// downsize/upsize based on the p95 and peak per-pod usage vs the request —
+// downsize/upsize based on the p95 and peak per-pod usage vs the request -
 // which, unlike a single snapshot, doesn't get fooled by spiky workloads.
 package main
 
@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,11 +27,11 @@ import (
 const (
 	historyDB        = "clusterheart"
 	historyColl      = "usage_samples"
-	historyRetention = 8 * time.Hour // TTL — keeps a rolling window > analysis window
+	historyRetention = 8 * time.Hour // TTL - keeps a rolling window > analysis window
 )
 
 // sampleInterval is how often usage is recorded. Overridable via SAMPLE_INTERVAL
-// (a Go duration) — mainly to exercise the feature quickly in tests.
+// (a Go duration) - mainly to exercise the feature quickly in tests.
 var sampleInterval = 30 * time.Second
 
 // minWindow is how much history must exist before the analysis emits an
@@ -55,7 +56,7 @@ type usageSample struct {
 
 type history struct {
 	coll  *mongo.Collection
-	ready bool
+	ready atomic.Bool
 }
 
 // initHistory connects to MongoDB, sets up indexes, and starts the sampler.
@@ -77,34 +78,45 @@ func (s *server) initHistory() {
 	if uri == "" {
 		uri = "mongodb://localhost:27017"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
-	if err != nil {
-		fmt.Printf("history: mongo connect failed (%v) — history disabled\n", err)
-		return
-	}
-	if err := client.Ping(ctx, nil); err != nil {
-		fmt.Printf("history: mongo not reachable at %s (%v) — history disabled; run `docker compose up -d`\n", uri, err)
-		return
-	}
+	// Connect in the background so a slow or unreachable Mongo never delays the
+	// dashboard's startup. Until it's ready, the rightsizing tab reports that
+	// history is still connecting; everything else works immediately.
+	s.hist = &history{}
+	go func() {
+		// Generous timeout: a mongodb+srv:// Atlas URI needs DNS SRV lookup, TLS,
+		// and topology discovery on first connect, which routinely exceeds a few
+		// seconds.
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
 
-	coll := client.Database(historyDB).Collection(historyColl)
-	// TTL index auto-prunes old samples.
-	_, _ = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "ts", Value: 1}},
-		Options: options.Index().SetExpireAfterSeconds(int32(historyRetention.Seconds())),
-	})
-	// Supports the per-workload window aggregation.
-	_, _ = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "ns", Value: 1}, {Key: "workload", Value: 1}, {Key: "ts", Value: 1}},
-	})
+		client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+		if err != nil {
+			fmt.Printf("history: mongo connect failed (%v) - history disabled\n", err)
+			return
+		}
+		if err := client.Ping(ctx, nil); err != nil {
+			fmt.Printf("history: mongo not reachable at %s (%v) - history disabled; run `docker compose up -d`\n", uri, err)
+			return
+		}
 
-	s.hist = &history{coll: coll, ready: true}
-	fmt.Printf("history: connected to %s (sampling every %s, %s retention, %s window)\n",
-		uri, sampleInterval, historyRetention, minWindow)
-	go s.sampleLoop()
+		coll := client.Database(historyDB).Collection(historyColl)
+		// TTL index auto-prunes old samples.
+		_, _ = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys:    bson.D{{Key: "ts", Value: 1}},
+			Options: options.Index().SetExpireAfterSeconds(int32(historyRetention.Seconds())),
+		})
+		// Supports the per-workload window aggregation.
+		_, _ = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "ns", Value: 1}, {Key: "workload", Value: 1}, {Key: "ts", Value: 1}},
+		})
+
+		s.hist.coll = coll
+		s.hist.ready.Store(true) // publish coll before marking ready
+		fmt.Printf("history: connected to %s (sampling every %s, %s retention, %s window)\n",
+			uri, sampleInterval, historyRetention, minWindow)
+		s.sampleLoop()
+	}()
 }
 
 func (s *server) sampleLoop() {
@@ -118,7 +130,7 @@ func (s *server) sampleLoop() {
 
 // sampleOnce records one per-workload snapshot of usage into MongoDB.
 func (s *server) sampleOnce() {
-	if s.hist == nil || !s.hist.ready {
+	if s.hist == nil || !s.hist.ready.Load() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -144,6 +156,21 @@ func (s *server) sampleOnce() {
 		}
 	}
 
+	// Map each CronJob-created Job back to its parent CronJob, so every run of a
+	// CronJob rolls up to a single workload instead of one row per scheduled Job
+	// (e.g. dms-tata-report-worker-29873285 / -29873290 -> dms-tata-report-worker).
+	jobToCron := map[string]string{}
+	if jl, err := k8s.BatchV1().Jobs("").List(ctx, metav1.ListOptions{}); err == nil {
+		for i := range jl.Items {
+			j := &jl.Items[i]
+			for _, o := range j.OwnerReferences {
+				if o.Controller != nil && *o.Controller && o.Kind == "CronJob" {
+					jobToCron[j.Namespace+"/"+j.Name] = o.Name
+				}
+			}
+		}
+	}
+
 	// aggregate active pods per workload
 	type agg struct {
 		ownerKind          string
@@ -159,6 +186,12 @@ func (s *server) sampleOnce() {
 			continue
 		}
 		kind, owner := workloadOwner(p)
+		// Collapse a CronJob's Job onto the CronJob itself.
+		if kind == "Job" {
+			if cron, ok := jobToCron[p.Namespace+"/"+owner]; ok {
+				kind, owner = "CronJob", cron
+			}
+		}
 		name := goWorkloadName(kind, owner, p.Name)
 		key := p.Namespace + "|" + name
 		g := groups[key]
@@ -216,7 +249,7 @@ func podRequests(p *corev1.Pod) (cpu, mem int64) {
 }
 
 // workloadOwner returns the controlling owner kind/name of a pod (one hop; a
-// Deployment pod reports its ReplicaSet here — goWorkloadName collapses it).
+// Deployment pod reports its ReplicaSet here - goWorkloadName collapses it).
 func workloadOwner(p *corev1.Pod) (kind, name string) {
 	for _, o := range p.OwnerReferences {
 		if o.Controller != nil && *o.Controller {
@@ -278,10 +311,10 @@ type RightsizeRow struct {
 // handleRightsizing aggregates the last minWindow of samples per workload and
 // returns a recommendation. ?ns=<namespace> scopes it; ns=ALL/empty = all.
 func (s *server) handleRightsizing(w http.ResponseWriter, r *http.Request) {
-	if s.hist == nil || !s.hist.ready {
+	if s.hist == nil || !s.hist.ready.Load() {
 		writeJSON(w, 200, map[string]any{
 			"ready":      false,
-			"reason":     "MongoDB not connected — run `docker compose up -d`, then restart.",
+			"reason":     "MongoDB not connected yet - connecting in the background (or set MONGO_URI / run `docker compose up -d`).",
 			"windowMins": int(minWindow.Minutes()),
 			"rows":       []RightsizeRow{},
 		})
@@ -376,7 +409,7 @@ func (s *server) handleRightsizing(w http.ResponseWriter, r *http.Request) {
 // the instantaneous reading) so a spiky workload isn't told to downsize.
 func rightsizeVerdict(r RightsizeRow, coverage time.Duration) (verdict, cls string, suggestCPU, suggestMem int64) {
 	// Need most of a full window (and more than a couple of samples) before
-	// advising — "6 hours at least, then suggest".
+	// advising - "6 hours at least, then suggest".
 	if r.Samples < 3 || coverage < time.Duration(float64(minWindow)*0.9) {
 		return "LEARNING", "verdict-none", 0, 0
 	}

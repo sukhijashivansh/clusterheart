@@ -2,7 +2,7 @@ package controlplane
 
 // Runbooks (spec §12): operator-authored, versioned playbooks that map an
 // incident type to a typed remediation action. They make "the known fix for a
-// known problem" explicit and operator-controlled — distinct from AI diagnosis.
+// known problem" explicit and operator-controlled - distinct from AI diagnosis.
 //
 // Safety: a runbook only PRE-FILLS a proposal's action+params; proposing still
 // goes through the deterministic, policy-checked CreateProposal path, so a

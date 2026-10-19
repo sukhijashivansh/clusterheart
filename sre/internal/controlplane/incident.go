@@ -12,7 +12,7 @@ import (
 const maxEvidence = 20
 
 // Incident is a detected, evidence-backed operational problem. It is a SYMPTOM
-// with supporting facts — not a root-cause claim. Root-cause analysis (AI) is a
+// with supporting facts - not a root-cause claim. Root-cause analysis (AI) is a
 // separate, later stage that attaches hypotheses to an incident.
 type Incident struct {
 	ID          string               `json:"id"`
