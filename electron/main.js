@@ -11,7 +11,7 @@
 //   4. The app menu has "Log out", which kills the binary, clears the token,
 //      and returns to the login screen.
 
-const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, Notification } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -33,6 +33,8 @@ process.on('unhandledRejection', (err) => {
 let win = null;
 let serverProc = null;
 let sessionToken = null;
+let heartbeatTimer = null;
+let lastNoticeAt = null;
 
 // --- token persistence ---------------------------------------------------
 function tokenFile() {
@@ -115,7 +117,38 @@ async function startDashboard() {
 }
 
 function stopDashboard() {
+  stopHeartbeat();
   if (serverProc) { try { serverProc.kill(); } catch (_) {} serverProc = null; }
+}
+
+// --- session heartbeat ---------------------------------------------------
+// While the dashboard is open, re-check the session server-side every 30s so
+// an admin Revoke / Force-out drops the user back to the login screen within
+// ~30s (not just at next launch), and so broadcast notices get delivered.
+function stopHeartbeat() {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+}
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(async () => {
+    if (!sessionToken) return;
+    let s;
+    try { s = await apiSession(sessionToken); }
+    catch (_) { return; } // transient network blip - don't kick on it
+    if (!s.valid || !s.approved) {
+      stopHeartbeat();
+      await doLogout();
+      return;
+    }
+    if (s.notice && s.notice.message && s.notice.updatedAt !== lastNoticeAt) {
+      lastNoticeAt = s.notice.updatedAt;
+      try {
+        if (Notification.isSupported()) {
+          new Notification({ title: 'Clusterheart', body: s.notice.message }).show();
+        }
+      } catch (_) {}
+    }
+  }, 30000);
 }
 
 // --- server calls --------------------------------------------------------
@@ -163,7 +196,7 @@ ipcMain.handle('auth:resume', async () => {
 });
 
 ipcMain.handle('app:start', async () => {
-  try { await startDashboard(); return { ok: true }; }
+  try { await startDashboard(); startHeartbeat(); return { ok: true }; }
   catch (err) { return { ok: false, error: String(err.message || err) }; }
 });
 

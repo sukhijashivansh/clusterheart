@@ -20,6 +20,7 @@ import (
 type store struct {
 	client *mongo.Client
 	users  *mongo.Collection
+	meta   *mongo.Collection
 }
 
 var errUserExists = errors.New("user already exists")
@@ -45,7 +46,8 @@ func openStore(ctx context.Context) (*store, error) {
 		return nil, fmt.Errorf("mongo ping: %w", err)
 	}
 
-	s := &store{client: client, users: client.Database(dbName).Collection("users")}
+	db := client.Database(dbName)
+	s := &store{client: client, users: db.Collection("users"), meta: db.Collection("settings")}
 	if _, err := s.users.Indexes().CreateOne(pctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uk_email"),
@@ -84,6 +86,34 @@ func (s *store) setLastLogin(ctx context.Context, email string) error {
 func (s *store) setApproved(ctx context.Context, email string, approved bool) error {
 	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)},
 		bson.M{"$set": bson.M{"approved": approved}})
+	return err
+}
+
+// invalidateSessions stamps sessionsValidAfter=now, so every token minted
+// before this instant is rejected on the next check (force log out).
+func (s *store) invalidateSessions(ctx context.Context, email string) error {
+	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)},
+		bson.M{"$set": bson.M{"sessionsValidAfter": time.Now()}})
+	return err
+}
+
+type notice struct {
+	Message   string    `bson:"message" json:"message"`
+	UpdatedAt time.Time `bson:"updatedAt" json:"updatedAt"`
+}
+
+// getNotice returns the current global broadcast notice (empty if none/cleared).
+func (s *store) getNotice(ctx context.Context) notice {
+	var n notice
+	_ = s.meta.FindOne(ctx, bson.M{"_id": "notice"}).Decode(&n)
+	return n
+}
+
+// setNotice upserts the global notice; an empty message clears it.
+func (s *store) setNotice(ctx context.Context, msg string) error {
+	_, err := s.meta.UpdateOne(ctx, bson.M{"_id": "notice"},
+		bson.M{"$set": bson.M{"message": msg, "updatedAt": time.Now()}},
+		options.Update().SetUpsert(true))
 	return err
 }
 

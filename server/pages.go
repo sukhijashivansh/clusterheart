@@ -115,6 +115,13 @@ table.users tbody tr:hover{background:#fafafa}
 .act.revoke{border:1px solid var(--border-strong);background:#fff;color:var(--muted)}
 .act.revoke:hover{color:var(--red);border-color:var(--red)}
 .empty{padding:44px 18px;text-align:center;color:var(--muted)}
+.act.forceout{border:1px solid var(--border-strong);background:#fff;color:var(--muted);margin-right:8px}
+.act.forceout:hover{color:#000;border-color:#000}
+.notice-box{border:1px solid var(--border-strong);padding:20px 22px;margin:0 0 26px}
+textarea.nb{width:100%;padding:11px 13px;font-family:inherit;font-size:14px;color:#000;background:#fff;border:1px solid var(--border-strong);border-radius:0;outline:none;resize:vertical}
+textarea.nb:focus{border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.09)}
+.nb-actions{display:flex;align-items:center;gap:10px;margin-top:12px}
+.nb-msg{font-size:13px;color:var(--muted)}
 
 /* --- landing nav --- */
 .lp-nav{
@@ -590,6 +597,15 @@ const adminBody = `{{define "body"}}<div class="admin">
 <p class="kicker" style="margin-top:34px">Admin · Access control</p>
 <h1 style="margin:0 0 10px">Users</h1>
 <p class="sub" style="max-width:600px;margin:0 0 26px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
+<div class="notice-box">
+  <p class="kicker" style="margin:0 0 10px">Broadcast notice</p>
+  <textarea id="notice-text" class="nb" rows="2" placeholder="Shown in every running app on its next check (e.g. &quot;A new version is available - please update.&quot;). Clear to remove.">{{.Notice}}</textarea>
+  <div class="nb-actions">
+    <button class="act approve" id="notice-send">Send to everyone</button>
+    <button class="act revoke" id="notice-clear">Clear</button>
+    <span id="notice-msg" class="nb-msg"></span>
+  </div>
+</div>
 <div class="panel">
 <table class="users">
 <thead><tr><th>User</th><th>Status</th><th>Last login</th><th></th></tr></thead>
@@ -608,19 +624,38 @@ const adminBody = `{{define "body"}}<div class="admin">
     {{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}
   </td>
   <td class="cell-act">
-    {{if .Approved}}<button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>
+    {{if .Approved}}<button class="act forceout" data-email="{{.Email}}">Force out</button><button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>
     {{else}}<button class="act approve" data-email="{{.Email}}" data-approve="true">Approve</button>{{end}}
   </td>
 </tr>{{end}}
 </tbody></table></div></div>{{end}}
 {{define "script"}}<script>
-document.querySelectorAll('.act').forEach(function(b){
+document.querySelectorAll('.act[data-approve]').forEach(function(b){
   b.addEventListener('click',async function(){
     b.disabled=true;b.textContent='…';
     await _post('/api/admin/approve',{email:b.dataset.email,approved:b.dataset.approve==='true'});
     location.reload();
   });
 });
+document.querySelectorAll('.act.forceout').forEach(function(b){
+  b.addEventListener('click',async function(){
+    b.disabled=true;b.textContent='…';
+    await _post('/api/admin/forcelogout',{email:b.dataset.email});
+    location.reload();
+  });
+});
+(function(){
+  var send=document.getElementById('notice-send'),clr=document.getElementById('notice-clear'),
+      txt=document.getElementById('notice-text'),msg=document.getElementById('notice-msg');
+  async function put(message,label){
+    send.disabled=clr.disabled=true;_mark(msg,label,'info');
+    var r=await _post('/api/admin/notice',{message:message});
+    send.disabled=clr.disabled=false;
+    _mark(msg,r.ok?'Saved.':(r.data.error||'Failed.'),r.ok?'ok':'err');
+  }
+  send.addEventListener('click',function(){put(txt.value,'Sending…');});
+  clr.addEventListener('click',function(){txt.value='';put('','Clearing…');});
+})();
 document.getElementById('logout').addEventListener('click',async function(e){
   e.preventDefault();await _post('/api/logout',{});location.href='/login';
 });

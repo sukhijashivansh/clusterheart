@@ -36,6 +36,8 @@ type User struct {
 	Approved  bool      `bson:"approved" json:"approved"`
 	Created   time.Time `bson:"created" json:"created"`
 	LastLogin time.Time `bson:"lastLogin" json:"lastLogin"`
+	// SessionsValidAfter invalidates any token minted before it (force log out).
+	SessionsValidAfter time.Time `bson:"sessionsValidAfter,omitempty" json:"-"`
 }
 
 type app struct {
@@ -56,36 +58,46 @@ const sessionCookie = "ch_session"
 const sessionTTL = 30 * 24 * time.Hour
 
 func (a *app) mint(email string) string {
-	exp := time.Now().Add(sessionTTL)
-	msg := strings.ToLower(email) + "|" + exp.UTC().Format(time.RFC3339)
+	now := time.Now()
+	exp := now.Add(sessionTTL)
+	// email|exp|iat - iat lets us reject tokens minted before a force-logout.
+	msg := strings.ToLower(email) + "|" + exp.UTC().Format(time.RFC3339) + "|" + now.UTC().Format(time.RFC3339)
 	mac := hmac.New(sha256.New, a.secret)
 	mac.Write([]byte(msg))
 	return base64.RawURLEncoding.EncodeToString([]byte(msg)) + "." + hex.EncodeToString(mac.Sum(nil))
 }
 
-func (a *app) parse(token string) (string, bool) {
+// parse verifies the token and returns the email and its issue time. Older
+// two-field tokens (no iat) parse with a zero iat, so any force-logout stamp
+// invalidates them - which is the safe direction.
+func (a *app) parse(token string) (email string, iat time.Time, ok bool) {
 	parts := strings.SplitN(token, ".", 2)
 	if len(parts) != 2 {
-		return "", false
+		return "", time.Time{}, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return "", false
+		return "", time.Time{}, false
 	}
 	mac := hmac.New(sha256.New, a.secret)
 	mac.Write(raw)
 	if !hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(parts[1])) {
-		return "", false
+		return "", time.Time{}, false
 	}
-	fields := strings.SplitN(string(raw), "|", 2)
-	if len(fields) != 2 {
-		return "", false
+	fields := strings.Split(string(raw), "|")
+	if len(fields) < 2 {
+		return "", time.Time{}, false
 	}
 	exp, err := time.Parse(time.RFC3339, fields[1])
 	if err != nil || time.Now().After(exp) {
-		return "", false
+		return "", time.Time{}, false
 	}
-	return fields[0], true
+	if len(fields) >= 3 {
+		if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
+			iat = t
+		}
+	}
+	return fields[0], iat, true
 }
 
 // sessionUser resolves the current user from a cookie or Authorization bearer.
@@ -102,14 +114,18 @@ func (a *app) sessionUser(r *http.Request) *User {
 	if token == "" {
 		return nil
 	}
-	email, ok := a.parse(token)
+	email, iat, ok := a.parse(token)
 	if !ok {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	u, err := a.store.find(ctx, email)
-	if err != nil {
+	if err != nil || u == nil {
+		return nil
+	}
+	// Token minted before a force-logout stamp is dead.
+	if !u.SessionsValidAfter.IsZero() && iat.Before(u.SessionsValidAfter) {
 		return nil
 	}
 	return u
@@ -218,13 +234,20 @@ func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"valid": false})
 		return
 	}
-	writeJSON(w, 200, map[string]any{
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	n := a.store.getNotice(ctx)
+	resp := map[string]any{
 		"valid":    true,
 		"approved": u.Approved,
 		"name":     u.Name,
 		"email":    u.Email,
 		"admin":    a.isAdmin(u.Email),
-	})
+	}
+	if n.Message != "" {
+		resp["notice"] = n
+	}
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -249,6 +272,58 @@ func (a *app) handleApprove(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	if err := a.store.setApproved(ctx, body.Email, body.Approved); err != nil {
+		writeJSON(w, 500, map[string]any{"error": "update failed"})
+		return
+	}
+	// Revoking also kills any live session so the lockout is immediate.
+	if !body.Approved {
+		_ = a.store.invalidateSessions(ctx, body.Email)
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// handleForceLogout ends a user's active sessions without touching approval -
+// they can sign back in if still approved.
+func (a *app) handleForceLogout(w http.ResponseWriter, r *http.Request) {
+	me := a.sessionUser(r)
+	if me == nil || !a.isAdmin(me.Email) {
+		writeJSON(w, 403, map[string]any{"error": "forbidden"})
+		return
+	}
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Email == "" {
+		writeJSON(w, 400, map[string]any{"error": "bad request"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if err := a.store.invalidateSessions(ctx, body.Email); err != nil {
+		writeJSON(w, 500, map[string]any{"error": "update failed"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// handleNotice sets (or clears, when message is empty) the global broadcast
+// notice that every app shows on its next heartbeat.
+func (a *app) handleNotice(w http.ResponseWriter, r *http.Request) {
+	me := a.sessionUser(r)
+	if me == nil || !a.isAdmin(me.Email) {
+		writeJSON(w, 403, map[string]any{"error": "forbidden"})
+		return
+	}
+	var body struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, 400, map[string]any{"error": "bad request"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if err := a.store.setNotice(ctx, strings.TrimSpace(body.Message)); err != nil {
 		writeJSON(w, 500, map[string]any{"error": "update failed"})
 		return
 	}
@@ -324,7 +399,7 @@ func (a *app) pageAdmin(w http.ResponseWriter, r *http.Request) {
 			pending++
 		}
 	}
-	render(w, adminTmpl, map[string]any{"Users": list, "Me": me.Name, "Pending": pending})
+	render(w, adminTmpl, map[string]any{"Users": list, "Me": me.Name, "Pending": pending, "Notice": a.store.getNotice(ctx).Message})
 }
 
 // --- wiring --------------------------------------------------------------
@@ -426,6 +501,8 @@ func main() {
 	mux.HandleFunc("/api/logout", post(a.handleLogout))
 	mux.HandleFunc("/api/session", a.handleSession)
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
+	mux.HandleFunc("/api/admin/forcelogout", post(a.handleForceLogout))
+	mux.HandleFunc("/api/admin/notice", post(a.handleNotice))
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage
