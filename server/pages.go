@@ -32,7 +32,7 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clusterheart</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 :root{
   --bg:#ffffff;--panel:#ffffff;--text:#171717;--muted:#525252;--faint:#a3a3a3;
   --border:#e5e5e5;--border-strong:#d4d4d4;
@@ -45,41 +45,45 @@ html,body{margin:0;min-height:100%}
 #download{scroll-margin-top:68px}
 body{
   background:var(--bg);color:var(--text);
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-family:'Geist',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   -webkit-font-smoothing:antialiased;line-height:1.5;
 }
+::selection{background:#000;color:#fff}
+.mono{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
 a{color:var(--text);text-decoration:none;font-weight:600}
-a:hover{text-decoration:underline}
-.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}
+a:hover{color:#000}
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:var(--bg)}
 .card{
-  width:100%;max-width:400px;padding:40px 36px;
-  background:var(--panel);border:1px solid var(--border);border-radius:0;
-  box-shadow:0 1px 2px rgba(0,0,0,.04),0 20px 50px -24px rgba(0,0,0,.18);
+  width:100%;max-width:410px;padding:46px 42px;
+  background:var(--panel);border:1px solid var(--border-strong);border-radius:0;
 }
-.brand{display:flex;align-items:center;gap:10px;margin-bottom:22px}
-.wordmark{font-size:19px;font-weight:700;letter-spacing:-.4px;color:var(--text)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
+.wordmark{font-size:18px;font-weight:700;letter-spacing:-.5px;color:#000}
 .wordmark .a{color:inherit}
-h1{font-size:23px;font-weight:800;letter-spacing:-.5px;margin:0 0 7px;color:var(--text)}
-.sub{color:var(--muted);font-size:13.5px;margin:0 0 26px}
-label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:18px 0 8px}
+.kicker{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
+h1{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.08;margin:0 0 9px;color:#000}
+.sub{color:var(--muted);font-size:14px;margin:0 0 30px}
+label{display:block;font-size:13px;font-weight:500;color:#000;margin:18px 0 8px}
 input{
-  width:100%;padding:12px 14px;font-size:14px;color:var(--text);
+  width:100%;padding:12px 14px;font-size:14px;color:#000;font-family:inherit;
   background:#fff;border:1px solid var(--border-strong);border-radius:0;outline:none;
   transition:border-color .15s,box-shadow .15s;
 }
-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,91,219,.14)}
+input:focus{border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.09)}
 input::placeholder{color:var(--faint)}
 .btn{
-  width:100%;margin-top:26px;padding:13px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;
-  background:#000;border:none;border-radius:0;
+  width:100%;margin-top:28px;padding:14px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;
+  background:#000;border:1px solid #000;border-radius:0;
   transition:background .15s,opacity .12s;
 }
 .btn:hover{background:#262626}
 .btn:active{background:#000}
 .btn:disabled{opacity:.45;cursor:default}
-.btn.secondary{margin-top:12px;background:#fff;color:var(--text);border:1px solid var(--border-strong)}
+.btn.secondary{margin-top:12px;background:#fff;color:#000;border:1px solid var(--border-strong)}
 .btn.secondary:hover{background:#fff;border-color:#000}
-.alt{margin-top:22px;font-size:13px;color:var(--muted);text-align:center}
+.alt{margin-top:24px;font-size:13.5px;color:var(--muted);text-align:center}
+.alt a{color:#000;font-weight:600}
+.trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600}
@@ -280,8 +284,8 @@ table.users tbody tr:hover{background:#fafafa}
 }
 @media(max-width:480px){
   .center{padding:20px}
-  .card{padding:30px 22px;border-radius:16px}
-  h1{font-size:20px}
+  .card{padding:32px 24px}
+  h1{font-size:24px}
 }
 @media(max-width:640px){
   .admin{padding:28px 16px}
@@ -313,6 +317,8 @@ async function _post(url,payload){
 </body></html>{{end}}`
 
 const logoSVG = `<svg width="26" height="26" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#3B5BDB"/><circle cx="50" cy="15" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="32.5" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="50" cy="85" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="32.5" r="10.5" fill="#3B5BDB"/></svg>`
+
+const lockSVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
 
 // --- home / landing ------------------------------------------------------
 
@@ -497,7 +503,8 @@ const homeBody = `{{define "body"}}
 
 const loginBody = `{{define "body"}}<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
-<h1>Welcome back</h1><p class="sub">Sign in to your account.</p>
+<p class="kicker">Sign in</p>
+<h1>Welcome back.</h1><p class="sub">Access your Clusterheart account.</p>
 <label for="email">Email</label>
 <input id="email" type="email" autocomplete="email" placeholder="you@company.com">
 <label for="pass">Password</label>
@@ -505,6 +512,7 @@ const loginBody = `{{define "body"}}<div class="center"><div class="card">
 <button class="btn" id="go">Sign in</button>
 <div id="msg" class="msg"></div>
 <div class="alt">New here? <a href="/signup">Create an account</a></div>
+<div class="trust">` + lockSVG + `Credentials never leave your machine.</div>
 </div></div>{{end}}
 {{define "script"}}<script>
 var email=document.getElementById('email'),pass=document.getElementById('pass'),go=document.getElementById('go'),msg=document.getElementById('msg');
@@ -524,7 +532,8 @@ email.addEventListener('keydown',function(e){if(e.key==='Enter')pass.focus();});
 
 const signupBody = `{{define "body"}}<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
-<h1>Create your account</h1><p class="sub">Sign up to request access.</p>
+<p class="kicker">Create account</p>
+<h1>Create your account.</h1><p class="sub">Sign up to request access.</p>
 <label for="name">Name</label>
 <input id="name" type="text" autocomplete="name" placeholder="Jane Doe">
 <label for="email">Work email</label>
@@ -534,6 +543,7 @@ const signupBody = `{{define "body"}}<div class="center"><div class="card">
 <button class="btn" id="go">Create account</button>
 <div id="msg" class="msg"></div>
 <div class="alt">Already have an account? <a href="/login">Sign in</a></div>
+<div class="trust">` + lockSVG + `Credentials never leave your machine.</div>
 </div></div>{{end}}
 {{define "script"}}<script>
 var nameEl=document.getElementById('name'),email=document.getElementById('email'),pass=document.getElementById('pass'),go=document.getElementById('go'),msg=document.getElementById('msg');
