@@ -74,18 +74,15 @@ func (rl *rateLimiter) wrap(name string, h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// clientIP resolves the real client IP behind the Vercel -> Caddy -> Go proxy
-// chain. Vercel carries the original browser IP in X-Vercel-Forwarded-For (and
-// X-Real-IP); X-Forwarded-For is the fallback for direct origin hits.
+// clientIP resolves the real client IP behind the Cloudflare -> Vercel -> Caddy
+// -> Go chain. Cloudflare's CF-Connecting-IP carries the true browser IP and is
+// stable; the Vercel/X-Real-IP headers are rotating edge IPs, so they come last.
+// X-Forwarded-For is the fallback for direct origin hits (no Cloudflare).
 func clientIP(r *http.Request) string {
-	if v := strings.TrimSpace(r.Header.Get("X-Vercel-Forwarded-For")); v != "" {
-		return firstIP(v)
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-Real-IP")); v != "" {
-		return firstIP(v)
-	}
-	if v := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); v != "" {
-		return firstIP(v)
+	for _, h := range []string{"CF-Connecting-IP", "True-Client-IP", "X-Forwarded-For"} {
+		if v := strings.TrimSpace(r.Header.Get(h)); v != "" {
+			return firstIP(v)
+		}
 	}
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return host
