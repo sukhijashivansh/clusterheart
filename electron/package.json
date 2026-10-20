@@ -22,6 +22,14 @@
   "build": {
     "appId": "com.clusterheart.app",
     "productName": "Clusterheart",
+    "protocols": [
+      {
+        "name": "Clusterheart",
+        "schemes": [
+          "clusterheart"
+        ]
+      }
+    ],
     "afterSign": "scripts/afterSign.js",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [

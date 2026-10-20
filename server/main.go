@@ -503,6 +503,9 @@ func main() {
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
 	mux.HandleFunc("/api/admin/forcelogout", post(a.handleForceLogout))
 	mux.HandleFunc("/api/admin/notice", post(a.handleNotice))
+	mux.HandleFunc("/auth/google/start", a.googleStart)
+	mux.HandleFunc("/auth/google/callback", a.googleCallback)
+	mux.HandleFunc("/api/auth/exchange", post(a.handleExchange))
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage
