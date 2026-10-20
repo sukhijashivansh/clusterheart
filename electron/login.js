@@ -50,6 +50,7 @@ $('go').addEventListener('click', async () => {
 $('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go').click(); });
 $('email').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pass').focus(); });
 $('signup').addEventListener('click', () => window.clusterheart.openSignup());
+$('forgot').addEventListener('click', () => window.clusterheart.openForgot());
 
 // --- pending view wiring -------------------------------------------------
 $('recheck').addEventListener('click', async () => {

@@ -232,6 +232,7 @@ ipcMain.handle('app:start', async () => {
 });
 
 ipcMain.handle('auth:signup-url', async () => { shell.openExternal(`${SERVER}/signup`); });
+ipcMain.handle('auth:forgot-url', async () => { shell.openExternal(`${SERVER}/forgot`); });
 
 // Google sign-in (system browser). Opens the OAuth flow in the default browser;
 // the callback hands a one-time code back via the clusterheart:// protocol,

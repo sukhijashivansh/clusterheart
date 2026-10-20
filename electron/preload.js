@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('clusterheart', {
   start: () => ipcRenderer.invoke('app:start'),
   logout: () => ipcRenderer.invoke('auth:logout'),
   openSignup: () => ipcRenderer.invoke('auth:signup-url'),
+  openForgot: () => ipcRenderer.invoke('auth:forgot-url'),
 });
