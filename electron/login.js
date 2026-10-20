@@ -50,14 +50,6 @@ $('go').addEventListener('click', async () => {
 $('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go').click(); });
 $('email').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pass').focus(); });
 $('signup').addEventListener('click', () => window.clusterheart.openSignup());
-$('google').addEventListener('click', async () => {
-  $('google').disabled = true;
-  say('Opening Google in your browser…', 'info');
-  await window.clusterheart.google();
-  // The browser completes sign-in and hands back to the app via the
-  // clusterheart:// link; the main process then reloads this screen.
-  setTimeout(() => { $('google').disabled = false; }, 4000);
-});
 
 // --- pending view wiring -------------------------------------------------
 $('recheck').addEventListener('click', async () => {

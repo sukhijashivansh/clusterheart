@@ -247,6 +247,10 @@ func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
 	if n.Message != "" {
 		resp["notice"] = n
 	}
+	// Latest shipped app version, so the desktop app can nudge users to update.
+	if v := os.Getenv("LATEST_APP_VERSION"); v != "" {
+		resp["latestVersion"] = v
+	}
 	writeJSON(w, 200, resp)
 }
 

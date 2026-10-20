@@ -35,6 +35,18 @@ let serverProc = null;
 let sessionToken = null;
 let heartbeatTimer = null;
 let lastNoticeAt = null;
+let lastNudgedVersion = null;
+
+// isNewer reports whether version a is newer than b (dotted numeric compare).
+function isNewer(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
 
 // --- token persistence ---------------------------------------------------
 function tokenFile() {
@@ -150,6 +162,20 @@ function startHeartbeat() {
       try {
         if (Notification.isSupported()) {
           new Notification({ title: 'Clusterheart', body: s.notice.message }).show();
+        }
+      } catch (_) {}
+    }
+    // Nudge to update when the server advertises a newer version.
+    if (s.latestVersion && isNewer(s.latestVersion, app.getVersion()) && lastNudgedVersion !== s.latestVersion) {
+      lastNudgedVersion = s.latestVersion;
+      try {
+        if (Notification.isSupported()) {
+          const n = new Notification({
+            title: 'Update available',
+            body: `Clusterheart ${s.latestVersion} is available. Click to download the latest version.`,
+          });
+          n.on('click', () => shell.openExternal(`${SERVER}/#download`));
+          n.show();
         }
       } catch (_) {}
     }
