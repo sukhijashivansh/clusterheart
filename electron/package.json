@@ -1,7 +1,7 @@
 {
   "name": "clusterheart",
   "productName": "Clusterheart",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Kubernetes / EKS health + FinOps dashboard",
   "homepage": "https://github.com/Decodx09/clusterheart",
   "author": "Shivansh Sukhija <sukhija.shivansh@gmail.com>",

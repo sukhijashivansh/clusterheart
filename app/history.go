@@ -8,9 +8,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -18,16 +21,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-)
-
-const (
-	historyDB        = "clusterheart"
-	historyColl      = "usage_samples"
-	historyRetention = 8 * time.Hour // TTL - keeps a rolling window > analysis window
 )
 
 // sampleInterval is how often usage is recorded. Overridable via SAMPLE_INTERVAL
@@ -41,22 +34,26 @@ var minWindow = 6 * time.Hour
 
 // usageSample is one per-workload reading. Usage is normalised per pod so that
 // replica changes (e.g. an HPA scaling out) don't distort the per-pod request
-// recommendation.
+// recommendation. Sent to the account server as JSON; the server stamps the
+// user and timestamp itself.
 type usageSample struct {
-	TS         time.Time `bson:"ts"`
-	Namespace  string    `bson:"ns"`
-	Workload   string    `bson:"workload"`
-	OwnerKind  string    `bson:"ownerKind"`
-	Replicas   int       `bson:"replicas"`
-	CPUPerPod  int64     `bson:"cpuPerPod"` // milli-cores
-	MemPerPod  int64     `bson:"memPerPod"` // bytes
-	CPURequest int64     `bson:"cpuReq"`    // milli-cores, per pod
-	MemRequest int64     `bson:"memReq"`    // bytes, per pod
+	Namespace  string `json:"ns"`
+	Workload   string `json:"workload"`
+	OwnerKind  string `json:"ownerKind"`
+	Replicas   int    `json:"replicas"`
+	CPUPerPod  int64  `json:"cpuPerPod"` // milli-cores
+	MemPerPod  int64  `json:"memPerPod"` // bytes
+	CPURequest int64  `json:"cpuReq"`    // milli-cores, per pod
+	MemRequest int64  `json:"memReq"`    // bytes, per pod
 }
 
+// history talks to the account server's usage API using the signed-in user's
+// session token. The dashboard never holds a database credential.
 type history struct {
-	coll  *mongo.Collection
-	ready atomic.Bool
+	server string
+	token  string
+	client *http.Client
+	ready  atomic.Bool
 }
 
 // initHistory connects to MongoDB, sets up indexes, and starts the sampler.
@@ -74,49 +71,35 @@ func (s *server) initHistory() {
 		}
 	}
 
-	uri := os.Getenv("MONGO_URI")
-	if uri == "" {
-		uri = "mongodb://localhost:27017"
+	// Usage history now goes through the account server (authenticated with the
+	// user's session token), so no database credential lives in the app. Electron
+	// passes the server URL and token in the environment when it launches us.
+	server := strings.TrimRight(os.Getenv("CLUSTERHEART_SERVER"), "/")
+	token := os.Getenv("CLUSTERHEART_TOKEN")
+	s.hist = &history{server: server, token: token, client: &http.Client{Timeout: 20 * time.Second}}
+	if server == "" || token == "" {
+		fmt.Println("history: no account session - rightsizing history disabled (sign in to enable)")
+		return
 	}
+	s.hist.ready.Store(true)
+	fmt.Printf("history: using %s (sampling every %s, %s window)\n", server, sampleInterval, minWindow)
+	go s.sampleLoop()
+}
 
-	// Connect in the background so a slow or unreachable Mongo never delays the
-	// dashboard's startup. Until it's ready, the rightsizing tab reports that
-	// history is still connecting; everything else works immediately.
-	s.hist = &history{}
-	go func() {
-		// Generous timeout: a mongodb+srv:// Atlas URI needs DNS SRV lookup, TLS,
-		// and topology discovery on first connect, which routinely exceeds a few
-		// seconds.
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-
-		client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
-		if err != nil {
-			fmt.Printf("history: mongo connect failed (%v) - history disabled\n", err)
-			return
-		}
-		if err := client.Ping(ctx, nil); err != nil {
-			fmt.Printf("history: mongo not reachable at %s (%v) - history disabled; run `docker compose up -d`\n", uri, err)
-			return
-		}
-
-		coll := client.Database(historyDB).Collection(historyColl)
-		// TTL index auto-prunes old samples.
-		_, _ = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-			Keys:    bson.D{{Key: "ts", Value: 1}},
-			Options: options.Index().SetExpireAfterSeconds(int32(historyRetention.Seconds())),
-		})
-		// Supports the per-workload window aggregation.
-		_, _ = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-			Keys: bson.D{{Key: "ns", Value: 1}, {Key: "workload", Value: 1}, {Key: "ts", Value: 1}},
-		})
-
-		s.hist.coll = coll
-		s.hist.ready.Store(true) // publish coll before marking ready
-		fmt.Printf("history: connected to %s (sampling every %s, %s retention, %s window)\n",
-			uri, sampleInterval, historyRetention, minWindow)
-		s.sampleLoop()
-	}()
+// postSamples ships a batch of readings to the account server.
+func (h *history) postSamples(ctx context.Context, samples []usageSample) {
+	body, _ := json.Marshal(map[string]any{"samples": samples})
+	req, err := http.NewRequestWithContext(ctx, "POST", h.server+"/api/usage/ingest", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
 }
 
 func (s *server) sampleLoop() {
@@ -210,15 +193,13 @@ func (s *server) sampleOnce() {
 		}
 	}
 
-	now := time.Now().UTC()
-	docs := make([]interface{}, 0, len(groups))
+	docs := make([]usageSample, 0, len(groups))
 	for key, g := range groups {
 		if g.count == 0 {
 			continue
 		}
 		parts := strings.SplitN(key, "|", 2)
 		docs = append(docs, usageSample{
-			TS:         now,
 			Namespace:  parts[0],
 			Workload:   parts[1],
 			OwnerKind:  g.ownerKind,
@@ -232,7 +213,7 @@ func (s *server) sampleOnce() {
 	if len(docs) == 0 {
 		return
 	}
-	_, _ = s.hist.coll.InsertMany(ctx, docs)
+	s.hist.postSamples(ctx, docs)
 }
 
 // podRequests sums a pod's container CPU (milli) and memory (bytes) requests.
@@ -314,7 +295,7 @@ func (s *server) handleRightsizing(w http.ResponseWriter, r *http.Request) {
 	if s.hist == nil || !s.hist.ready.Load() {
 		writeJSON(w, 200, map[string]any{
 			"ready":      false,
-			"reason":     "MongoDB not connected yet - connecting in the background (or set MONGO_URI / run `docker compose up -d`).",
+			"reason":     "Usage history unavailable - sign in to your Clusterheart account to enable rightsizing.",
 			"windowMins": int(minWindow.Minutes()),
 			"rows":       []RightsizeRow{},
 		})
@@ -324,64 +305,16 @@ func (s *server) handleRightsizing(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
-	cutoff := time.Now().UTC().Add(-minWindow)
-	match := bson.D{{Key: "ts", Value: bson.D{{Key: "$gte", Value: cutoff}}}}
-	if ns := r.URL.Query().Get("ns"); ns != "" && ns != "ALL" {
-		match = append(match, bson.E{Key: "ns", Value: ns})
-	}
-
-	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: match}},
-		{{Key: "$sort", Value: bson.D{{Key: "ts", Value: 1}}}},
-		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: bson.D{{Key: "ns", Value: "$ns"}, {Key: "workload", Value: "$workload"}}},
-			{Key: "cpuP95", Value: bson.D{{Key: "$percentile", Value: bson.D{{Key: "input", Value: "$cpuPerPod"}, {Key: "p", Value: bson.A{0.95}}, {Key: "method", Value: "approximate"}}}}},
-			{Key: "memP95", Value: bson.D{{Key: "$percentile", Value: bson.D{{Key: "input", Value: "$memPerPod"}, {Key: "p", Value: bson.A{0.95}}, {Key: "method", Value: "approximate"}}}}},
-			{Key: "cpuPeak", Value: bson.D{{Key: "$max", Value: "$cpuPerPod"}}},
-			{Key: "memPeak", Value: bson.D{{Key: "$max", Value: "$memPerPod"}}},
-			{Key: "cpuReq", Value: bson.D{{Key: "$last", Value: "$cpuReq"}}},
-			{Key: "memReq", Value: bson.D{{Key: "$last", Value: "$memReq"}}},
-			{Key: "replicas", Value: bson.D{{Key: "$last", Value: "$replicas"}}},
-			{Key: "ownerKind", Value: bson.D{{Key: "$last", Value: "$ownerKind"}}},
-			{Key: "samples", Value: bson.D{{Key: "$sum", Value: 1}}},
-			{Key: "first", Value: bson.D{{Key: "$min", Value: "$ts"}}},
-			{Key: "last", Value: bson.D{{Key: "$max", Value: "$ts"}}},
-		}}},
-	}
-
-	cur, err := s.hist.coll.Aggregate(ctx, pipeline)
+	raw, err := s.hist.fetchAggregate(ctx, r.URL.Query().Get("ns"), int(minWindow.Minutes()))
 	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
-	}
-	defer cur.Close(ctx)
-
-	var raw []struct {
-		ID struct {
-			NS       string `bson:"ns"`
-			Workload string `bson:"workload"`
-		} `bson:"_id"`
-		CPUP95    []float64 `bson:"cpuP95"`
-		MemP95    []float64 `bson:"memP95"`
-		CPUPeak   int64     `bson:"cpuPeak"`
-		MemPeak   int64     `bson:"memPeak"`
-		CPUReq    int64     `bson:"cpuReq"`
-		MemReq    int64     `bson:"memReq"`
-		Replicas  int       `bson:"replicas"`
-		OwnerKind string    `bson:"ownerKind"`
-		Samples   int       `bson:"samples"`
-		First     time.Time `bson:"first"`
-		Last      time.Time `bson:"last"`
-	}
-	if err := cur.All(ctx, &raw); err != nil {
-		writeErr(w, 500, err.Error())
+		writeErr(w, 502, "history unavailable: "+err.Error())
 		return
 	}
 
 	rows := make([]RightsizeRow, 0, len(raw))
 	for _, g := range raw {
 		row := RightsizeRow{
-			Namespace: g.ID.NS, Workload: g.ID.Workload, OwnerKind: g.OwnerKind,
+			Namespace: g.NS, Workload: g.Workload, OwnerKind: g.OwnerKind,
 			Replicas: g.Replicas, CPURequest: g.CPUReq, MemRequest: g.MemReq,
 			CPUPeak: g.CPUPeak, MemPeak: g.MemPeak, Samples: g.Samples,
 			WindowMins: int(g.Last.Sub(g.First).Minutes()),
@@ -402,6 +335,45 @@ func (s *server) handleRightsizing(w http.ResponseWriter, r *http.Request) {
 		"windowMins": int(minWindow.Minutes()),
 		"rows":       rows,
 	})
+}
+
+// aggRow mirrors one grouped row returned by the account server's aggregate API.
+type aggRow struct {
+	NS        string    `json:"ns"`
+	Workload  string    `json:"workload"`
+	CPUP95    []float64 `json:"cpuP95"`
+	MemP95    []float64 `json:"memP95"`
+	CPUPeak   int64     `json:"cpuPeak"`
+	MemPeak   int64     `json:"memPeak"`
+	CPUReq    int64     `json:"cpuReq"`
+	MemReq    int64     `json:"memReq"`
+	Replicas  int       `json:"replicas"`
+	OwnerKind string    `json:"ownerKind"`
+	Samples   int       `json:"samples"`
+	First     time.Time `json:"first"`
+	Last      time.Time `json:"last"`
+}
+
+// fetchAggregate asks the account server for the per-workload window aggregation.
+func (h *history) fetchAggregate(ctx context.Context, ns string, windowMins int) ([]aggRow, error) {
+	u := fmt.Sprintf("%s/api/usage/aggregate?ns=%s&windowMins=%d", h.server, url.QueryEscape(ns), windowMins)
+	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+	var out struct {
+		Rows []aggRow `json:"rows"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out.Rows, nil
 }
 
 // rightsizeVerdict decides downsize/upsize/ok from the windowed stats. It waits

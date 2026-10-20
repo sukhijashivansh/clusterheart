@@ -103,7 +103,12 @@ async function startDashboard() {
   if (!fs.existsSync(bin)) throw new Error(`dashboard binary not found at ${bin}`);
   try { fs.chmodSync(bin, 0o755); } catch (_) {}
   const port = await freePort();
-  serverProc = spawn(bin, ['-addr', `127.0.0.1:${port}`], { env: patchedEnv(), stdio: 'ignore' });
+  // Pass the account server + the user's session token so the dashboard can
+  // store rightsizing usage history through our server (no DB creds in the app).
+  const env = patchedEnv();
+  env.CLUSTERHEART_SERVER = SERVER;
+  if (sessionToken) env.CLUSTERHEART_TOKEN = sessionToken;
+  serverProc = spawn(bin, ['-addr', `127.0.0.1:${port}`], { env, stdio: 'ignore' });
   // Without an 'error' listener, a failed spawn throws and crashes the app.
   let spawnErr = null;
   serverProc.on('error', (err) => { spawnErr = err; });

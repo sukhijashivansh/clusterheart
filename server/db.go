@@ -21,6 +21,7 @@ type store struct {
 	client *mongo.Client
 	users  *mongo.Collection
 	meta   *mongo.Collection
+	usage  *mongo.Collection
 }
 
 var errUserExists = errors.New("user already exists")
@@ -47,13 +48,27 @@ func openStore(ctx context.Context) (*store, error) {
 	}
 
 	db := client.Database(dbName)
-	s := &store{client: client, users: db.Collection("users"), meta: db.Collection("settings")}
+	s := &store{
+		client: client,
+		users:  db.Collection("users"),
+		meta:   db.Collection("settings"),
+		usage:  db.Collection("usage_samples"),
+	}
 	if _, err := s.users.Indexes().CreateOne(pctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uk_email"),
 	}); err != nil {
 		return nil, fmt.Errorf("ensure email index: %w", err)
 	}
+	// Usage history: a TTL index keeps a rolling window (continuous cleanup), and
+	// a compound index supports the per-user window aggregation.
+	_, _ = s.usage.Indexes().CreateOne(pctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "ts", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(int32((8 * time.Hour).Seconds())).SetName("ttl_ts"),
+	})
+	_, _ = s.usage.Indexes().CreateOne(pctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "user", Value: 1}, {Key: "ns", Value: 1}, {Key: "workload", Value: 1}, {Key: "ts", Value: 1}},
+	})
 	return s, nil
 }
 

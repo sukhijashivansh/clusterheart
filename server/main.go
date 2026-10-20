@@ -491,6 +491,9 @@ func main() {
 		log.Println("WARNING: ADMIN_EMAILS is empty - nobody can reach /admin. Set it in server/.env")
 	}
 
+	// Daily hard-purge of usage history (on top of the 8h TTL).
+	go st.usagePurgeLoop()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", a.pageLogin)
 	mux.HandleFunc("/signup", a.pageSignup)
@@ -506,6 +509,8 @@ func main() {
 	mux.HandleFunc("/auth/google/start", a.googleStart)
 	mux.HandleFunc("/auth/google/callback", a.googleCallback)
 	mux.HandleFunc("/api/auth/exchange", post(a.handleExchange))
+	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
+	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage
