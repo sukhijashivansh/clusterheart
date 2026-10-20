@@ -2766,8 +2766,22 @@ function init() {
   refreshPortForwards();
   setInterval(refresh, 5000);
   setInterval(refreshPortForwards, 4000);
+  gateSRENav();
 }
 init();
+
+// Hide the Autonomous SRE tabs unless a control plane is actually wired up, so
+// an unconfigured install doesn't surface the "not configured" state at all.
+async function gateSRENav() {
+  try {
+    const cfg = await sreConfig();
+    if (cfg && cfg.configured) return;
+  } catch (_) {}
+  ["sre-overview", "incidents", "remediation"].forEach(v => {
+    const el = document.querySelector('.nav[data-view="' + v + '"]');
+    if (el) el.style.display = "none";
+  });
+}
 
 // ======================================================================
 // Autonomous SRE: incidents + remediation approval queue.
