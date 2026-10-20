@@ -98,6 +98,12 @@ func (s *store) setLastLogin(ctx context.Context, email string) error {
 	return err
 }
 
+func (s *store) setPassword(ctx context.Context, email, passHash string) error {
+	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)},
+		bson.M{"$set": bson.M{"passHash": passHash}})
+	return err
+}
+
 func (s *store) setApproved(ctx context.Context, email string, approved bool) error {
 	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)},
 		bson.M{"$set": bson.M{"approved": approved}})

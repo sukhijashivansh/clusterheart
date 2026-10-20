@@ -494,21 +494,30 @@ func main() {
 	// Daily hard-purge of usage history (on top of the 8h TTL).
 	go st.usagePurgeLoop()
 
+	// Per-IP rate limiters for the sensitive auth endpoints.
+	loginRL := newRateLimiter(10, time.Minute)      // login / token exchange
+	signupRL := newRateLimiter(5, 10*time.Minute)   // account creation
+	resetRL := newRateLimiter(5, 15*time.Minute)    // forgot / reset password
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", a.pageLogin)
 	mux.HandleFunc("/signup", a.pageSignup)
 	mux.HandleFunc("/account", a.pageAccount)
 	mux.HandleFunc("/admin", a.pageAdmin)
-	mux.HandleFunc("/api/signup", post(a.handleSignup))
-	mux.HandleFunc("/api/login", post(a.handleLogin))
+	mux.HandleFunc("/forgot", a.pageForgot)
+	mux.HandleFunc("/reset", a.pageReset)
+	mux.HandleFunc("/api/signup", signupRL.wrap("signup", post(a.handleSignup)))
+	mux.HandleFunc("/api/login", loginRL.wrap("login", post(a.handleLogin)))
 	mux.HandleFunc("/api/logout", post(a.handleLogout))
 	mux.HandleFunc("/api/session", a.handleSession)
+	mux.HandleFunc("/api/forgot", resetRL.wrap("forgot", post(a.handleForgot)))
+	mux.HandleFunc("/api/reset", resetRL.wrap("reset", post(a.handleReset)))
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
 	mux.HandleFunc("/api/admin/forcelogout", post(a.handleForceLogout))
 	mux.HandleFunc("/api/admin/notice", post(a.handleNotice))
 	mux.HandleFunc("/auth/google/start", a.googleStart)
 	mux.HandleFunc("/auth/google/callback", a.googleCallback)
-	mux.HandleFunc("/api/auth/exchange", post(a.handleExchange))
+	mux.HandleFunc("/api/auth/exchange", loginRL.wrap("exchange", post(a.handleExchange)))
 	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
 	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
 
@@ -537,7 +546,7 @@ func main() {
 	mux.HandleFunc("/", a.pageHome)
 
 	log.Printf("clusterheart account server on http://%s (downloads: %s)", *addr, downloadsDir)
-	log.Fatal(http.ListenAndServe(*addr, logging(mux)))
+	log.Fatal(http.ListenAndServe(*addr, logging(securityHeaders(mux))))
 }
 
 // --- helpers -------------------------------------------------------------

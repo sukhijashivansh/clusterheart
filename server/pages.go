@@ -24,6 +24,8 @@ var (
 	signupTmpl  = page(signupBody)
 	accountTmpl = page(accountBody)
 	adminTmpl   = page(adminBody)
+	forgotTmpl  = page(forgotBody)
+	resetTmpl   = page(resetBody)
 )
 
 // --- shared layout + design system --------------------------------------
@@ -518,15 +520,14 @@ const loginBody = `{{define "body"}}<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Sign in</p>
 <h1>Welcome back.</h1><p class="sub">Access your Clusterheart account.</p>
-<a class="gbtn" href="/auth/google/start">` + gLogo + `Continue with Google</a>
-<div class="divider">or</div>
 <label for="email">Email</label>
 <input id="email" type="email" autocomplete="email" placeholder="you@company.com">
 <label for="pass">Password</label>
 <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••">
 <button class="btn" id="go">Sign in</button>
 <div id="msg" class="msg"></div>
-<div class="alt">New here? <a href="/signup">Create an account</a></div>
+<div class="alt"><a href="/forgot">Forgot password?</a></div>
+<div class="alt" style="margin-top:10px">New here? <a href="/signup">Create an account</a></div>
 <div class="trust">` + lockSVG + `Credentials never leave your machine.</div>
 </div></div>{{end}}
 {{define "script"}}<script>
@@ -549,8 +550,6 @@ const signupBody = `{{define "body"}}<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Create account</p>
 <h1>Create your account.</h1><p class="sub">Sign up to request access.</p>
-<a class="gbtn" href="/auth/google/start">` + gLogo + `Continue with Google</a>
-<div class="divider">or</div>
 <label for="name">Name</label>
 <input id="name" type="text" autocomplete="name" placeholder="Jane Doe">
 <label for="email">Work email</label>
@@ -573,6 +572,61 @@ async function submit(){
 }
 go.addEventListener('click',submit);
 pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
+</script>{{end}}`
+
+// --- forgot / reset password ---------------------------------------------
+
+const forgotBody = `{{define "body"}}<div class="center"><div class="card">
+<div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
+<p class="kicker">Reset password</p>
+<h1>Forgot password?</h1><p class="sub">Enter your email and we'll send you a reset link.</p>
+<label for="email">Email</label>
+<input id="email" type="email" autocomplete="email" placeholder="you@company.com">
+<button class="btn" id="go">Send reset link</button>
+<div id="msg" class="msg"></div>
+<div class="alt"><a href="/login">Back to sign in</a></div>
+</div></div>{{end}}
+{{define "script"}}<script>
+var email=document.getElementById('email'),go=document.getElementById('go'),msg=document.getElementById('msg');
+async function submit(){
+  if(!email.value.trim()){_mark(msg,'Enter your email.','err');return;}
+  go.disabled=true;_mark(msg,'Sending…','info');
+  var res=await _post('/api/forgot',{email:email.value.trim()});
+  go.disabled=false;
+  if(res.ok){_mark(msg,'If an account exists for that email, a reset link is on its way. Check your inbox.','ok');}
+  else{_mark(msg,res.data.error||'Something went wrong.','err');}
+}
+go.addEventListener('click',submit);
+email.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
+</script>{{end}}`
+
+const resetBody = `{{define "body"}}<div class="center"><div class="card">
+<div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
+<p class="kicker">Reset password</p>
+<h1>Set a new password.</h1><p class="sub">Choose a new password for your account.</p>
+<label for="pass">New password</label>
+<input id="pass" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+<label for="pass2">Confirm password</label>
+<input id="pass2" type="password" autocomplete="new-password" placeholder="Re-enter password">
+<button class="btn" id="go">Reset password</button>
+<div id="msg" class="msg"></div>
+<div class="alt"><a href="/login">Back to sign in</a></div>
+</div></div>{{end}}
+{{define "script"}}<script>
+var pass=document.getElementById('pass'),pass2=document.getElementById('pass2'),go=document.getElementById('go'),msg=document.getElementById('msg');
+var token=new URLSearchParams(location.search).get('token')||'';
+if(!token){_mark(msg,'This reset link is invalid or incomplete.','err');go.disabled=true;}
+async function submit(){
+  if(pass.value.length<8){_mark(msg,'Password must be at least 8 characters.','err');return;}
+  if(pass.value!==pass2.value){_mark(msg,'Passwords do not match.','err');return;}
+  go.disabled=true;_mark(msg,'Resetting…','info');
+  var res=await _post('/api/reset',{token:token,password:pass.value});
+  if(!res.ok){_mark(msg,res.data.error||'Reset failed.','err');go.disabled=false;return;}
+  _mark(msg,'Password updated. Redirecting to sign in…','ok');
+  setTimeout(function(){location.href='/login';},1400);
+}
+go.addEventListener('click',submit);
+pass2.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 </script>{{end}}`
 
 // --- account -------------------------------------------------------------
