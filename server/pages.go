@@ -86,35 +86,35 @@ input::placeholder{color:var(--faint)}
 .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:0;font-size:11.5px;font-weight:600}
 .pill.on{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .pill.off{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 
 /* --- admin panel --- */
-.admin{max-width:880px;margin:0 auto;padding:52px 24px}
-.admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px}
+.admin{max-width:940px;margin:0 auto;padding:56px 24px}
+.admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:22px;border-bottom:1px solid var(--border)}
 .admin-user{font-size:13px;color:var(--muted);white-space:nowrap}
-.count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:8px;border-radius:20px;background:rgba(251,191,36,.14);color:var(--amber);font-size:12px;font-weight:700;vertical-align:middle}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:0;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04),0 20px 50px -24px rgba(0,0,0,.12)}
+.admin-user a{color:#000}
+.count{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;padding:0 6px;margin-right:6px;border-radius:0;background:#000;color:#fff;font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;font-weight:700;vertical-align:middle}
+.panel{background:var(--panel);border:1px solid var(--border-strong);border-radius:0;overflow:hidden}
 table.users{width:100%;border-collapse:collapse}
-table.users th{text-align:left;padding:14px 18px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;background:#fafafa;border-bottom:1px solid var(--border)}
-table.users td{padding:15px 18px;vertical-align:middle}
+table.users th{text-align:left;padding:13px 18px;font-size:10.5px;text-transform:uppercase;letter-spacing:.15em;color:var(--faint);font-weight:600;font-family:'Geist Mono',ui-monospace,monospace;background:#fafafa;border-bottom:1px solid var(--border-strong)}
+table.users td{padding:16px 18px;vertical-align:middle}
 table.users tbody tr{border-top:1px solid var(--border);transition:background .12s}
+table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:#fafafa}
-.u-name{font-weight:650;font-size:14px;color:var(--text)}
-.u-email{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
+.u-name{font-weight:650;font-size:14.5px;color:#000}
+.u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:3px}
 .u-time{font-size:13px;color:var(--muted)}
 .cell-act{text-align:right;white-space:nowrap}
-.act{padding:7px 16px;border-radius:8px;font-size:12.5px;font-weight:650;cursor:pointer;transition:transform .12s,opacity .12s,box-shadow .12s,border-color .12s,color .12s,background .12s}
-.act:hover{transform:translateY(-1px)}
-.act:active{transform:translateY(0)}
-.act:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
-.act.approve{border:none;color:#fff;background:#16a34a}
-.act.approve:hover{background:#15803d}
+.act{padding:9px 18px;border-radius:0;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
+.act:disabled{opacity:.45;cursor:default}
+.act.approve{border:1px solid #000;color:#fff;background:#000}
+.act.approve:hover{background:#262626}
 .act.revoke{border:1px solid var(--border-strong);background:#fff;color:var(--muted)}
-.act.revoke:hover{color:var(--red);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.07)}
-.empty{padding:40px 18px;text-align:center;color:var(--muted)}
+.act.revoke:hover{color:var(--red);border-color:var(--red)}
+.empty{padding:44px 18px;text-align:center;color:var(--muted)}
 
 /* --- landing nav --- */
 .lp-nav{
@@ -562,6 +562,7 @@ pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 const accountBody = `{{define "body"}}<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
+<p class="kicker">Account</p>
 <h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
 {{if .Approved}}
   <p><span class="pill on"><span class="dot"></span>Approved</span></p>
@@ -583,10 +584,12 @@ document.getElementById('logout').addEventListener('click',async function(){
 
 const adminBody = `{{define "body"}}<div class="admin">
 <div class="admin-head">
-  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">Clusterheart <span style="color:var(--faint);font-weight:500">· admin</span></span></div>
-  <div class="admin-user">{{.Me}} · <a href="#" id="logout">log out</a></div>
+  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
+  <div class="admin-user">{{.Me}} · <a href="#" id="logout">Log out</a></div>
 </div>
-<p class="sub" style="margin:0 0 22px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
+<p class="kicker" style="margin-top:34px">Admin · Access control</p>
+<h1 style="margin:0 0 10px">Users</h1>
+<p class="sub" style="max-width:600px;margin:0 0 26px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
 <div class="panel">
 <table class="users">
 <thead><tr><th>User</th><th>Status</th><th>Last login</th><th></th></tr></thead>
