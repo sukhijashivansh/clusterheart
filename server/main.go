@@ -162,6 +162,16 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// isHTTPS reports whether the request reached us over TLS, either directly or
+// via a terminating proxy (Caddy/Vercel set X-Forwarded-Proto). Used to mark
+// the session cookie Secure in production while keeping local http dev working.
+func isHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
 func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var body struct{ Email, Password string }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -188,6 +198,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(sessionTTL),
 	})
