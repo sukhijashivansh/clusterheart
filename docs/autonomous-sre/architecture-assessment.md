@@ -8,7 +8,7 @@ Status: living document. Grounded in the repository as of this branch.
 |---|---|---|---|
 | Dashboard engine | `app/` (Go module `kubepulse-ui`) | Reads a live cluster, serves the UI | client-go v0.34 + metrics; runs **in-cluster** (`rest.InClusterConfig`) or from a kubeconfig |
 | Usage history | `app/history.go` | Rolling usage time-series | MongoDB `clusterheart.usage_samples`, 8h TTL |
-| Account server | `server/` (Go) | Sign-up / login / approval gate | MongoDB; hosted on Render; approves who may run the desktop app |
+| Account server | `server/` (Go) | Sign-up / login / approval gate | MongoDB; hosted on AWS (EC2 + Caddy), fronted by Vercel; approves who may run the desktop app |
 | Desktop app | `electron/` | Wraps the dashboard, gates on approval | |
 | Landing page | `index.html` + `vercel.json` | Marketing site | Vercel + Cloudflare |
 

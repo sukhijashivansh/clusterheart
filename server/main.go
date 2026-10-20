@@ -482,9 +482,9 @@ func envOr(key, def string) string {
 	return def
 }
 
-// defaultAddr picks the listen address. Hosts like Render/Heroku inject PORT
-// and expect the process to bind 0.0.0.0:$PORT. Locally we fall back to ADDR
-// (or 127.0.0.1:9000) so dev behaviour is unchanged.
+// defaultAddr picks the listen address. If a PORT env var is injected we bind
+// 0.0.0.0:$PORT; otherwise we fall back to ADDR (or 127.0.0.1:9000) so dev
+// behaviour is unchanged. On AWS the systemd unit sets ADDR=0.0.0.0:9000.
 func defaultAddr() string {
 	if p := os.Getenv("PORT"); p != "" {
 		return "0.0.0.0:" + p
