@@ -57,7 +57,7 @@ a:hover{color:#000}
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:var(--bg)}
 .card{
   width:100%;max-width:410px;padding:46px 42px;
-  background:var(--panel);border:1px solid var(--border-strong);border-radius:0;
+  background:var(--panel);
 }
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
 .wordmark{font-size:18px;font-weight:700;letter-spacing:-.5px;color:#000}
@@ -92,7 +92,7 @@ input::placeholder{color:var(--faint)}
 .btn.secondary:hover{background:#fff;border-color:#000}
 .alt{margin-top:24px;font-size:13.5px;color:var(--muted);text-align:center}
 .alt a{color:#000;font-weight:600}
-.trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
+.trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
 
