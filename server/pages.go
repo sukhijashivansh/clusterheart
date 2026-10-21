@@ -109,6 +109,7 @@ table.users tbody tr:hover{background:#fafafa}
 .u-name{font-weight:650;font-size:14.5px;color:#000}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:3px}
 .u-time{font-size:13px;color:var(--muted)}
+.u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
 .cell-act{text-align:right;white-space:nowrap}
 .act{padding:9px 18px;border-radius:0;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
 .act:disabled{opacity:.45;cursor:default}
@@ -666,9 +667,9 @@ const adminBody = `{{define "body"}}<div class="admin">
 </div>
 <div class="panel">
 <table class="users">
-<thead><tr><th>User</th><th>Status</th><th>Last login</th><th></th></tr></thead>
+<thead><tr><th>User</th><th>Status</th><th>Version</th><th>Last seen</th><th></th></tr></thead>
 <tbody>
-{{if not .Users}}<tr><td colspan="4" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
+{{if not .Users}}<tr><td colspan="5" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
 {{range .Users}}<tr>
   <td class="cell-user">
     <div class="u-name">{{.Name}}</div>
@@ -678,8 +679,9 @@ const adminBody = `{{define "body"}}<div class="admin">
     {{if .Approved}}<span class="pill on"><span class="dot"></span>Approved</span>
     {{else}}<span class="pill off"><span class="dot"></span>Pending</span>{{end}}
   </td>
-  <td data-label="Last login" class="u-time">
-    {{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}
+  <td data-label="Version" class="u-ver">{{if .AppVersion}}v{{.AppVersion}}{{else}}&mdash;{{end}}</td>
+  <td data-label="Last seen" class="u-time">
+    {{if .LastSeen.IsZero}}{{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}{{else}}{{.LastSeen.Format "Jan 2, 15:04"}}{{end}}
   </td>
   <td class="cell-act">
     {{if .Approved}}<button class="act forceout" data-email="{{.Email}}">Force out</button><button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>

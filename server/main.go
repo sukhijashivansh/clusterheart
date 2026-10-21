@@ -36,6 +36,10 @@ type User struct {
 	Approved  bool      `bson:"approved" json:"approved"`
 	Created   time.Time `bson:"created" json:"created"`
 	LastLogin time.Time `bson:"lastLogin" json:"lastLogin"`
+	// LastSeen + AppVersion are refreshed on every session heartbeat, so the
+	// admin can see who's active and which app build they're on.
+	LastSeen   time.Time `bson:"lastSeen,omitempty" json:"lastSeen"`
+	AppVersion string    `bson:"appVersion,omitempty" json:"appVersion"`
 	// SessionsValidAfter invalidates any token minted before it (force log out).
 	SessionsValidAfter time.Time `bson:"sessionsValidAfter,omitempty" json:"-"`
 }
@@ -236,6 +240,8 @@ func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
+	// Record activity + the reporting app version (sent by the desktop app).
+	_ = a.store.setSeen(ctx, u.Email, strings.TrimSpace(r.Header.Get("X-App-Version")))
 	n := a.store.getNotice(ctx)
 	resp := map[string]any{
 		"valid":    true,

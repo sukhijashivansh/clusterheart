@@ -213,7 +213,7 @@ async function apiLogin(email, password) {
 }
 async function apiSession(token) {
   const res = await fetch(`${SERVER}/api/session`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, 'X-App-Version': app.getVersion() },
     signal: AbortSignal.timeout(20000),
   });
   return res.json().catch(() => ({ valid: false }));

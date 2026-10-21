@@ -98,6 +98,17 @@ func (s *store) setLastLogin(ctx context.Context, email string) error {
 	return err
 }
 
+// setSeen refreshes lastSeen (and the reported app version, when provided) for
+// a user on each session heartbeat.
+func (s *store) setSeen(ctx context.Context, email, appVersion string) error {
+	set := bson.M{"lastSeen": time.Now()}
+	if appVersion != "" {
+		set["appVersion"] = appVersion
+	}
+	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)}, bson.M{"$set": set})
+	return err
+}
+
 func (s *store) setPassword(ctx context.Context, email, passHash string) error {
 	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)},
 		bson.M{"$set": bson.M{"passHash": passHash}})

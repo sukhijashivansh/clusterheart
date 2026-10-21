@@ -8,99 +8,107 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
     :root{
-      --bg:#ffffff;--panel:#ffffff;--text:#171717;--muted:#525252;--faint:#a3a3a3;
-      --border:#e5e5e5;--border-strong:#d4d4d4;--green:#16a34a;--amber:#b45309;--red:#dc2626;
+      --bg:#ffffff;--soft:#fafafa;--text:#171717;--muted:#6b6b6b;--faint:#a3a3a3;
+      --border:#ececec;--field:#f5f5f5;--green:#16a34a;--amber:#b45309;--red:#dc2626;
     }
     *{box-sizing:border-box}
     html,body{margin:0;height:100%;-webkit-user-select:none;user-select:none}
     body{
       background:var(--bg);color:var(--text);
-      font-family:'Geist',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      font-family:'Geist',ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
       -webkit-font-smoothing:antialiased;line-height:1.5;
-      display:flex;align-items:center;justify-content:center;min-height:100vh;padding:32px;
+      display:flex;min-height:100vh;
     }
     ::selection{background:#000;color:#fff}
-    .card{width:100%;max-width:410px;padding:46px 42px;background:var(--panel);border:1px solid var(--border-strong)}
-    .brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
-    .wordmark{font-size:18px;font-weight:700;letter-spacing:-.5px;color:#000}
-    .kicker{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
-    h1{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.08;margin:0 0 9px;color:#000}
-    .sub{color:var(--muted);font-size:14px;margin:0 0 30px}
-    label{display:block;font-size:13px;font-weight:500;color:#000;margin:18px 0 8px}
-    input{
-      width:100%;padding:12px 14px;font-size:14px;color:#000;font-family:inherit;
-      background:#fff;border:1px solid var(--border-strong);outline:none;
-      -webkit-user-select:text;user-select:text;transition:border-color .15s,box-shadow .15s;
+
+    /* left: brand */
+    .left{
+      flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:20px;padding:48px;background:var(--soft);border-right:1px solid var(--border);
     }
-    input:focus{border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.09)}
+    .left .wordmark{font-size:22px;font-weight:700;letter-spacing:-.6px;color:#000}
+    .left .tag{margin:0;max-width:250px;text-align:center;color:var(--muted);font-size:14px;line-height:1.55}
+
+    /* right: form */
+    .right{flex:1 1 0;display:flex;align-items:center;justify-content:center;padding:48px}
+    .form-wrap{width:100%;max-width:320px}
+    .kicker{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+    h1{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1.1;margin:0 0 8px;color:#000}
+    .sub{color:var(--muted);font-size:14px;margin:0 0 28px}
+    label{display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin:16px 0 7px}
+    input{
+      width:100%;padding:13px 14px;font-size:14px;color:#000;font-family:inherit;
+      background:var(--field);border:1px solid transparent;border-radius:10px;outline:none;
+      -webkit-user-select:text;user-select:text;transition:background .15s,border-color .15s,box-shadow .15s;
+    }
+    input:focus{background:#fff;border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
     input::placeholder{color:var(--faint)}
     .btn{
-      width:100%;margin-top:28px;padding:14px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;
-      background:#000;border:1px solid #000;transition:background .15s,opacity .12s;
+      width:100%;margin-top:26px;padding:13px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;
+      background:#000;border:none;border-radius:10px;transition:opacity .15s,background .15s;
     }
     .btn:hover{background:#262626}
-    .btn:active{background:#000}
     .btn:disabled{opacity:.45;cursor:default}
-    .btn.secondary{margin-top:12px;background:#fff;color:#000;border:1px solid var(--border-strong)}
-    .btn.secondary:hover{background:#fff;border-color:#000}
-    .alt{margin-top:22px;font-size:13.5px;color:var(--muted);text-align:center}
-    .alt + .alt{margin-top:10px}
+    .btn.secondary{margin-top:10px;background:var(--field);color:#000}
+    .btn.secondary:hover{background:#ececec}
+    .alt{margin-top:18px;font-size:13.5px;color:var(--muted);text-align:center}
+    .alt + .alt{margin-top:9px}
     .link{color:#000;font-weight:600;cursor:pointer}
-    .link:hover{text-decoration:underline}
-    .msg{min-height:20px;margin-top:16px;font-size:13px}
+    .link:hover{opacity:.7}
+    .msg{min-height:20px;margin-top:14px;font-size:13px}
     .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
-    .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;font-size:11.5px;font-weight:600;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;margin-bottom:16px}
     .pill.off{background:#fffbeb;color:var(--amber);border:1px solid #fde68a}
     .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
-    .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
-    .spin{width:24px;height:24px;border:2.5px solid var(--border);border-top-color:#000;border-radius:50%;animation:r .8s linear infinite;margin:6px auto 14px}
+    .spin{width:24px;height:24px;border:2.5px solid var(--border);border-top-color:#000;border-radius:50%;animation:r .8s linear infinite;margin:0 auto 14px}
     @keyframes r{to{transform:rotate(360deg)}}
     .hidden{display:none}
     .center-text{text-align:center}
+
+    /* narrow window: drop the brand panel, just the form */
+    @media (max-width:720px){ .left{display:none} }
   </style>
 </head>
 <body>
-  <main class="card">
-    <div class="brand">
-      <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="15" fill="#3B5BDB"/><circle cx="50" cy="15" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="32.5" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="50" cy="85" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="32.5" r="10.5" fill="#3B5BDB"/>
-      </svg>
-      <span class="wordmark">Clusterheart</span>
-    </div>
+  <aside class="left">
+    <svg width="60" height="60" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="15" fill="#3B5BDB"/><circle cx="50" cy="15" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="32.5" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="50" cy="85" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="32.5" r="10.5" fill="#3B5BDB"/>
+    </svg>
+    <span class="wordmark">Clusterheart</span>
+    <p class="tag">Your whole Kubernetes cluster. One application.</p>
+  </aside>
 
-    <!-- resume check -->
-    <div id="loading">
-      <div class="spin"></div>
-      <p class="sub center-text" style="margin:0">Checking your session&hellip;</p>
-    </div>
-
-    <!-- sign-in form -->
-    <div id="form" class="hidden">
-      <p class="kicker">Sign in</p>
-      <h1>Welcome back.</h1>
-      <p class="sub">Access your Clusterheart account.</p>
-      <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
-      <label for="pass">Password</label>
-      <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••" />
-      <button class="btn" id="go">Sign in</button>
-      <div id="msg" class="msg"></div>
-      <div class="alt"><span class="link" id="forgot">Forgot password?</span></div>
-      <div class="alt">New here? <span class="link" id="signup">Create an account</span></div>
-      <div class="trust">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        Credentials never leave your machine.
+  <main class="right">
+    <div class="form-wrap">
+      <!-- resume check -->
+      <div id="loading">
+        <div class="spin"></div>
+        <p class="sub center-text" style="margin:0">Checking your session&hellip;</p>
       </div>
-    </div>
 
-    <!-- pending approval -->
-    <div id="pending" class="hidden">
-      <p class="kicker">Account</p>
-      <span class="pill off"><span class="dot"></span>Pending approval</span>
-      <h1>Almost there.</h1>
-      <p class="sub" id="pendingName">Your account is waiting for the owner to approve it. You'll get in as soon as they do.</p>
-      <button class="btn" id="recheck">Check again</button>
-      <button class="btn secondary" id="signout">Sign out</button>
+      <!-- sign-in form -->
+      <div id="form" class="hidden">
+        <p class="kicker">Sign in</p>
+        <h1>Welcome back.</h1>
+        <p class="sub">Access your Clusterheart account.</p>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
+        <label for="pass">Password</label>
+        <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••" />
+        <button class="btn" id="go">Sign in</button>
+        <div id="msg" class="msg"></div>
+        <div class="alt"><span class="link" id="forgot">Forgot password?</span></div>
+        <div class="alt">New here? <span class="link" id="signup">Create an account</span></div>
+      </div>
+
+      <!-- pending approval -->
+      <div id="pending" class="hidden">
+        <span class="pill off"><span class="dot"></span>Pending approval</span>
+        <h1>Almost there.</h1>
+        <p class="sub" id="pendingName">Your account is waiting for the owner to approve it. You'll get in as soon as they do.</p>
+        <button class="btn" id="recheck">Check again</button>
+        <button class="btn secondary" id="signout">Sign out</button>
+      </div>
     </div>
   </main>
 
