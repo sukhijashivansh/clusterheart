@@ -26,14 +26,6 @@
     "electronLanguages": [
       "en-US"
     ],
-    "protocols": [
-      {
-        "name": "Clusterheart",
-        "schemes": [
-          "clusterheart"
-        ]
-      }
-    ],
     "afterSign": "scripts/afterSign.js",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [

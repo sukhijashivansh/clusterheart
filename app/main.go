@@ -3143,11 +3143,14 @@ func (s *server) handlePatchResources(w http.ResponseWriter, r *http.Request) {
 // --- /api/shell  (WebSocket → pod exec) ---
 //
 // Client → server frames:
-//   text starting with "0:" → stdin bytes (everything after the prefix)
-//   text starting with "1:" → resize JSON: {"cols":N,"rows":N}
+//
+//	text starting with "0:" → stdin bytes (everything after the prefix)
+//	text starting with "1:" → resize JSON: {"cols":N,"rows":N}
+//
 // Server → client frames:
-//   text frames with stdout/stderr bytes
-//   on close: text frame "__exit__: <msg>" then ws close.
+//
+//	text frames with stdout/stderr bytes
+//	on close: text frame "__exit__: <msg>" then ws close.
 func (s *server) handleShell(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	ns := q.Get("ns")
@@ -3276,7 +3279,9 @@ func writeWsExit(ws *websocket.Conn, msg string) {
 		time.Now().Add(2*time.Second))
 }
 
-type wsSizeQueue struct{ ch chan remotecommand.TerminalSize }
+type wsSizeQueue struct {
+	ch chan remotecommand.TerminalSize
+}
 
 func (q wsSizeQueue) Next() *remotecommand.TerminalSize {
 	sz, ok := <-q.ch

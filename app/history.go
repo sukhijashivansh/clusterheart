@@ -156,11 +156,11 @@ func (s *server) sampleOnce() {
 
 	// aggregate active pods per workload
 	type agg struct {
-		ownerKind          string
-		count              int
-		cpuUse, memUse     int64
-		cpuReq, memReq     int64 // per-pod request (from representative pod)
-		haveReq            bool
+		ownerKind      string
+		count          int
+		cpuUse, memUse int64
+		cpuReq, memReq int64 // per-pod request (from representative pod)
+		haveReq        bool
 	}
 	groups := map[string]*agg{}
 	for i := range pl.Items {

@@ -515,9 +515,9 @@ func main() {
 	go st.usagePurgeLoop()
 
 	// Per-IP rate limiters for the sensitive auth endpoints.
-	loginRL := newRateLimiter(10, time.Minute)      // login / token exchange
-	signupRL := newRateLimiter(5, 10*time.Minute)   // account creation
-	resetRL := newRateLimiter(5, 15*time.Minute)    // forgot / reset password
+	loginRL := newRateLimiter(10, time.Minute)    // login / token exchange
+	signupRL := newRateLimiter(5, 10*time.Minute) // account creation
+	resetRL := newRateLimiter(5, 15*time.Minute)  // forgot / reset password
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", a.pageLogin)
@@ -535,9 +535,6 @@ func main() {
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
 	mux.HandleFunc("/api/admin/forcelogout", post(a.handleForceLogout))
 	mux.HandleFunc("/api/admin/notice", post(a.handleNotice))
-	mux.HandleFunc("/auth/google/start", a.googleStart)
-	mux.HandleFunc("/auth/google/callback", a.googleCallback)
-	mux.HandleFunc("/api/auth/exchange", loginRL.wrap("exchange", post(a.handleExchange)))
 	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
 	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
 	mux.HandleFunc("/api/sre-bootstrap", a.handleSREBootstrap)

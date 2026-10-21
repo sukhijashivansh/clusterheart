@@ -24,6 +24,15 @@ import (
 
 const resetTTL = time.Hour
 
+// publicBaseURL is the externally reachable base (behind Vercel/Cloudflare),
+// used to build links we email out. Override with PUBLIC_BASE_URL.
+func publicBaseURL() string {
+	if v := os.Getenv("PUBLIC_BASE_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return "https://www.clusterheart.com"
+}
+
 func resetFingerprint(passHash string) string {
 	h := sha256.Sum256([]byte(passHash))
 	return hex.EncodeToString(h[:8])

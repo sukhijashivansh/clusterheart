@@ -251,39 +251,6 @@ ipcMain.handle('app:start', async () => {
 ipcMain.handle('auth:signup-url', async () => { shell.openExternal(`${SERVER}/signup`); });
 ipcMain.handle('auth:forgot-url', async () => { shell.openExternal(`${SERVER}/forgot`); });
 
-// Google sign-in (system browser). Opens the OAuth flow in the default browser;
-// the callback hands a one-time code back via the clusterheart:// protocol,
-// handled by handleDeepLink below.
-ipcMain.handle('auth:google', async () => { shell.openExternal(`${SERVER}/auth/google/start?desktop=1`); });
-
-async function completeGoogle(code) {
-  try {
-    const res = await fetch(`${SERVER}/api/auth/exchange`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }), signal: AbortSignal.timeout(20000),
-    });
-    const d = await res.json().catch(() => ({}));
-    if (res.ok && d.ok && d.token) saveToken(d.token);
-  } catch (_) {}
-  // Reload the login screen; its startup resume() boots the dashboard if the
-  // account is approved, or shows the pending view, using the token we stored.
-  if (win && !win.isDestroyed()) {
-    try { await win.loadFile('login.html'); } catch (_) {}
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  }
-}
-
-function handleDeepLink(u) {
-  try {
-    const url = new URL(u);
-    if (url.protocol === 'clusterheart:') {
-      const code = url.searchParams.get('code');
-      if (code) completeGoogle(code);
-    }
-  } catch (_) {}
-}
-
 async function doLogout() {
   stopDashboard();
   clearToken();
@@ -329,17 +296,13 @@ function createWindow() {
   });
 }
 
-// Single-instance + custom protocol, for the Google (system browser) handback.
+// Single instance: focus the existing window instead of opening a second.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
-app.on('second-instance', (_e, argv) => {
-  const u = argv.find((a) => typeof a === 'string' && a.startsWith('clusterheart://'));
-  if (u) handleDeepLink(u);
+app.on('second-instance', () => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
-app.on('open-url', (e, url) => { e.preventDefault(); handleDeepLink(url); });
-try { app.setAsDefaultProtocolClient('clusterheart'); } catch (_) {}
 
 app.whenReady().then(() => {
   // Dock icon in dev (packaged builds get the icon from electron-builder).

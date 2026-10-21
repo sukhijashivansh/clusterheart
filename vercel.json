@@ -31,7 +31,6 @@
     { "source": "/admin", "destination": "https://clusterheart-server.clusterheart.com/admin" },
     { "source": "/forgot", "destination": "https://clusterheart-server.clusterheart.com/forgot" },
     { "source": "/reset", "destination": "https://clusterheart-server.clusterheart.com/reset" },
-    { "source": "/auth/:path*", "destination": "https://clusterheart-server.clusterheart.com/auth/:path*" },
     { "source": "/api/:path*", "destination": "https://clusterheart-server.clusterheart.com/api/:path*" }
   ],
   "headers": [
