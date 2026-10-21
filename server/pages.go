@@ -61,8 +61,9 @@ a:hover{color:#000}
 }
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
 .wordmark{font-size:18px;font-weight:700;letter-spacing:-.5px;color:#000}
-/* auth cards: logo only (no wordmark text next to it) */
-.card .brand .wordmark{display:none}
+/* auth pages: logo header top-left; the in-card brand is hidden (logo lives in the header) */
+.card .brand{display:none}
+.auth-top{position:absolute;top:0;left:0;padding:24px 30px;display:flex;align-items:center}
 .wordmark .a{color:inherit}
 .kicker{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
 h1{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.08;margin:0 0 9px;color:#000}
@@ -379,6 +380,9 @@ const logoSVG = `<svg width="26" height="26" viewBox="0 0 100 100"><circle cx="5
 
 const lockSVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
 
+// authTop is the fixed logo header (top-left) shown on the auth pages.
+const authTop = `<a class="auth-top" href="/">` + logoSVG + `</a>`
+
 // --- home / landing ------------------------------------------------------
 
 const homeBody = `{{define "body"}}
@@ -560,7 +564,7 @@ const homeBody = `{{define "body"}}
 
 // --- login ---------------------------------------------------------------
 
-const loginBody = `{{define "body"}}<div class="center"><div class="card">
+const loginBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Sign in</p>
 <h1>Welcome back.</h1><p class="sub">Access your Clusterheart account.</p>
@@ -590,7 +594,7 @@ email.addEventListener('keydown',function(e){if(e.key==='Enter')pass.focus();});
 
 // --- signup --------------------------------------------------------------
 
-const signupBody = `{{define "body"}}<div class="center"><div class="card">
+const signupBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Create account</p>
 <h1>Create your account.</h1><p class="sub">Sign up to request access.</p>
@@ -620,7 +624,7 @@ pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 // --- forgot / reset password ---------------------------------------------
 
-const forgotBody = `{{define "body"}}<div class="center"><div class="card">
+const forgotBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Reset password</p>
 <h1>Forgot password?</h1><p class="sub">Enter your email and we'll send you a reset link.</p>
@@ -644,7 +648,7 @@ go.addEventListener('click',submit);
 email.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 </script>{{end}}`
 
-const resetBody = `{{define "body"}}<div class="center"><div class="card">
+const resetBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Reset password</p>
 <h1>Set a new password.</h1><p class="sub">Choose a new password for your account.</p>
@@ -675,7 +679,7 @@ pass2.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 // --- account -------------------------------------------------------------
 
-const accountBody = `{{define "body"}}<div class="center"><div class="card">
+const accountBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Account</p>
 <h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
