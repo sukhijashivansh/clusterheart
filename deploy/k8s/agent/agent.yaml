@@ -1,21 +1,17 @@
-# ClusterHeart SRE Agent — OBSERVE-ONLY install.
+# ClusterHeart SRE Agent — OBSERVE-ONLY, registry-free install.
 #
-# This manifest grants read-only access that exactly matches what the agent
-# collector reads (nodes, pods, events, workloads, discovery). It contains NO
-# mutating verbs, NO pods/exec, NO pods/portforward, and NO access to Secret
-# values. Remediation runs under a SEPARATE, narrowly-scoped ServiceAccount that
-# is installed only when a cluster opts in (added in a later milestone).
+# No container registry needed: a tiny public alpine base fetches the prebuilt
+# agent binary (published to public Vercel Blob) and runs it. Read-only access
+# only — matches what the collector reads. No mutating verbs, no exec, no
+# portforward, no Secret values.
 #
-# Before applying, create the agent credentials Secret (shown once at cluster
-# registration from the control plane):
-#
+# Deploy (CLUSTER_ID + AGENT_TOKEN come from control-plane registration):
 #   kubectl create namespace clusterheart-sre
 #   kubectl -n clusterheart-sre create secret generic clusterheart-agent \
-#     --from-literal=CONTROLPLANE_URL=https://<control-plane-host> \
+#     --from-literal=CONTROLPLANE_URL=https://clusterheart-server.clusterheart.com/cp \
 #     --from-literal=CLUSTER_ID=<clu_...> \
-#     --from-literal=AGENT_TOKEN=<token-from-registration>
-#
-# Then: kubectl apply -f deploy/k8s/agent/agent.yaml
+#     --from-literal=AGENT_TOKEN=<token>
+#   kubectl apply -f deploy/k8s/agent/agent.yaml
 ---
 apiVersion: v1
 kind: Namespace
@@ -28,7 +24,6 @@ metadata:
   name: clusterheart-agent
   namespace: clusterheart-sre
 ---
-# Read-only ClusterRole. Only the resources/verbs the collector actually uses.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -43,7 +38,6 @@ rules:
   - apiGroups: ["batch"]
     resources: [jobs, cronjobs]
     verbs: [get, list, watch]
-  # Server version discovery (/version) for compatibility reporting.
   - nonResourceURLs: ["/version", "/version/"]
     verbs: ["get"]
 ---
@@ -79,19 +73,34 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: agent
-          image: ghcr.io/decodx09/clusterheart-sre-agent:latest # build + push before use
-          args: ["/agent"]
+          image: alpine:3.20
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "fetching agent binary..."
+              wget -qO /work/agent "$AGENT_BINARY_URL"
+              chmod +x /work/agent
+              exec /work/agent
+          env:
+            - name: AGENT_BINARY_URL
+              value: "https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/sre/clusterheart-agent-linux-amd64"
+            - { name: COLLECT_INTERVAL, value: "30s" }
           envFrom:
             - secretRef: { name: clusterheart-agent }
-          env:
-            - { name: COLLECT_INTERVAL, value: "30s" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
           resources:
             requests: { cpu: "25m", memory: "64Mi" }
-            limits: { cpu: "200m", memory: "192Mi" }
+            limits: { cpu: "200m", memory: "256Mi" }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: work
+          emptyDir: {}
