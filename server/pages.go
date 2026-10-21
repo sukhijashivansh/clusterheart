@@ -61,6 +61,8 @@ a:hover{color:#000}
 }
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
 .wordmark{font-size:18px;font-weight:700;letter-spacing:-.5px;color:#000}
+/* auth cards: logo only (no wordmark text next to it) */
+.card .brand .wordmark{display:none}
 .wordmark .a{color:inherit}
 .kicker{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
 h1{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.08;margin:0 0 9px;color:#000}
