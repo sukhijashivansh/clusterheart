@@ -52,6 +52,14 @@ $('email').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pass')
 $('signup').addEventListener('click', () => window.clusterheart.openSignup());
 $('forgot').addEventListener('click', () => window.clusterheart.openForgot());
 
+// Show / hide password.
+$('pass-eye').addEventListener('click', () => {
+  const show = $('pass').type === 'password';
+  $('pass').type = show ? 'text' : 'password';
+  $('pass-eye').classList.toggle('on', show);
+  $('pass-eye').setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+});
+
 // --- pending view wiring -------------------------------------------------
 $('recheck').addEventListener('click', async () => {
   $('recheck').disabled = true;

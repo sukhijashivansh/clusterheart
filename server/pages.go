@@ -73,6 +73,13 @@ input{
 }
 input:focus{border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.09)}
 input::placeholder{color:var(--faint)}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:46px}
+.pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--faint);padding:0}
+.pw-eye:hover{color:var(--muted)}
+.pw-eye .eye-off{display:none}
+.pw-eye.on .eye{display:none}
+.pw-eye.on .eye-off{display:block}
 .btn{
   width:100%;margin-top:28px;padding:14px 16px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;
   background:#000;border:1px solid #000;border-radius:0;
@@ -88,43 +95,54 @@ input::placeholder{color:var(--faint)}
 .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
-.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:0;font-size:11.5px;font-weight:600}
-.pill.on{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
-.pill.off{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
-.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 
-/* --- admin panel --- */
-.admin{max-width:940px;margin:0 auto;padding:56px 24px}
-.admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:22px;border-bottom:1px solid var(--border)}
+/* --- admin panel (Apple-style) --- */
+.admin{max-width:900px;margin:0 auto;padding:46px 24px 72px}
+.admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:20px}
 .admin-user{font-size:13px;color:var(--muted);white-space:nowrap}
 .admin-user a{color:#000}
-.count{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;padding:0 6px;margin-right:6px;border-radius:0;background:#000;color:#fff;font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;font-weight:700;vertical-align:middle}
-.panel{background:var(--panel);border:1px solid var(--border-strong);border-radius:0;overflow:hidden}
+.count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:7px;border-radius:999px;background:#000;color:#fff;font-size:11.5px;font-weight:700;vertical-align:middle}
+
+/* cards */
+.card2{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 16px 40px -28px rgba(0,0,0,.25);overflow:hidden;margin:0 0 20px}
+.card2-head{padding:20px 22px 16px;border-bottom:1px solid var(--border)}
+.card2-title{font-size:15px;font-weight:650;letter-spacing:-.2px;color:#000;margin:0}
+.card2-desc{font-size:13px;color:var(--muted);margin:3px 0 0}
+.card2-body{padding:18px 22px 20px}
+
+/* broadcast notice composer */
+textarea.nb{width:100%;padding:13px 14px;font-family:inherit;font-size:14px;color:#000;background:#f5f5f5;border:1px solid transparent;border-radius:12px;outline:none;resize:vertical;transition:background .15s,border-color .15s,box-shadow .15s}
+textarea.nb:focus{background:#fff;border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
+.nb-actions{display:flex;align-items:center;gap:10px;margin-top:14px}
+.nb-msg{font-size:13px;color:var(--muted)}
+
+/* buttons (rounded, soft) */
+.act{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid transparent;transition:background .14s,color .14s}
+.act:disabled{opacity:.45;cursor:default}
+.act.approve{color:#fff;background:#000}
+.act.approve:hover{background:#262626}
+.act.forceout{background:#f5f5f5;color:#1d1d1f;margin-right:8px}
+.act.forceout:hover{background:#ececec}
+.act.revoke{background:#f5f5f5;color:#1d1d1f}
+.act.revoke:hover{background:#fdeeee;color:var(--red)}
+
+/* users table */
 table.users{width:100%;border-collapse:collapse}
-table.users th{text-align:left;padding:13px 18px;font-size:10.5px;text-transform:uppercase;letter-spacing:.15em;color:var(--faint);font-weight:600;font-family:'Geist Mono',ui-monospace,monospace;background:#fafafa;border-bottom:1px solid var(--border-strong)}
-table.users td{padding:16px 18px;vertical-align:middle}
+table.users th{text-align:left;padding:13px 22px;font-size:11px;letter-spacing:.03em;color:var(--faint);font-weight:600;background:#fafafa;border-bottom:1px solid var(--border)}
+table.users td{padding:15px 22px;vertical-align:middle}
 table.users tbody tr{border-top:1px solid var(--border);transition:background .12s}
 table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:#fafafa}
-.u-name{font-weight:650;font-size:14.5px;color:#000}
-.u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:3px}
-.u-time{font-size:13px;color:var(--muted)}
+.u-name{font-weight:600;font-size:14.5px;color:#000}
+.u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
+.u-time{font-size:13px;color:var(--text)}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
 .cell-act{text-align:right;white-space:nowrap}
-.act{padding:9px 18px;border-radius:0;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
-.act:disabled{opacity:.45;cursor:default}
-.act.approve{border:1px solid #000;color:#fff;background:#000}
-.act.approve:hover{background:#262626}
-.act.revoke{border:1px solid var(--border-strong);background:#fff;color:var(--muted)}
-.act.revoke:hover{color:var(--red);border-color:var(--red)}
-.empty{padding:44px 18px;text-align:center;color:var(--muted)}
-.act.forceout{border:1px solid var(--border-strong);background:#fff;color:var(--muted);margin-right:8px}
-.act.forceout:hover{color:#000;border-color:#000}
-.notice-box{border:1px solid var(--border-strong);padding:20px 22px;margin:0 0 26px}
-textarea.nb{width:100%;padding:11px 13px;font-family:inherit;font-size:14px;color:#000;background:#fff;border:1px solid var(--border-strong);border-radius:0;outline:none;resize:vertical}
-textarea.nb:focus{border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.09)}
-.nb-actions{display:flex;align-items:center;gap:10px;margin-top:12px}
-.nb-msg{font-size:13px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600}
+.pill.on{background:#edf7f0;color:#1a7f43}
+.pill.off{background:#fff6e8;color:#b06a00}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.empty{padding:48px 18px;text-align:center;color:var(--muted)}
 
 /* --- landing nav --- */
 .lp-nav{
@@ -322,9 +340,22 @@ async function _post(url,payload){
     return {ok:false,status:0,data:{error:m}};
   }
 }
+// Wire every password show/hide toggle on the page.
+document.querySelectorAll('.pw-eye').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var inp=btn.parentElement.querySelector('input');
+    var show=inp.type==='password';
+    inp.type=show?'text':'password';
+    btn.classList.toggle('on',show);
+    btn.setAttribute('aria-label',show?'Hide password':'Show password');
+  });
+});
 </script>
 {{block "script" .}}{{end}}
 </body></html>{{end}}`
+
+// eyeBtn is the reusable show/hide-password control placed inside a .pw-wrap.
+const eyeBtn = `<button type="button" class="pw-eye" aria-label="Show password" tabindex="-1"><svg class="eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>`
 
 const logoSVG = `<svg width="26" height="26" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#3B5BDB"/><circle cx="50" cy="15" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="32.5" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="50" cy="85" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="32.5" r="10.5" fill="#3B5BDB"/></svg>`
 
@@ -518,7 +549,7 @@ const loginBody = `{{define "body"}}<div class="center"><div class="card">
 <label for="email">Email</label>
 <input id="email" type="email" autocomplete="email" placeholder="you@company.com">
 <label for="pass">Password</label>
-<input id="pass" type="password" autocomplete="current-password" placeholder="••••••••">
+<div class="pw-wrap"><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••">` + eyeBtn + `</div>
 <button class="btn" id="go">Sign in</button>
 <div id="msg" class="msg"></div>
 <div class="alt"><a href="/forgot">Forgot password?</a></div>
@@ -550,7 +581,7 @@ const signupBody = `{{define "body"}}<div class="center"><div class="card">
 <label for="email">Work email</label>
 <input id="email" type="email" autocomplete="email" placeholder="you@company.com">
 <label for="pass">Password</label>
-<input id="pass" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+<div class="pw-wrap"><input id="pass" type="password" autocomplete="new-password" placeholder="At least 8 characters">` + eyeBtn + `</div>
 <button class="btn" id="go">Create account</button>
 <div id="msg" class="msg"></div>
 <div class="alt">Already have an account? <a href="/login">Sign in</a></div>
@@ -600,9 +631,9 @@ const resetBody = `{{define "body"}}<div class="center"><div class="card">
 <p class="kicker">Reset password</p>
 <h1>Set a new password.</h1><p class="sub">Choose a new password for your account.</p>
 <label for="pass">New password</label>
-<input id="pass" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+<div class="pw-wrap"><input id="pass" type="password" autocomplete="new-password" placeholder="At least 8 characters">` + eyeBtn + `</div>
 <label for="pass2">Confirm password</label>
-<input id="pass2" type="password" autocomplete="new-password" placeholder="Re-enter password">
+<div class="pw-wrap"><input id="pass2" type="password" autocomplete="new-password" placeholder="Re-enter password">` + eyeBtn + `</div>
 <button class="btn" id="go">Reset password</button>
 <div id="msg" class="msg"></div>
 <div class="alt"><a href="/login">Back to sign in</a></div>
@@ -653,42 +684,43 @@ const adminBody = `{{define "body"}}<div class="admin">
   <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
   <div class="admin-user">{{.Me}} · <a href="#" id="logout">Log out</a></div>
 </div>
-<p class="kicker" style="margin-top:34px">Admin · Access control</p>
-<h1 style="margin:0 0 10px">Users</h1>
-<p class="sub" style="max-width:600px;margin:0 0 26px">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve people to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups here, or revoke access anytime.{{end}}</p>
-<div class="notice-box">
-  <p class="kicker" style="margin:0 0 10px">Broadcast notice</p>
-  <textarea id="notice-text" class="nb" rows="2" placeholder="Shown in every running app on its next check (e.g. &quot;A new version is available - please update.&quot;). Clear to remove.">{{.Notice}}</textarea>
-  <div class="nb-actions">
-    <button class="act approve" id="notice-send">Send to everyone</button>
-    <button class="act revoke" id="notice-clear">Clear</button>
-    <span id="notice-msg" class="nb-msg"></span>
+<p class="kicker" style="margin-top:30px">Admin</p>
+<h1 style="margin:0 0 28px">Access control</h1>
+
+<section class="card2">
+  <div class="card2-head">
+    <p class="card2-title">Broadcast notice</p>
+    <p class="card2-desc">Shown in every running app on its next check. Leave empty and Clear to remove.</p>
   </div>
-</div>
-<div class="panel">
-<table class="users">
-<thead><tr><th>User</th><th>Status</th><th>Version</th><th>Last seen</th><th></th></tr></thead>
-<tbody>
-{{if not .Users}}<tr><td colspan="5" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
-{{range .Users}}<tr>
-  <td class="cell-user">
-    <div class="u-name">{{.Name}}</div>
-    <div class="u-email">{{.Email}}</div>
-  </td>
-  <td data-label="Status">
-    {{if .Approved}}<span class="pill on"><span class="dot"></span>Approved</span>
-    {{else}}<span class="pill off"><span class="dot"></span>Pending</span>{{end}}
-  </td>
-  <td data-label="Version" class="u-ver">{{if .AppVersion}}v{{.AppVersion}}{{else}}&mdash;{{end}}</td>
-  <td data-label="Last seen" class="u-time">
-    {{if .LastSeen.IsZero}}{{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}{{else}}{{.LastSeen.Format "Jan 2, 15:04"}}{{end}}
-  </td>
-  <td class="cell-act">
-    {{if .Approved}}<button class="act forceout" data-email="{{.Email}}">Force out</button><button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>
-    {{else}}<button class="act approve" data-email="{{.Email}}" data-approve="true">Approve</button>{{end}}
-  </td>
-</tr>{{end}}
-</tbody></table></div></div>{{end}}
+  <div class="card2-body">
+    <textarea id="notice-text" class="nb" rows="2" placeholder="e.g. A new version is available — please update.">{{.Notice}}</textarea>
+    <div class="nb-actions">
+      <button class="act approve" id="notice-send">Send to everyone</button>
+      <button class="act revoke" id="notice-clear">Clear</button>
+      <span id="notice-msg" class="nb-msg"></span>
+    </div>
+  </div>
+</section>
+
+<section class="card2">
+  <div class="card2-head">
+    <p class="card2-title">Users</p>
+    <p class="card2-desc">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups or revoke access anytime.{{end}}</p>
+  </div>
+  <table class="users">
+  <thead><tr><th>User</th><th>Status</th><th>Version</th><th>Last seen</th><th></th></tr></thead>
+  <tbody>
+  {{if not .Users}}<tr><td colspan="5" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
+  {{range .Users}}<tr>
+    <td class="cell-user"><div class="u-name">{{.Name}}</div><div class="u-email">{{.Email}}</div></td>
+    <td data-label="Status">{{if .Approved}}<span class="pill on"><span class="dot"></span>Approved</span>{{else}}<span class="pill off"><span class="dot"></span>Pending</span>{{end}}</td>
+    <td data-label="Version" class="u-ver">{{if .AppVersion}}v{{.AppVersion}}{{else}}&mdash;{{end}}</td>
+    <td data-label="Last seen" class="u-time">{{if .LastSeen.IsZero}}{{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}{{else}}{{.LastSeen.Format "Jan 2, 15:04"}}{{end}}</td>
+    <td class="cell-act">{{if .Approved}}<button class="act forceout" data-email="{{.Email}}">Force out</button><button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>{{else}}<button class="act approve" data-email="{{.Email}}" data-approve="true">Approve</button>{{end}}</td>
+  </tr>{{end}}
+  </tbody></table>
+</section>
+</div>{{end}}
 {{define "script"}}<script>
 document.querySelectorAll('.act[data-approve]').forEach(function(b){
   b.addEventListener('click',async function(){
