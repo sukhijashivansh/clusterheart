@@ -254,6 +254,22 @@ func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, resp)
 }
 
+// handleSREBootstrap hands the desktop app the SRE control-plane coordinates.
+// Kept out of the browser: only the Electron main process calls this (with the
+// session bearer) and passes the values into the dashboard process env.
+func (a *app) handleSREBootstrap(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil || !u.Approved {
+		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"controlplaneUrl": os.Getenv("SRE_CONTROLPLANE_URL"),
+		"adminToken":      os.Getenv("SRE_ADMIN_TOKEN"),
+		"tenantId":        envOr("SRE_TENANT_ID", "default"),
+	})
+}
+
 func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -524,6 +540,7 @@ func main() {
 	mux.HandleFunc("/api/auth/exchange", loginRL.wrap("exchange", post(a.handleExchange)))
 	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
 	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
+	mux.HandleFunc("/api/sre-bootstrap", a.handleSREBootstrap)
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage

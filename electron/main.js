@@ -120,6 +120,23 @@ async function startDashboard() {
   const env = patchedEnv();
   env.CLUSTERHEART_SERVER = SERVER;
   if (sessionToken) env.CLUSTERHEART_TOKEN = sessionToken;
+  // Autonomous SRE control-plane coordinates, fetched authenticated and passed
+  // into the dashboard process env (never exposed to the webview). If the
+  // account server doesn't provide them, the SRE tabs simply stay hidden.
+  if (sessionToken) {
+    try {
+      const r = await fetch(`${SERVER}/api/sre-bootstrap`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (r.ok) {
+        const c = await r.json();
+        if (c.controlplaneUrl) env.CONTROLPLANE_URL = c.controlplaneUrl;
+        if (c.adminToken) env.CONTROLPLANE_ADMIN_TOKEN = c.adminToken;
+        if (c.tenantId) env.SRE_TENANT_ID = c.tenantId;
+      }
+    } catch (_) {}
+  }
   serverProc = spawn(bin, ['-addr', `127.0.0.1:${port}`], { env, stdio: 'ignore' });
   // Without an 'error' listener, a failed spawn throws and crashes the app.
   let spawnErr = null;
