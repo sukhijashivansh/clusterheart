@@ -23,9 +23,9 @@ var (
 	loginTmpl   = page(loginBody)
 	signupTmpl  = page(signupBody)
 	accountTmpl = page(accountBody)
-	adminTmpl   = page(adminBody)
 	forgotTmpl  = page(forgotBody)
 	resetTmpl   = page(resetBody)
+	// admin templates (Users + Broadcast pages) live in admin_page.go
 )
 
 // --- shared layout + design system --------------------------------------
@@ -96,11 +96,27 @@ input::placeholder{color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
 .msg.err{color:var(--red)}.msg.ok{color:var(--green)}.msg.info{color:var(--muted)}
 
-/* --- admin panel (Apple-style) --- */
-.admin{max-width:900px;margin:0 auto;padding:46px 24px 72px}
-.admin-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:20px}
-.admin-user{font-size:13px;color:var(--muted);white-space:nowrap}
-.admin-user a{color:#000}
+/* --- admin (sidebar shell, Apple-style) --- */
+.admin-shell{display:flex;min-height:100vh}
+.admin-nav{width:238px;flex-shrink:0;background:#fafafa;border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.an-brand{display:flex;align-items:center;gap:9px;padding:4px 8px 22px}
+.an-brand .wordmark{font-size:16px}
+.an-list{display:flex;flex-direction:column;gap:2px}
+.nav-item{display:block;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;color:var(--muted)}
+.nav-item:hover{background:rgba(0,0,0,.04);color:#000}
+.nav-item.active{background:#fff;color:#000;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 1px var(--border)}
+.an-foot{margin-top:auto;padding:14px 10px 4px;font-size:12.5px;color:var(--muted)}
+.an-me{font-weight:500;color:#000;margin-bottom:3px}
+.an-logout{color:var(--muted)}.an-logout:hover{color:#000}
+.admin-main{flex:1 1 auto;min-width:0;padding:52px 56px;max-width:1040px}
+@media(max-width:720px){
+  .admin-shell{flex-direction:column}
+  .admin-nav{width:100%;height:auto;position:static;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--border);padding:12px 16px}
+  .an-brand{padding:0;margin-right:16px}
+  .an-list{flex-direction:row}
+  .an-foot{margin:0 0 0 auto;padding:0}
+  .admin-main{padding:32px 20px}
+}
 .count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:7px;border-radius:999px;background:#000;color:#fff;font-size:11.5px;font-weight:700;vertical-align:middle}
 
 /* cards */
@@ -135,7 +151,7 @@ table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:#fafafa}
 .u-name{font-weight:600;font-size:14.5px;color:#000}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
-.u-time{font-size:13px;color:var(--text)}
+.u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
 .cell-act{text-align:right;white-space:nowrap}
 .pill{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600}
@@ -678,77 +694,3 @@ document.getElementById('logout').addEventListener('click',async function(){
 </script>{{end}}`
 
 // --- admin ---------------------------------------------------------------
-
-const adminBody = `{{define "body"}}<div class="admin">
-<div class="admin-head">
-  <div class="brand" style="margin:0">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
-  <div class="admin-user">{{.Me}} · <a href="#" id="logout">Log out</a></div>
-</div>
-<p class="kicker" style="margin-top:30px">Admin</p>
-<h1 style="margin:0 0 28px">Access control</h1>
-
-<section class="card2">
-  <div class="card2-head">
-    <p class="card2-title">Broadcast notice</p>
-    <p class="card2-desc">Shown in every running app on its next check. Leave empty and Clear to remove.</p>
-  </div>
-  <div class="card2-body">
-    <textarea id="notice-text" class="nb" rows="2" placeholder="e.g. A new version is available — please update.">{{.Notice}}</textarea>
-    <div class="nb-actions">
-      <button class="act approve" id="notice-send">Send to everyone</button>
-      <button class="act revoke" id="notice-clear">Clear</button>
-      <span id="notice-msg" class="nb-msg"></span>
-    </div>
-  </div>
-</section>
-
-<section class="card2">
-  <div class="card2-head">
-    <p class="card2-title">Users</p>
-    <p class="card2-desc">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups or revoke access anytime.{{end}}</p>
-  </div>
-  <table class="users">
-  <thead><tr><th>User</th><th>Status</th><th>Version</th><th>Last seen</th><th></th></tr></thead>
-  <tbody>
-  {{if not .Users}}<tr><td colspan="5" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
-  {{range .Users}}<tr>
-    <td class="cell-user"><div class="u-name">{{.Name}}</div><div class="u-email">{{.Email}}</div></td>
-    <td data-label="Status">{{if .Approved}}<span class="pill on"><span class="dot"></span>Approved</span>{{else}}<span class="pill off"><span class="dot"></span>Pending</span>{{end}}</td>
-    <td data-label="Version" class="u-ver">{{if .AppVersion}}v{{.AppVersion}}{{else}}&mdash;{{end}}</td>
-    <td data-label="Last seen" class="u-time">{{if .LastSeen.IsZero}}{{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}{{else}}{{.LastSeen.Format "Jan 2, 15:04"}}{{end}}</td>
-    <td class="cell-act">{{if .Approved}}<button class="act forceout" data-email="{{.Email}}">Force out</button><button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>{{else}}<button class="act approve" data-email="{{.Email}}" data-approve="true">Approve</button>{{end}}</td>
-  </tr>{{end}}
-  </tbody></table>
-</section>
-</div>{{end}}
-{{define "script"}}<script>
-document.querySelectorAll('.act[data-approve]').forEach(function(b){
-  b.addEventListener('click',async function(){
-    b.disabled=true;b.textContent='…';
-    await _post('/api/admin/approve',{email:b.dataset.email,approved:b.dataset.approve==='true'});
-    location.reload();
-  });
-});
-document.querySelectorAll('.act.forceout').forEach(function(b){
-  b.addEventListener('click',async function(){
-    b.disabled=true;b.textContent='…';
-    await _post('/api/admin/forcelogout',{email:b.dataset.email});
-    location.reload();
-  });
-});
-(function(){
-  var send=document.getElementById('notice-send'),clr=document.getElementById('notice-clear'),
-      txt=document.getElementById('notice-text'),msg=document.getElementById('notice-msg');
-  async function put(message,label){
-    send.disabled=clr.disabled=true;_mark(msg,label,'info');
-    var r=await _post('/api/admin/notice',{message:message});
-    send.disabled=clr.disabled=false;
-    _mark(msg,r.ok?'Saved.':(r.data.error||'Failed.'),r.ok?'ok':'err');
-  }
-  send.addEventListener('click',function(){put(txt.value,'Sending…');});
-  clr.addEventListener('click',function(){txt.value='';put('','Clearing…');});
-})();
-document.getElementById('logout').addEventListener('click',async function(e){
-  e.preventDefault();await _post('/api/logout',{});location.href='/login';
-});
-</script>{{end}}`

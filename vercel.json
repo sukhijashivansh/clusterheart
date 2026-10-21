@@ -29,6 +29,7 @@
     { "source": "/signup", "destination": "https://clusterheart-server.clusterheart.com/signup" },
     { "source": "/account", "destination": "https://clusterheart-server.clusterheart.com/account" },
     { "source": "/admin", "destination": "https://clusterheart-server.clusterheart.com/admin" },
+    { "source": "/admin/broadcast", "destination": "https://clusterheart-server.clusterheart.com/admin/broadcast" },
     { "source": "/forgot", "destination": "https://clusterheart-server.clusterheart.com/forgot" },
     { "source": "/reset", "destination": "https://clusterheart-server.clusterheart.com/reset" },
     { "source": "/api/:path*", "destination": "https://clusterheart-server.clusterheart.com/api/:path*" }

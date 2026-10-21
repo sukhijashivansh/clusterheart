@@ -396,14 +396,24 @@ func (a *app) pageAccount(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *app) pageAdmin(w http.ResponseWriter, r *http.Request) {
+// adminGuard returns the signed-in admin, or redirects and returns nil.
+func (a *app) adminGuard(w http.ResponseWriter, r *http.Request) *User {
 	me := a.sessionUser(r)
 	if me == nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
+		return nil
 	}
 	if !a.isAdmin(me.Email) {
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
+		return nil
+	}
+	return me
+}
+
+// pageAdmin is the Users page (/admin).
+func (a *app) pageAdmin(w http.ResponseWriter, r *http.Request) {
+	me := a.adminGuard(w, r)
+	if me == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -425,7 +435,18 @@ func (a *app) pageAdmin(w http.ResponseWriter, r *http.Request) {
 			pending++
 		}
 	}
-	render(w, adminTmpl, map[string]any{"Users": list, "Me": me.Name, "Pending": pending, "Notice": a.store.getNotice(ctx).Message})
+	render(w, adminUsersTmpl, map[string]any{"Users": list, "Me": me.Name, "Pending": pending})
+}
+
+// pageAdminBroadcast is the Broadcast page (/admin/broadcast).
+func (a *app) pageAdminBroadcast(w http.ResponseWriter, r *http.Request) {
+	me := a.adminGuard(w, r)
+	if me == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	render(w, adminBroadcastTmpl, map[string]any{"Me": me.Name, "Notice": a.store.getNotice(ctx).Message})
 }
 
 // --- wiring --------------------------------------------------------------
@@ -530,6 +551,7 @@ func main() {
 	mux.HandleFunc("/signup", a.pageSignup)
 	mux.HandleFunc("/account", a.pageAccount)
 	mux.HandleFunc("/admin", a.pageAdmin)
+	mux.HandleFunc("/admin/broadcast", a.pageAdminBroadcast)
 	mux.HandleFunc("/forgot", a.pageForgot)
 	mux.HandleFunc("/reset", a.pageReset)
 	mux.HandleFunc("/api/signup", signupRL.wrap("signup", post(a.handleSignup)))
