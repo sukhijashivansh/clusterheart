@@ -16,7 +16,9 @@ const adminTok = "admin-secret-test-token"
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	srv := NewServer(NewMemStore(), NewMemIncidentStore(), adminTok, nil)
+	srv := NewServer(NewMemStore(), NewMemIncidentStore(),
+		NewMemRemediationStore(), NewMemPolicyStore(), NewMemAuditStore(),
+		NewMemDiagnosisStore(), NewMemRunbookStore(), adminTok, nil)
 	return httptest.NewServer(srv.Routes())
 }
 
@@ -200,5 +202,156 @@ func TestTelemetryBatchTooLarge(t *testing.T) {
 	}
 	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, big); code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized batch: want 413, got %d", code)
+	}
+}
+
+func TestProposeFromDiagnosisHTTP(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "tenantP", "eks")
+
+	// Telemetry with one actionable (CrashLoopBackOff) and one non-actionable
+	// (ImagePullBackOff) fault → two incidents.
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{
+			{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "boom"},
+			{Namespace: "web", Pod: "img-1", Owner: "Deployment/img", Container: "img", Type: contract.ProblemImagePullBackOff, Message: "pull denied"},
+		},
+	}}}
+	if code, body := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry: want 202, got %d: %s", code, body)
+	}
+	// Allow the web namespace so the proposal isn't blocked.
+	pol := map[string]any{"mode": "approval-required", "allowedActions": []string{"RolloutRestart"},
+		"namespaceAllowlist": []string{"web"}, "protectedEnvironments": []string{"production"},
+		"maxConcurrent": 5, "perWorkloadCooldownSeconds": 0, "paused": false}
+	if code, body := do(t, http.MethodPut, ts.URL+"/api/v1/policy?tenantId=tenantP", adminTok, "", pol); code != http.StatusOK {
+		t.Fatalf("policy: want 200, got %d: %s", code, body)
+	}
+
+	_, body := do(t, http.MethodGet, ts.URL+"/api/v1/incidents?tenantId=tenantP&status=open", adminTok, "", nil)
+	var il struct {
+		Incidents []Incident `json:"incidents"`
+	}
+	_ = json.Unmarshal(body, &il)
+	var crashID, imgID string
+	for _, i := range il.Incidents {
+		switch i.Type {
+		case contract.ProblemCrashLoopBackOff:
+			crashID = i.ID
+		case contract.ProblemImagePullBackOff:
+			imgID = i.ID
+		}
+	}
+	if crashID == "" || imgID == "" {
+		t.Fatalf("expected both incidents, got %s", body)
+	}
+
+	// Actionable incident → 201 Created, a proposed RolloutRestart on its workload.
+	code, body := do(t, http.MethodPost, ts.URL+"/api/v1/incidents/"+crashID+"/propose?tenantId=tenantP", adminTok, "", nil)
+	if code != http.StatusCreated {
+		t.Fatalf("propose(crashloop): want 201, got %d: %s", code, body)
+	}
+	var p RemediationProposal
+	_ = json.Unmarshal(body, &p)
+	if p.Status != StatusProposed || p.Action != ActionRolloutRestart || p.Target.Name != "api" {
+		t.Fatalf("unexpected proposal: %+v", p)
+	}
+
+	// Non-actionable incident → 422, no proposal.
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/incidents/"+imgID+"/propose?tenantId=tenantP", adminTok, "", nil); code != http.StatusUnprocessableEntity {
+		t.Fatalf("propose(imagepull): want 422, got %d", code)
+	}
+}
+
+func TestStatsHTTP(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "tenantS", "eks")
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{
+			{Namespace: "web", Pod: "a", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"},
+			{Namespace: "web", Pod: "b", Owner: "Deployment/img", Container: "img", Type: contract.ProblemImagePullBackOff, Message: "y"},
+		},
+	}}}
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry want 202, got %d", code)
+	}
+	code, body := do(t, http.MethodGet, ts.URL+"/api/v1/stats?tenantId=tenantS", adminTok, "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("stats want 200, got %d: %s", code, body)
+	}
+	var st struct {
+		Clusters  map[string]int            `json:"clusters"`
+		Incidents map[string]map[string]int `json:"incidents"`
+	}
+	// incidents has mixed types; decode loosely.
+	var raw map[string]any
+	_ = json.Unmarshal(body, &raw)
+	_ = json.Unmarshal(body, &st)
+	if st.Clusters["total"] != 1 {
+		t.Fatalf("want 1 cluster, got %v", st.Clusters)
+	}
+	inc := raw["incidents"].(map[string]any)
+	sev := inc["openBySeverity"].(map[string]any)
+	if int(sev["high"].(float64)) != 1 || int(sev["medium"].(float64)) != 1 {
+		t.Fatalf("expected 1 high + 1 medium open, got %v", sev)
+	}
+	if int(inc["total"].(float64)) != 2 {
+		t.Fatalf("expected 2 incidents, got %v", inc["total"])
+	}
+}
+
+func TestRunbookSaveValidateAndPrecedence(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "tenantR", "eks")
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{{
+		CollectedAt: time.Now().UTC(),
+		PodProblems: []contract.PodProblem{{Namespace: "web", Pod: "a", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}},
+	}}}
+	if code, _ := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry want 202, got %d", code)
+	}
+	// Allow the namespace + Scale action so a runbook-driven Scale isn't blocked.
+	pol := map[string]any{"mode": "approval-required", "allowedActions": []string{"RolloutRestart", "Scale"},
+		"namespaceAllowlist": []string{"web"}, "maxConcurrent": 5, "maxReplicas": 10}
+	if code, _ := do(t, http.MethodPut, ts.URL+"/api/v1/policy?tenantId=tenantR", adminTok, "", pol); code != http.StatusOK {
+		t.Fatal("policy put failed")
+	}
+
+	// Invalid runbook (unknown action) is rejected.
+	bad := map[string]any{"incidentType": "CrashLoopBackOff", "action": "Nuke", "enabled": true}
+	if code, _ := do(t, http.MethodPut, ts.URL+"/api/v1/runbooks?tenantId=tenantR", adminTok, "", bad); code != http.StatusBadRequest {
+		t.Fatalf("unknown action runbook should be 400, got %d", code)
+	}
+	// Valid runbook: CrashLoopBackOff → Scale to 4 (overrides the AI's RolloutRestart).
+	rb := map[string]any{"incidentType": "CrashLoopBackOff", "action": "Scale", "params": map[string]string{"replicas": "4"}, "enabled": true}
+	code, body := do(t, http.MethodPut, ts.URL+"/api/v1/runbooks?tenantId=tenantR", adminTok, "", rb)
+	if code != http.StatusOK {
+		t.Fatalf("valid runbook put want 200, got %d: %s", code, body)
+	}
+	var saved Runbook
+	_ = json.Unmarshal(body, &saved)
+	if saved.Version != 1 || saved.ID == "" {
+		t.Fatalf("runbook not versioned: %+v", saved)
+	}
+
+	// Find the incident, then propose — the runbook must win over the AI rec.
+	_, ib := do(t, http.MethodGet, ts.URL+"/api/v1/incidents?tenantId=tenantR&status=open", adminTok, "", nil)
+	var il struct {
+		Incidents []Incident `json:"incidents"`
+	}
+	_ = json.Unmarshal(ib, &il)
+	if len(il.Incidents) != 1 {
+		t.Fatalf("want 1 incident, got %d", len(il.Incidents))
+	}
+	_, pb := do(t, http.MethodPost, ts.URL+"/api/v1/incidents/"+il.Incidents[0].ID+"/propose?tenantId=tenantR", adminTok, "", nil)
+	var p RemediationProposal
+	_ = json.Unmarshal(pb, &p)
+	if p.Action != ActionScale || p.Params["replicas"] != "4" || p.Target.Name != "api" {
+		t.Fatalf("runbook should drive a Scale(4) on Deployment/api, got %+v", p)
 	}
 }

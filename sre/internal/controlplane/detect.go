@@ -16,21 +16,25 @@ import (
 // never as instructions.
 type Engine struct {
 	incidents IncidentStore
+	notifier  Notifier
 	log       *slog.Logger
 }
 
-func newEngine(incidents IncidentStore, log *slog.Logger) *Engine {
+func newEngine(incidents IncidentStore, notifier Notifier, log *slog.Logger) *Engine {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Engine{incidents: incidents, log: log}
+	if notifier == nil {
+		notifier = noopNotifier{}
+	}
+	return &Engine{incidents: incidents, notifier: notifier, log: log}
 }
 
 // severityFor maps a problem type to a severity. These are conservative and
 // deterministic; they can later be tuned per-policy.
 func severityFor(t contract.ProblemType) string {
 	switch t {
-	case contract.ProblemOOMKilled, contract.ProblemCrashLoopBackOff, contract.ProblemRolloutStuck:
+	case contract.ProblemOOMKilled, contract.ProblemCrashLoopBackOff, contract.ProblemRolloutStuck, contract.ProblemAgentDown:
 		return "high"
 	case contract.ProblemImagePullBackOff, contract.ProblemUnschedulable:
 		return "medium"
@@ -103,8 +107,16 @@ func (e *Engine) Reconcile(ctx context.Context, tenantID, clusterID string, snap
 	active := make(map[string]bool, len(obs))
 	for _, o := range obs {
 		active[o.fingerprint] = true
-		if err := e.incidents.UpsertObservation(ctx, tenantID, clusterID, snap.CollectedAt, o); err != nil {
+		created, err := e.incidents.UpsertObservation(ctx, tenantID, clusterID, snap.CollectedAt, o)
+		if err != nil {
 			return err
+		}
+		if created {
+			// Notify once, only when a NEW incident opens (dedup prevents storms).
+			e.notifier.Notify(Notification{
+				Kind: "incident.opened", Severity: o.severity, Title: o.title,
+				Detail: o.evidence.Message, TenantID: tenantID, ClusterID: clusterID,
+			})
 		}
 	}
 	resolved, err := e.incidents.ResolveMissing(ctx, clusterID, active, snap.CollectedAt)

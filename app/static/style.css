@@ -1544,3 +1544,80 @@ td.pct-cool { color: var(--green); }
 .hpa-pill-min { color: var(--green); border-color: var(--green); background: var(--green-soft); }
 .hpa-pill-mid { color: var(--accent-bright); border-color: var(--accent); background: var(--accent-soft); }
 .hpa-pill-metric { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.02em; }
+
+/* ---------- Autonomous SRE: incidents + remediation ---------- */
+.sre-row { cursor: pointer; }
+
+/* Incidents table: size the SEVERITY pill column (the base th,td max-width:0
+   otherwise collapses it to a clipped sliver) and the AI RCA actions column so
+   the diagnose + propose buttons fit inside instead of spilling off-screen. */
+#sre-inc-table th.sev, #sre-inc-table td.sev { width: 100px; min-width: 100px; max-width: 100px; overflow: visible; white-space: nowrap; }
+#sre-inc-table th.act, #sre-inc-table td.act { width: 178px; min-width: 178px; max-width: 178px; text-align: right; white-space: nowrap; overflow: visible; }
+#sre-inc-table td.act .btn + .btn { margin-left: 6px; }
+/* Compact action buttons so both fit inside the actions column. */
+#sre-inc-table td.act .btn, #sre-prop-table td.act .btn { padding: 4px 10px; }
+
+/* Remediation table: pin each column (border-box) so the whole table fits the
+   ~1270px content area without the approve/reject buttons spilling past the
+   table edge. RATIONALE is the single flexible column (ellipsis-truncated);
+   RESULT wraps. Columns stay draggable via makeResizable (auto layout). */
+#sre-prop-table td.st,   #sre-prop-table th.st   { width: 104px; min-width: 104px; max-width: 104px; overflow: visible; white-space: nowrap; }
+#sre-prop-table td.actn, #sre-prop-table th.actn { width: 116px; min-width: 116px; max-width: 116px; overflow: visible; white-space: nowrap; }
+#sre-prop-table td.sev,  #sre-prop-table th.sev  { width: 78px;  min-width: 78px;  max-width: 78px;  overflow: visible; white-space: nowrap; }
+#sre-prop-table td.tgt,  #sre-prop-table th.tgt  { width: 205px; min-width: 205px; max-width: 205px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sre-prop-table td.res,  #sre-prop-table th.res  { width: 175px; min-width: 175px; max-width: 175px; white-space: normal; overflow: hidden; }
+#sre-prop-table td.act,  #sre-prop-table th.act  { width: 184px; min-width: 184px; max-width: 184px; text-align: right; white-space: nowrap; overflow: visible; }
+#sre-prop-table td.act .btn + .btn { margin-left: 6px; }
+.sre-rationale { color: var(--muted); max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sre-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--border-strong); font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+}
+/* severity + risk */
+.sre-badge.sev-critical, .sre-badge.sev-high { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+.sre-badge.sev-medium { color: var(--yellow); border-color: var(--yellow); background: var(--yellow-soft); }
+.sre-badge.sev-low, .sre-badge.sev-info { color: var(--green); border-color: var(--green); background: var(--green-soft); }
+/* lifecycle status */
+.sre-badge.st-open, .sre-badge.st-failed, .sre-badge.st-blocked { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+.sre-badge.st-proposed, .sre-badge.st-approved { color: var(--yellow); border-color: var(--yellow); background: var(--yellow-soft); }
+.sre-badge.st-executed, .sre-badge.st-resolved { color: var(--green); border-color: var(--green); background: var(--green-soft); }
+.sre-badge.st-rejected { color: var(--muted); }
+
+.sre-exec.ok  { color: var(--green); font-weight: 600; }
+.sre-exec.bad { color: var(--red);   font-weight: 600; }
+.sre-exec-err { margin-top: 2px; max-width: 280px; white-space: normal; }
+
+.sre-notice { margin: 10px 0; padding: 12px 14px; border-radius: 8px; line-height: 1.5; }
+.sre-notice.warn { color: var(--yellow); border: 1px solid var(--yellow); background: var(--yellow-soft); }
+.sre-notice.err  { color: var(--red);    border: 1px solid var(--red);    background: var(--red-soft); }
+
+/* ---------- SRE overview ---------- */
+#sre-ov-cards { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+/* These reuse .finops-card, whose body has min-height:120 for chart content.
+   For stat cards that leaves a big empty gap above the bottom-aligned stats —
+   size the body to its content instead (keep the grid's flex-end so the stat
+   labels stay on one baseline). */
+#sre-ov-cards .card-body { min-height: 0; }
+.sre-ov-grid { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+.sre-ov-kv { display: flex; flex-direction: column; gap: 2px; }
+.sre-ov-n { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+.sre-ov-n.ok { color: var(--green); }
+.sre-ov-n.warn { color: var(--yellow); }
+.sre-ov-n.bad { color: var(--red); }
+.sre-ov-l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+/* The list is a sibling of .card-body, so it has no padding of its own — match
+   the body's horizontal padding (18px) and add bottom spacing so it isn't
+   flush against (and clipped by) the card's bottom edge. */
+/* Sit the divider with balanced spacing: the body's 16px bottom padding above
+   it, ~14px below — instead of a lopsided 26px/8px gap. */
+.sre-ov-list { margin: 0 18px; padding: 14px 0 16px; border-top: 1px solid var(--border-lt); }
+.sre-ov-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 12.5px; }
+.sre-ov-row + .sre-ov-row { border-top: 1px solid var(--border-lt); }
+.sre-ov-type { display: inline-flex; align-items: center; gap: 9px; }
+.sre-ov-count { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 24px; text-align: right; }
+.sev-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.sev-dot.sev-high, .sev-dot.sev-critical { background: var(--red); }
+.sev-dot.sev-medium { background: var(--yellow); }
+.sev-dot.sev-low, .sev-dot.sev-info { background: var(--green); }

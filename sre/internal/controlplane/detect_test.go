@@ -23,7 +23,7 @@ func openIncidents(t *testing.T, store IncidentStore, tenant string) []Incident 
 
 func TestDetectorsCreateIncidents(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	now := time.Now()
 
 	snap := snapWithProblems(now,
@@ -58,7 +58,7 @@ func TestDetectorsCreateIncidents(t *testing.T) {
 
 func TestDedupAndTimeline(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	base := time.Now()
 	prob := []contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}}
 
@@ -82,7 +82,7 @@ func TestDedupAndTimeline(t *testing.T) {
 
 func TestResolveWhenProblemClears(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	now := time.Now()
 	prob := []contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemCrashLoopBackOff, Message: "x"}}
 
@@ -103,7 +103,7 @@ func TestResolveWhenProblemClears(t *testing.T) {
 
 func TestIncidentTenantIsolation(t *testing.T) {
 	store := NewMemIncidentStore()
-	eng := newEngine(store, nil)
+	eng := newEngine(store, nil, nil)
 	now := time.Now()
 	prob := []contract.PodProblem{{Namespace: "web", Pod: "api-1", Owner: "Deployment/api", Container: "api", Type: contract.ProblemOOMKilled, Message: "x"}}
 	_ = eng.Reconcile(context.Background(), "tenantA", "cluA", snapWithProblems(now, prob, nil))
@@ -119,5 +119,47 @@ func TestIncidentTenantIsolation(t *testing.T) {
 	// GetIncident with the wrong tenant must 404 (not leak).
 	if _, err := store.GetIncident(context.Background(), "tenantB", a[0].ID); err != ErrNotFound {
 		t.Fatalf("GetIncident cross-tenant should be ErrNotFound, got %v", err)
+	}
+}
+
+func TestAgentDownSweep(t *testing.T) {
+	store := NewMemStore()
+	inc := NewMemIncidentStore()
+	srv := NewServer(store, inc, NewMemRemediationStore(), NewMemPolicyStore(),
+		NewMemAuditStore(), NewMemDiagnosisStore(), NewMemRunbookStore(), "admin", nil)
+	ctx := context.Background()
+	now := time.Now()
+
+	// A cluster that has never connected must NOT be alarmed.
+	_ = store.CreateCluster(ctx, Cluster{ID: "cNew", TenantID: "t1", Name: "new"})
+	// A connected-but-stale cluster (last heartbeat well beyond the threshold).
+	old := now.Add(-10 * time.Minute)
+	_ = store.CreateCluster(ctx, Cluster{ID: "cStale", TenantID: "t1", Name: "stale", LastHeartbeat: &old})
+	// A healthy cluster (recent heartbeat).
+	fresh := now.Add(-5 * time.Second)
+	_ = store.CreateCluster(ctx, Cluster{ID: "cOk", TenantID: "t1", Name: "ok", LastHeartbeat: &fresh})
+
+	srv.sweepAgentHealth(ctx, now)
+
+	incs, _ := inc.ListIncidents(ctx, "t1", "open")
+	if len(incs) != 1 || incs[0].Type != contract.ProblemAgentDown || incs[0].ClusterID != "cStale" {
+		t.Fatalf("expected one AgentDown for cStale, got %+v", incs)
+	}
+
+	// Sweeping again must not open a duplicate (dedup via fingerprint).
+	srv.sweepAgentHealth(ctx, now.Add(time.Minute))
+	open, _ := inc.ListIncidents(ctx, "t1", "open")
+	if len(open) != 1 {
+		t.Fatalf("sweep must not duplicate AgentDown, got %d", len(open))
+	}
+
+	// Recovery: telemetry resumes → the normal resolve pass clears AgentDown
+	// (its fingerprint isn't in the live fault set).
+	eng := newEngine(inc, nil, nil)
+	if err := eng.Reconcile(ctx, "t1", "cStale", snapWithProblems(now.Add(2*time.Minute), nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := inc.ListIncidents(ctx, "t1", "open"); len(open) != 0 {
+		t.Fatalf("AgentDown should resolve when telemetry resumes, still open: %+v", open)
 	}
 }

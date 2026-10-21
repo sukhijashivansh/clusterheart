@@ -1,0 +1,105 @@
+# ClusterHeart SRE Remediation Controller — OPT-IN, narrowly privileged.
+#
+# This is a SEPARATE component from the observe-only agent, with a SEPARATE
+# ServiceAccount and a SEPARATE control-plane credential (the remediation
+# token). Install it ONLY for clusters you have explicitly opted into
+# remediation.
+#
+# The controller performs NO detection and runs NO AI. It polls the control
+# plane for actions that have ALREADY been approved by policy (or a human),
+# executes exactly the typed actions it supports, and reports the outcome.
+# It cannot run arbitrary commands or apply arbitrary manifests.
+#
+# Least privilege: the only supported action today is RolloutRestart, which
+# reads a workload and writes back the same object with a restart annotation.
+# That needs precisely `get` + `update` on Deployments/StatefulSets/DaemonSets
+# in the apps group — nothing else. No create, no delete, no patch, no pods,
+# no exec, no secrets, no cluster-admin.
+#
+# Enable remediation for a cluster from the control plane (operator/admin),
+# which returns the one-time remediation token:
+#
+#   curl -s -X POST https://<control-plane-host>/api/v1/clusters/<clu_...>/remediation-token \
+#     -H "Authorization: Bearer <admin-token>" | jq
+#   # -> { "clusterId": "clu_...", "remediationToken": "..." }  (shown ONCE)
+#
+# Create the credentials Secret, then apply this manifest:
+#
+#   kubectl -n clusterheart-sre create secret generic clusterheart-remediation \
+#     --from-literal=CONTROLPLANE_URL=https://<control-plane-host> \
+#     --from-literal=CLUSTER_ID=<clu_...> \
+#     --from-literal=REMEDIATION_TOKEN=<token-from-the-call-above>
+#
+#   kubectl apply -f deploy/k8s/remediation/remediation.yaml
+#
+# (The clusterheart-sre namespace is created by the agent manifest. If you run
+# the controller without the agent, create it first: kubectl create namespace
+# clusterheart-sre)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clusterheart-remediation
+  namespace: clusterheart-sre
+---
+# Narrow ClusterRole. Exactly the resources/verbs the executor uses — and no
+# more. RolloutRestart does Get (read + before-state + verify) and Update
+# (write back with the restart annotation, carrying resourceVersion for
+# optimistic concurrency).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clusterheart-remediation
+rules:
+  - apiGroups: ["apps"]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clusterheart-remediation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: clusterheart-remediation
+subjects:
+  - kind: ServiceAccount
+    name: clusterheart-remediation
+    namespace: clusterheart-sre
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clusterheart-remediation
+  namespace: clusterheart-sre
+  labels: { app: clusterheart-remediation }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: clusterheart-remediation }
+  template:
+    metadata:
+      labels: { app: clusterheart-remediation }
+    spec:
+      serviceAccountName: clusterheart-remediation
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: remediation
+          image: ghcr.io/decodx09/clusterheart-sre-remediation:latest # build + push before use
+          args: ["/remediation"]
+          envFrom:
+            - secretRef: { name: clusterheart-remediation }
+          env:
+            - { name: POLL_INTERVAL, value: "15s" }
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits: { cpu: "200m", memory: "192Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

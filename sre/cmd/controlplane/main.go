@@ -30,10 +30,20 @@ func main() {
 
 	var store controlplane.Store
 	var incidents controlplane.IncidentStore
+	var rem controlplane.RemediationStore
+	var pol controlplane.PolicyStore
+	var audit controlplane.AuditStore
+	var diag controlplane.DiagnosisStore
+	var runbooks controlplane.RunbookStore
 	if mongoURI == "" {
 		log.Warn("MONGO_URI not set — using in-memory stores (NOT durable; local dev only)")
 		store = controlplane.NewMemStore()
 		incidents = controlplane.NewMemIncidentStore()
+		rem = controlplane.NewMemRemediationStore()
+		pol = controlplane.NewMemPolicyStore()
+		audit = controlplane.NewMemAuditStore()
+		diag = controlplane.NewMemDiagnosisStore()
+		runbooks = controlplane.NewMemRunbookStore()
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		db, err := controlplane.ConnectMongo(ctx, mongoURI, mongoDB)
@@ -52,11 +62,32 @@ func main() {
 			log.Error("mongo incident store init failed", "err", err)
 			os.Exit(1)
 		}
+		if rem, err = controlplane.NewMongoRemediationStore(ctx, db); err != nil {
+			cancel()
+			log.Error("mongo remediation store init failed", "err", err)
+			os.Exit(1)
+		}
+		if audit, err = controlplane.NewMongoAuditStore(ctx, db); err != nil {
+			cancel()
+			log.Error("mongo audit store init failed", "err", err)
+			os.Exit(1)
+		}
+		pol = controlplane.NewMongoPolicyStore(ctx, db)
+		if diag, err = controlplane.NewMongoDiagnosisStore(ctx, db); err != nil {
+			cancel()
+			log.Error("mongo diagnosis store init failed", "err", err)
+			os.Exit(1)
+		}
+		if runbooks, err = controlplane.NewMongoRunbookStore(ctx, db); err != nil {
+			cancel()
+			log.Error("mongo runbook store init failed", "err", err)
+			os.Exit(1)
+		}
 		cancel()
 		log.Info("connected to MongoDB", "db", mongoDB)
 	}
 
-	srv := controlplane.NewServer(store, incidents, adminToken, log)
+	srv := controlplane.NewServer(store, incidents, rem, pol, audit, diag, runbooks, adminToken, log)
 	httpSrv := &http.Server{
 		Addr:              addr,
 		Handler:           srv.Routes(),
@@ -65,6 +96,12 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+
+	// Background self-monitoring: raise AgentDown incidents for clusters that go
+	// silent. Stops when sweepCtx is cancelled at shutdown.
+	sweepCtx, stopSweeps := context.WithCancel(context.Background())
+	defer stopSweeps()
+	go srv.RunAgentHealthSweeps(sweepCtx, 60*time.Second)
 
 	go func() {
 		log.Info("control plane listening", "addr", addr)
@@ -79,6 +116,7 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	log.Info("shutting down")
+	stopSweeps()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(ctx)

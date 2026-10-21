@@ -74,6 +74,10 @@ const (
 	ProblemImagePullBackOff ProblemType = "ImagePullBackOff"
 	ProblemUnschedulable    ProblemType = "Unschedulable"
 	ProblemRolloutStuck     ProblemType = "RolloutStuck"
+	// ProblemAgentDown is raised by the CONTROL PLANE (not the agent) when a
+	// previously-connected cluster stops sending telemetry — so the platform
+	// never silently reports a cluster healthy while it is actually blind.
+	ProblemAgentDown ProblemType = "AgentDown"
 )
 
 // PodProblem is a measured fault on a pod/container (from pod status).
@@ -148,4 +152,55 @@ type ClusterStatus struct {
 // ErrorResponse is the uniform error envelope.
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+// --- remediation controller protocol ------------------------------------
+//
+// The in-cluster remediation controller authenticates with its OWN per-cluster
+// token (separate from the observe agent), pulls approved actions for its
+// cluster, executes them with the narrow remediate ServiceAccount, and reports
+// the outcome. The control plane never contacts a cluster itself.
+
+// RemediationTokenResponse returns the one-time remediation token (operator API).
+type RemediationTokenResponse struct {
+	ClusterID        string `json:"clusterId"`
+	RemediationToken string `json:"remediationToken"`
+}
+
+// ActionTarget identifies the object an action operates on.
+type ActionTarget struct {
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+// PendingAction is an approved action handed to the controller for execution.
+// DryRun is resolved by the control plane from policy (mode=dry-run => true).
+type PendingAction struct {
+	ProposalID     string            `json:"proposalId"`
+	Action         string            `json:"action"`
+	Target         ActionTarget      `json:"target"`
+	Params         map[string]string `json:"params,omitempty"`
+	DryRun         bool              `json:"dryRun"`
+	TimeoutSeconds int               `json:"timeoutSeconds"`
+}
+
+// PendingActionsResponse is the controller's work queue for its cluster.
+type PendingActionsResponse struct {
+	Actions []PendingAction `json:"actions"`
+}
+
+// ActionResult is what the controller reports back after executing (or
+// dry-running) an action.
+type ActionResult struct {
+	Success            bool      `json:"success"`
+	DryRun             bool      `json:"dryRun"`
+	BeforeState        string    `json:"beforeState"`
+	PlannedChange      string    `json:"plannedChange"`
+	Result             string    `json:"result"`
+	VerificationPassed *bool     `json:"verificationPassed,omitempty"`
+	RollbackAvailable  bool      `json:"rollbackAvailable"`
+	Error              string    `json:"error,omitempty"`
+	StartedAt          time.Time `json:"startedAt"`
+	FinishedAt         time.Time `json:"finishedAt"`
 }

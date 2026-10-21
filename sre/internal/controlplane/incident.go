@@ -59,7 +59,9 @@ type observation struct {
 type IncidentStore interface {
 	// UpsertObservation creates a new open incident for (clusterID, fingerprint)
 	// or updates the existing one (lastSeen, occurrences++, bounded evidence).
-	UpsertObservation(ctx context.Context, tenantID, clusterID string, at time.Time, obs observation) error
+	// Returns created=true only when a NEW open incident was opened (so callers
+	// can notify once per incident, not once per occurrence).
+	UpsertObservation(ctx context.Context, tenantID, clusterID string, at time.Time, obs observation) (created bool, err error)
 	// ResolveMissing marks open incidents for clusterID whose fingerprint is not
 	// in active as resolved. Returns the number resolved.
 	ResolveMissing(ctx context.Context, clusterID string, active map[string]bool, at time.Time) (int, error)
@@ -82,7 +84,7 @@ func NewMemIncidentStore() IncidentStore {
 
 func incKey(clusterID, fingerprint string) string { return clusterID + "|" + fingerprint }
 
-func (m *memIncidentStore) UpsertObservation(_ context.Context, tenantID, clusterID string, at time.Time, obs observation) error {
+func (m *memIncidentStore) UpsertObservation(_ context.Context, tenantID, clusterID string, at time.Time, obs observation) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := incKey(clusterID, obs.fingerprint)
@@ -91,7 +93,7 @@ func (m *memIncidentStore) UpsertObservation(_ context.Context, tenantID, cluste
 		inc.LastSeen = at
 		inc.Occurrences++
 		inc.Evidence = appendEvidence(inc.Evidence, obs.evidence)
-		return nil
+		return false, nil
 	}
 	// New incident, or re-open a previously resolved one with a fresh identity.
 	id := newID("inc")
@@ -104,7 +106,7 @@ func (m *memIncidentStore) UpsertObservation(_ context.Context, tenantID, cluste
 	}
 	m.byKey[k] = ni
 	m.byID[id] = ni
-	return nil
+	return true, nil
 }
 
 func (m *memIncidentStore) ResolveMissing(_ context.Context, clusterID string, active map[string]bool, at time.Time) (int, error) {

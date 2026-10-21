@@ -36,7 +36,7 @@ func NewMongoIncidentStore(ctx context.Context, db *mongo.Database) (IncidentSto
 	return &mongoIncidentStore{coll: coll}, nil
 }
 
-func (m *mongoIncidentStore) UpsertObservation(ctx context.Context, tenantID, clusterID string, at time.Time, obs observation) error {
+func (m *mongoIncidentStore) UpsertObservation(ctx context.Context, tenantID, clusterID string, at time.Time, obs observation) (bool, error) {
 	filter := bson.M{"clusterId": clusterID, "fingerprint": obs.fingerprint, "status": "open"}
 	update := bson.M{
 		"$setOnInsert": bson.M{
@@ -49,8 +49,11 @@ func (m *mongoIncidentStore) UpsertObservation(ctx context.Context, tenantID, cl
 		"$inc":  bson.M{"occurrences": 1},
 		"$push": bson.M{"evidence": bson.M{"$each": bson.A{obs.evidence}, "$slice": -maxEvidence}},
 	}
-	_, err := m.coll.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
-	return err
+	res, err := m.coll.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	if err != nil {
+		return false, err
+	}
+	return res.UpsertedCount > 0, nil // a new incident was inserted
 }
 
 func (m *mongoIncidentStore) ResolveMissing(ctx context.Context, clusterID string, active map[string]bool, at time.Time) (int, error) {
