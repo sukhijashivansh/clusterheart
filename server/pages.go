@@ -61,9 +61,12 @@ a:hover{color:#000}
 }
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
 .wordmark{font-size:18px;font-weight:700;letter-spacing:-.5px;color:#000}
-/* auth pages: logo header top-left; the in-card brand is hidden (logo lives in the header) */
+/* auth pages: big logo on the left, form on the right (in-card brand hidden) */
 .card .brand{display:none}
-.auth-top{position:absolute;top:0;left:0;padding:24px 30px;display:flex;align-items:center}
+.auth-split{display:flex;min-height:100vh}
+.auth-left{flex:1;display:flex;align-items:center;justify-content:center;background:#fafafa;padding:40px}
+.auth-right{flex:1;display:flex;align-items:center;justify-content:center;padding:40px}
+@media(max-width:820px){.auth-left{display:none}}
 .wordmark .a{color:inherit}
 .kicker{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
 h1{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.08;margin:0 0 9px;color:#000}
@@ -380,8 +383,8 @@ const logoSVG = `<svg width="26" height="26" viewBox="0 0 100 100"><circle cx="5
 
 const lockSVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
 
-// authTop is the fixed logo header (top-left) shown on the auth pages.
-const authTop = `<a class="auth-top" href="/">` + logoSVG + `</a>`
+// bigLogo is the large brand mark shown in the left panel of the auth pages.
+const bigLogo = `<a href="/" aria-label="Clusterheart"><svg width="132" height="132" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#3B5BDB"/><circle cx="50" cy="15" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="32.5" r="10.5" fill="#3B5BDB"/><circle cx="80.3" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="50" cy="85" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="67.5" r="10.5" fill="#3B5BDB"/><circle cx="19.7" cy="32.5" r="10.5" fill="#3B5BDB"/></svg></a>`
 
 // --- home / landing ------------------------------------------------------
 
@@ -564,7 +567,7 @@ const homeBody = `{{define "body"}}
 
 // --- login ---------------------------------------------------------------
 
-const loginBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
+const loginBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Sign in</p>
 <h1>Welcome back.</h1><p class="sub">Access your Clusterheart account.</p>
@@ -577,7 +580,7 @@ const loginBody = `{{define "body"}}` + authTop + `<div class="center"><div clas
 <div class="alt"><a href="/forgot">Forgot password?</a></div>
 <div class="alt" style="margin-top:10px">New here? <a href="/signup">Create an account</a></div>
 <div class="trust">` + lockSVG + `Credentials never leave your machine.</div>
-</div></div>{{end}}
+</div></section></div>{{end}}
 {{define "script"}}<script>
 var email=document.getElementById('email'),pass=document.getElementById('pass'),go=document.getElementById('go'),msg=document.getElementById('msg');
 async function submit(){
@@ -594,7 +597,7 @@ email.addEventListener('keydown',function(e){if(e.key==='Enter')pass.focus();});
 
 // --- signup --------------------------------------------------------------
 
-const signupBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
+const signupBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Create account</p>
 <h1>Create your account.</h1><p class="sub">Sign up to request access.</p>
@@ -608,7 +611,7 @@ const signupBody = `{{define "body"}}` + authTop + `<div class="center"><div cla
 <div id="msg" class="msg"></div>
 <div class="alt">Already have an account? <a href="/login">Sign in</a></div>
 <div class="trust">` + lockSVG + `Credentials never leave your machine.</div>
-</div></div>{{end}}
+</div></section></div>{{end}}
 {{define "script"}}<script>
 var nameEl=document.getElementById('name'),email=document.getElementById('email'),pass=document.getElementById('pass'),go=document.getElementById('go'),msg=document.getElementById('msg');
 async function submit(){
@@ -624,7 +627,7 @@ pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 // --- forgot / reset password ---------------------------------------------
 
-const forgotBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
+const forgotBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Reset password</p>
 <h1>Forgot password?</h1><p class="sub">Enter your email and we'll send you a reset link.</p>
@@ -633,7 +636,7 @@ const forgotBody = `{{define "body"}}` + authTop + `<div class="center"><div cla
 <button class="btn" id="go">Send reset link</button>
 <div id="msg" class="msg"></div>
 <div class="alt"><a href="/login">Back to sign in</a></div>
-</div></div>{{end}}
+</div></section></div>{{end}}
 {{define "script"}}<script>
 var email=document.getElementById('email'),go=document.getElementById('go'),msg=document.getElementById('msg');
 async function submit(){
@@ -648,7 +651,7 @@ go.addEventListener('click',submit);
 email.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 </script>{{end}}`
 
-const resetBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
+const resetBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Reset password</p>
 <h1>Set a new password.</h1><p class="sub">Choose a new password for your account.</p>
@@ -659,7 +662,7 @@ const resetBody = `{{define "body"}}` + authTop + `<div class="center"><div clas
 <button class="btn" id="go">Reset password</button>
 <div id="msg" class="msg"></div>
 <div class="alt"><a href="/login">Back to sign in</a></div>
-</div></div>{{end}}
+</div></section></div>{{end}}
 {{define "script"}}<script>
 var pass=document.getElementById('pass'),pass2=document.getElementById('pass2'),go=document.getElementById('go'),msg=document.getElementById('msg');
 var token=new URLSearchParams(location.search).get('token')||'';
@@ -679,7 +682,7 @@ pass2.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 // --- account -------------------------------------------------------------
 
-const accountBody = `{{define "body"}}` + authTop + `<div class="center"><div class="card">
+const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Account</p>
 <h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
@@ -692,7 +695,7 @@ const accountBody = `{{define "body"}}` + authTop + `<div class="center"><div cl
 {{end}}
 {{if .IsAdmin}}<div class="alt"><a href="/admin">Open admin panel →</a></div>{{end}}
 <button class="btn secondary" id="logout">Log out</button>
-</div></div>{{end}}
+</div></section></div>{{end}}
 {{define "script"}}<script>
 document.getElementById('logout').addEventListener('click',async function(){
   await _post('/api/logout',{});location.href='/login';
