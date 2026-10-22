@@ -54,6 +54,16 @@ func (a *app) isAdmin(email string) bool {
 	return a.adminEmails[strings.ToLower(strings.TrimSpace(email))]
 }
 
+// autoApprove reports whether new/logging-in accounts should be approved
+// automatically (set AUTO_APPROVE=true to skip the manual admin gate).
+func autoApprove() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AUTO_APPROVE"))) {
+	case "true", "1", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // --- sessions ------------------------------------------------------------
 // A session token is base64url(email|expiryRFC3339).hmac. Stateless: works as
 // a cookie (web) and as a bearer token (Electron).
@@ -168,7 +178,7 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		Email:    email,
 		Name:     name,
 		PassHash: string(hash),
-		Approved: false,
+		Approved: autoApprove(),
 		Created:  time.Now(),
 	})
 	if err == errUserExists {
@@ -211,6 +221,12 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.store.setLastLogin(ctx, email)
+
+	// Auto-approve on login (covers accounts created before the flag was on).
+	if !u.Approved && autoApprove() {
+		_ = a.store.setApproved(ctx, email, true)
+		u.Approved = true
+	}
 
 	token := a.mint(email)
 	http.SetCookie(w, &http.Cookie{
