@@ -566,6 +566,7 @@ func main() {
 	mux.HandleFunc("/login", a.pageLogin)
 	mux.HandleFunc("/signup", a.pageSignup)
 	mux.HandleFunc("/account", a.pageAccount)
+	mux.HandleFunc("/app", a.pageApp)
 	mux.HandleFunc("/admin", a.pageAdmin)
 	mux.HandleFunc("/admin/broadcast", a.pageAdminBroadcast)
 	mux.HandleFunc("/forgot", a.pageForgot)
@@ -582,6 +583,7 @@ func main() {
 	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
 	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
 	mux.HandleFunc("/api/sre-bootstrap", a.handleSREBootstrap)
+	mux.HandleFunc("/api/app/clusters", a.handleAppClusters)
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage

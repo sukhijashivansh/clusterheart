@@ -32,6 +32,7 @@
     { "source": "/admin/broadcast", "destination": "https://clusterheart-server.clusterheart.com/admin/broadcast" },
     { "source": "/forgot", "destination": "https://clusterheart-server.clusterheart.com/forgot" },
     { "source": "/reset", "destination": "https://clusterheart-server.clusterheart.com/reset" },
+    { "source": "/app", "destination": "https://clusterheart-server.clusterheart.com/app" },
     { "source": "/api/:path*", "destination": "https://clusterheart-server.clusterheart.com/api/:path*" }
   ],
   "headers": [
