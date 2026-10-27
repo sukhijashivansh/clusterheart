@@ -612,7 +612,7 @@ async function submit(){
   go.disabled=true;_mark(msg,'Signing in…','info');
   var res=await _post('/api/login',{email:email.value.trim(),password:pass.value});
   if(!res.ok){_mark(msg,res.data.error||'Sign in failed.','err');go.disabled=false;return;}
-  _mark(msg,'Welcome back, redirecting…','ok');location.href='/account';
+  _mark(msg,'Welcome back, redirecting…','ok');location.href='/app';
 }
 go.addEventListener('click',submit);
 pass.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
@@ -712,7 +712,8 @@ const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth
 <h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
 {{if .Approved}}
   <p><span class="pill on"><span class="dot"></span>Approved</span></p>
-  <p class="sub" style="margin-top:14px">You have access. Open the Clusterheart desktop app and sign in to start.</p>
+  <p class="sub" style="margin-top:14px">You're in. Open your dashboard to add clusters and watch their health from any device.</p>
+  <a href="/app" class="btn" style="display:block;text-align:center;text-decoration:none">Open dashboard</a>
 {{else}}
   <p><span class="pill off"><span class="dot"></span>Pending approval</span></p>
   <p class="sub" style="margin-top:14px">Your account is waiting for an admin to approve it. You'll be able to use the app once approved.</p>
