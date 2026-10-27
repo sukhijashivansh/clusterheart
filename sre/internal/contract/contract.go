@@ -78,6 +78,7 @@ type PodInfo struct {
 	Ready     string `json:"ready"` // e.g. "2/3"
 	Restarts  int32  `json:"restarts"`
 	Node      string `json:"node,omitempty"`
+	Owner     string `json:"owner,omitempty"` // controller, e.g. "Deployment/x" or "Job/y"
 	CPUMilli  int64  `json:"cpuMilli,omitempty"`
 	MemMi     int64  `json:"memMi,omitempty"`
 }

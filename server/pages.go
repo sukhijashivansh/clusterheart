@@ -145,6 +145,15 @@ input::placeholder{color:var(--faint)}
 .card2-title{font-size:15px;font-weight:650;letter-spacing:-.2px;color:var(--text);margin:0}
 .card2-desc{font-size:13px;color:var(--muted);margin:3px 0 0}
 .card2-body{padding:18px 22px 20px}
+/* scrollable table area with a pinned header (for long pod/job lists) */
+.tscroll{max-height:440px;overflow:auto;border-top:1px solid var(--border)}
+.tscroll table.users th{position:sticky;top:0;background:var(--input-bg);z-index:1}
+/* collapsible sidebar via the burger toggle */
+.admin-shell.nav-hidden .admin-nav{display:none}
+.nav-burger{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);cursor:pointer;font-size:16px;line-height:1;margin-bottom:18px}
+.nav-burger:hover{border-color:var(--accent)}
+.toolbar-input{width:auto;padding:8px 11px;font-size:13px;background:var(--input-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;outline:none}
+.toolbar-input:focus{border-color:var(--accent)}
 
 /* broadcast notice composer */
 textarea.nb{width:100%;padding:13px 14px;font-family:inherit;font-size:14px;color:var(--text);background:var(--input-bg);border:1px solid var(--border);border-radius:0;outline:none;resize:vertical;transition:background .15s,border-color .15s,box-shadow .15s}

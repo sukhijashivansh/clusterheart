@@ -157,7 +157,7 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 
 var appTmpl = page(appBody)
 
-const appBody = `{{define "body"}}<div class="admin-shell">
+const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 <aside class="admin-nav">
   <div class="an-brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
   <nav class="an-list">
@@ -167,6 +167,7 @@ const appBody = `{{define "body"}}<div class="admin-shell">
   <div class="an-foot"><div class="an-me">{{.Email}}</div><a href="#" id="logout" class="an-logout">Log out</a></div>
 </aside>
 <main class="admin-main">
+  <button id="nav-toggle" class="nav-burger" aria-label="Toggle menu" title="Hide / show menu">&#9776;</button>
   <div id="list-head">
     <p class="kicker">Your clusters</p>
     <h1 style="margin:0 0 7px">Clusters</h1>
@@ -179,6 +180,10 @@ const appBody = `{{define "body"}}<div class="admin-shell">
 {{define "script"}}<script>
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
+
+var _nt=document.getElementById('nav-toggle'),_sh=document.getElementById('app-shell');
+if(_sh&&localStorage.getItem('ch-nav')==='hidden')_sh.classList.add('nav-hidden');
+if(_nt)_nt.addEventListener('click',function(){var h=_sh.classList.toggle('nav-hidden');localStorage.setItem('ch-nav',h?'hidden':'shown');});
 
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
@@ -260,22 +265,39 @@ async function loadDetail(id){
       stat('Workloads',(wl.deployments||0)+' deploy',(wl.daemonSets||0)+' ds · '+(wl.statefulSets||0)+' sts · '+(wl.jobs||0)+' jobs')+
       stat('Restart pressure',(p.highRestart||0),'pods restarting')+
     '</div>';
-    var pl=L.podList||[];
-    if(pl.length){
-      var hasMetrics=pl.some(function(x){return x.cpuMilli||x.memMi;});
-      pl=pl.slice().sort(function(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);});
-      html+='<section class="card2"><div class="card2-head"><p class="card2-title">Pods ('+pl.length+(L.podListTruncated?' of '+(pl.length+L.podListTruncated):'')+')</p><p class="card2-desc">'+(hasMetrics?'Live, with CPU/memory from metrics-server.':'Live. Install metrics-server to see CPU/memory.')+'</p></div><table class="users"><thead><tr><th>Pod</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody>';
-      pl.forEach(function(x){
-        var ok=(x.phase==='Running'||x.phase==='Succeeded');
-        html+='<tr><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
-          '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
-          '<td class="u-time">'+esc(x.ready||'')+'</td>'+
-          '<td class="u-time">'+(x.restarts||0)+'</td>'+
-          '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td>'+
-          '<td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
-          '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
-      });
-      html+='</tbody></table>'+(L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+'</section>';
+    var all=L.podList||[];
+    var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});
+    function isJob(x){return (x.owner||'').indexOf('Job/')===0;}
+    function byCpu(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);}
+    var svc=all.filter(function(x){return !isJob(x);}).sort(byCpu);
+    var jobs=all.filter(isJob).sort(byCpu);
+    function podRow(x){
+      var ok=(x.phase==='Running'||x.phase==='Succeeded');
+      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+        '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
+        '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
+        '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
+        '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
+    }
+    if(svc.length){
+      var nss=Array.from(new Set(svc.map(function(x){return x.namespace;}))).sort();
+      html+='<section class="card2">'+
+        '<div class="card2-head" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">'+
+          '<div style="flex:1;min-width:150px"><p class="card2-title">Pods ('+svc.length+')</p><p class="card2-desc">'+(hasMetrics?'Live CPU/memory from metrics-server.':'Install metrics-server for CPU/memory.')+'</p></div>'+
+          '<input id="pod-search" class="toolbar-input" placeholder="Search pods…" style="flex:1;min-width:130px">'+
+          '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
+        '</div>'+
+        '<div class="tscroll"><table class="users"><thead><tr><th>Pod</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
+        svc.map(podRow).join('')+
+        '</tbody></table></div>'+
+        (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+
+      '</section>';
+    }
+    if(jobs.length){
+      html+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Jobs ('+jobs.length+')</p><p class="card2-desc">Pods created by Jobs.</p></div>'+
+        '<div class="tscroll"><table class="users"><thead><tr><th>Job pod</th><th>Status</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody>'+
+        jobs.map(function(x){var ok=(x.phase==='Running'||x.phase==='Succeeded');return '<tr><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td><td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td><td class="u-time">'+(x.restarts||0)+'</td><td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td><td class="u-email">'+esc(x.node||'')+'</td></tr>';}).join('')+
+        '</tbody></table></div></section>';
     }
     var probs=[];
     (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
@@ -293,6 +315,16 @@ async function loadDetail(id){
     }
     if(!probs.length&&!w.length){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No problems or warnings in the latest snapshot. Looks healthy.</p></div></section>';}
     box.innerHTML=html;
+    var ps=document.getElementById('pod-search'),pn=document.getElementById('pod-ns');
+    function applyPodFilter(){
+      var q=((ps&&ps.value)||'').toLowerCase(),ns=(pn&&pn.value)||'';
+      document.querySelectorAll('#pods-body tr').forEach(function(tr){
+        var okn=!ns||tr.dataset.ns===ns, okq=!q||(tr.dataset.name||'').indexOf(q)>=0;
+        tr.style.display=(okn&&okq)?'':'none';
+      });
+    }
+    if(ps)ps.addEventListener('input',applyPodFilter);
+    if(pn)pn.addEventListener('change',applyPodFilter);
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
 

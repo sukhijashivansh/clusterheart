@@ -149,6 +149,7 @@ func podInfo(p *corev1.Pod) contract.PodInfo {
 		Ready:     fmt.Sprintf("%d/%d", ready, total),
 		Restarts:  int32(podRestarts(p)),
 		Node:      p.Spec.NodeName,
+		Owner:     ownerWorkload(p),
 	}
 }
 
