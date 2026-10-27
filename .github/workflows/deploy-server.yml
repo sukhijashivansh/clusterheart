@@ -1,0 +1,74 @@
+# Auto-deploy the Go account server (server/) to the VPS/EC2 box on every
+# push to main that touches server/**. Builds a static Linux binary in CI,
+# copies it over SSH, swaps it into /opt/clusterheart, and restarts the
+# systemd unit (see deploy/clusterheart.service).
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_SSH_HOST   - server hostname or IP
+#   DEPLOY_SSH_USER   - ssh user (e.g. ubuntu or root)
+#   DEPLOY_SSH_KEY    - the user's PRIVATE ssh key (full PEM, incl. BEGIN/END)
+#   DEPLOY_SSH_PORT   - (optional) ssh port; defaults to 22
+# Optional repo variable:
+#   DEPLOY_ARCH       - target CPU arch: amd64 (default) or arm64 (Graviton)
+#
+# The ssh user must be root, or have passwordless sudo for `install` and
+# `systemctl restart clusterheart`.
+
+name: Deploy account server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+
+      - name: Build static Linux binary
+        working-directory: server
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ vars.DEPLOY_ARCH || 'amd64' }}
+        run: go build -trimpath -ldflags="-s -w" -o clusterheart-server .
+
+      - name: Copy binary to server (staging dir)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          source: server/clusterheart-server
+          target: clusterheart-deploy
+          strip_components: 1
+
+      - name: Install binary and restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            SUDO=""
+            [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+            $SUDO install -m 0755 "$HOME/clusterheart-deploy/clusterheart-server" /opt/clusterheart/clusterheart-server
+            rm -rf "$HOME/clusterheart-deploy"
+            $SUDO systemctl restart clusterheart
+            sleep 2
+            $SUDO systemctl is-active clusterheart
