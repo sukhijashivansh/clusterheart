@@ -62,6 +62,24 @@ type ClusterSnapshot struct {
 	Workloads        WorkloadSummary   `json:"workloads"`
 	PodProblems      []PodProblem      `json:"podProblems,omitempty"`
 	WorkloadProblems []WorkloadProblem `json:"workloadProblems,omitempty"`
+	// PodList is a bounded inventory of individual pods (capped by the agent) so
+	// the browser dashboard can show a real pod table with live CPU/memory.
+	// PodListTruncated is how many pods the cap dropped.
+	PodList          []PodInfo `json:"podList,omitempty"`
+	PodListTruncated int       `json:"podListTruncated,omitempty"`
+}
+
+// PodInfo is one pod's inventory row: identity, status, and (when metrics-server
+// is present) live usage. CPUMilli is millicores, MemMi is mebibytes.
+type PodInfo struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Phase     string `json:"phase"`
+	Ready     string `json:"ready"` // e.g. "2/3"
+	Restarts  int32  `json:"restarts"`
+	Node      string `json:"node,omitempty"`
+	CPUMilli  int64  `json:"cpuMilli,omitempty"`
+	MemMi     int64  `json:"memMi,omitempty"`
 }
 
 // ProblemType enumerates the deterministic fault signals the agent reports.

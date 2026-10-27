@@ -260,6 +260,23 @@ async function loadDetail(id){
       stat('Workloads',(wl.deployments||0)+' deploy',(wl.daemonSets||0)+' ds · '+(wl.statefulSets||0)+' sts · '+(wl.jobs||0)+' jobs')+
       stat('Restart pressure',(p.highRestart||0),'pods restarting')+
     '</div>';
+    var pl=L.podList||[];
+    if(pl.length){
+      var hasMetrics=pl.some(function(x){return x.cpuMilli||x.memMi;});
+      pl=pl.slice().sort(function(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);});
+      html+='<section class="card2"><div class="card2-head"><p class="card2-title">Pods ('+pl.length+(L.podListTruncated?' of '+(pl.length+L.podListTruncated):'')+')</p><p class="card2-desc">'+(hasMetrics?'Live, with CPU/memory from metrics-server.':'Live. Install metrics-server to see CPU/memory.')+'</p></div><table class="users"><thead><tr><th>Pod</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody>';
+      pl.forEach(function(x){
+        var ok=(x.phase==='Running'||x.phase==='Succeeded');
+        html+='<tr><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+          '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
+          '<td class="u-time">'+esc(x.ready||'')+'</td>'+
+          '<td class="u-time">'+(x.restarts||0)+'</td>'+
+          '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td>'+
+          '<td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
+          '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
+      });
+      html+='</tbody></table>'+(L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+'</section>';
+    }
     var probs=[];
     (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
     (L.workloadProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.kind+' '+x.name,msg:x.message});});

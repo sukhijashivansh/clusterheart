@@ -6,6 +6,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +19,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
+
+// maxPodInventory bounds how many individual pods a snapshot carries, so the
+// control-plane store stays small even on large clusters. Extra pods are
+// dropped and counted in PodListTruncated.
+const maxPodInventory = 300
 
 // maxWarnings bounds how many warning events a snapshot carries.
 const maxWarnings = 50
@@ -33,6 +40,7 @@ const maxProblems = 200
 // Collector reads cluster state.
 type Collector struct {
 	clientset kubernetes.Interface
+	metrics   metricsv.Interface // nil if metrics-server is not installed
 	k8sVer    string
 }
 
@@ -54,6 +62,11 @@ func NewCollector(kubeconfigPath string) (*Collector, error) {
 		return nil, err
 	}
 	c := &Collector{clientset: cs}
+	// Metrics are best-effort: if metrics-server isn't installed, CPU/mem are
+	// simply omitted - the agent must never fail because metrics are missing.
+	if mc, err := metricsv.NewForConfig(cfg); err == nil {
+		c.metrics = mc
+	}
 	if v, err := cs.Discovery().ServerVersion(); err == nil {
 		c.k8sVer = v.GitVersion
 	}
@@ -103,6 +116,11 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 		if len(snap.PodProblems) < maxProblems {
 			snap.PodProblems = append(snap.PodProblems, detectPodProblems(p)...)
 		}
+		if len(snap.PodList) < maxPodInventory {
+			snap.PodList = append(snap.PodList, podInfo(p))
+		} else {
+			snap.PodListTruncated++
+		}
 	}
 	if len(snap.PodProblems) > maxProblems {
 		snap.PodProblems = snap.PodProblems[:maxProblems]
@@ -111,7 +129,56 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 	snap.Workloads = c.workloadCounts(ctx)
 	snap.WorkloadProblems = c.deploymentProblems(ctx)
 	snap.Warnings = c.warnings(ctx)
+	c.mergePodMetrics(ctx, snap.PodList)
 	return snap, nil
+}
+
+// podInfo builds one inventory row from a pod's status (no metrics yet).
+func podInfo(p *corev1.Pod) contract.PodInfo {
+	total := len(p.Spec.Containers)
+	ready := 0
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.Ready {
+			ready++
+		}
+	}
+	return contract.PodInfo{
+		Namespace: p.Namespace,
+		Name:      p.Name,
+		Phase:     string(p.Status.Phase),
+		Ready:     fmt.Sprintf("%d/%d", ready, total),
+		Restarts:  int32(podRestarts(p)),
+		Node:      p.Spec.NodeName,
+	}
+}
+
+// mergePodMetrics fills CPU/memory from metrics-server into the inventory, by
+// ns/name. Best-effort: if metrics are unavailable the fields stay zero.
+func (c *Collector) mergePodMetrics(ctx context.Context, list []contract.PodInfo) {
+	if c.metrics == nil || len(list) == 0 {
+		return
+	}
+	pm, err := c.metrics.MetricsV1beta1().PodMetricses(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	type usage struct{ cpu, mem int64 }
+	byKey := make(map[string]usage, len(pm.Items))
+	for i := range pm.Items {
+		m := &pm.Items[i]
+		var cpu, mem int64
+		for j := range m.Containers {
+			cpu += m.Containers[j].Usage.Cpu().MilliValue()
+			mem += m.Containers[j].Usage.Memory().Value()
+		}
+		byKey[m.Namespace+"/"+m.Name] = usage{cpu: cpu, mem: mem / (1024 * 1024)}
+	}
+	for i := range list {
+		if u, ok := byKey[list[i].Namespace+"/"+list[i].Name]; ok {
+			list[i].CPUMilli = u.cpu
+			list[i].MemMi = u.mem
+		}
+	}
 }
 
 // detectPodProblems derives measured fault signals from a pod's status. These
