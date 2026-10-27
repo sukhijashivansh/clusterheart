@@ -32,7 +32,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
     <!-- Set the theme before paint so there's no flash. Defaults to dark. -->
     <script>
         (function () {
@@ -40,34 +39,9 @@
             if (t === 'dark') document.documentElement.classList.add('dark');
         })();
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        // Colors are driven by CSS variables (see :root / .dark below), so the same
-        // utility classes (bg-base, text-ink, …) render both the light and dark scheme.
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        base:    'rgb(var(--c-base) / <alpha-value>)',
-                        surface: 'rgb(var(--c-surface) / <alpha-value>)',
-                        panel:   'rgb(var(--c-panel) / <alpha-value>)',
-                        panel2:  'rgb(var(--c-panel2) / <alpha-value>)',
-                        line:    'rgb(var(--c-line) / <alpha-value>)',
-                        line2:   'rgb(var(--c-line2) / <alpha-value>)',
-                        ink:     'rgb(var(--c-ink) / <alpha-value>)',
-                        muted:   'rgb(var(--c-muted) / <alpha-value>)',
-                        faint:   'rgb(var(--c-faint) / <alpha-value>)',
-                        accent:  'rgb(var(--c-accent) / <alpha-value>)',
-                        accent2: 'rgb(var(--c-accent2) / <alpha-value>)',
-                        btn:     'rgb(var(--c-btn) / <alpha-value>)',
-                        btn2:    'rgb(var(--c-btn2) / <alpha-value>)',
-                        btnink:  'rgb(var(--c-btnink) / <alpha-value>)',
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Prebuilt Tailwind utilities (no runtime compile). Regenerate after class
+         changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify -->
+    <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
@@ -156,10 +130,10 @@
         }
     </style>
 </head>
-<body class="bg-base text-ink antialiased selection:bg-accent selection:text-base">
+<body class="bg-canvas text-ink antialiased selection:bg-accent selection:text-canvas">
 
     <!-- ===== NAV ===== -->
-    <nav class="fixed w-full z-50 bg-base/80 backdrop-blur-xl border-b border-line" id="navbar">
+    <nav class="fixed w-full z-50 bg-canvas/80 backdrop-blur-xl border-b border-line" id="navbar">
         <div class="max-w-6xl mx-auto px-6">
             <div class="relative flex items-center justify-between h-16">
                 <button type="button" data-theme-logo aria-label="Clusterheart — click to switch colour scheme" title="Switch colour scheme" class="flex items-center gap-2.5 cursor-pointer select-none">
@@ -194,7 +168,7 @@
             </div>
         </div>
 
-        <div id="mobile-menu" class="hidden md:hidden bg-base border-b border-line">
+        <div id="mobile-menu" class="hidden md:hidden bg-canvas border-b border-line">
             <div class="px-6 py-4 space-y-1">
                 <a href="#features" class="block py-2.5 text-muted hover:text-ink font-medium">Features</a>
                 <a href="#finops" class="block py-2.5 text-muted hover:text-ink font-medium">FinOps</a>
@@ -254,7 +228,7 @@
     </section>
 
     <!-- ===== FEATURES: pods / jobs / nodes ===== -->
-    <section id="features" class="py-16 sm:py-24 bg-base">
+    <section id="features" class="py-16 sm:py-24 bg-canvas">
         <div class="max-w-6xl mx-auto px-6">
             <div class="max-w-2xl mb-10 sm:mb-16">
                 <p class="mono text-xs font-medium tracking-[0.2em] text-accent uppercase mb-4">01 / Core</p>
@@ -368,31 +342,31 @@
                         <div class="space-y-4">
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">Compute</span><span class="mono text-faint">$21.40</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:100%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:100%"></div></div>
                             </div>
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">Database</span><span class="mono text-faint">$12.50</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:58%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:58%"></div></div>
                             </div>
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">Kubernetes</span><span class="mono text-faint">$9.60</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:45%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:45%"></div></div>
                             </div>
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">Storage</span><span class="mono text-faint">$6.85</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:32%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:32%"></div></div>
                             </div>
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">CDN</span><span class="mono text-faint">$5.20</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:24%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:24%"></div></div>
                             </div>
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">Data transfer</span><span class="mono text-faint">$4.33</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:20%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:20%"></div></div>
                             </div>
                             <div>
                                 <div class="flex justify-between text-sm mb-1.5"><span class="text-muted">NoSQL</span><span class="mono text-faint">$3.75</span></div>
-                                <div class="h-2 bg-base"><div class="h-2 bg-accent" style="width:18%"></div></div>
+                                <div class="h-2 bg-canvas"><div class="h-2 bg-accent" style="width:18%"></div></div>
                             </div>
                         </div>
                         <p class="mono text-[11px] text-faint mt-6">daily cloud spend, by service</p>
@@ -403,7 +377,7 @@
     </section>
 
     <!-- ===== AI + RIGHTSIZING ===== -->
-    <section id="ai" class="relative overflow-hidden py-16 sm:py-24 bg-base">
+    <section id="ai" class="relative overflow-hidden py-16 sm:py-24 bg-canvas">
         <div class="absolute inset-0 dotgrid opacity-30 [mask-image:radial-gradient(60%_60%_at_50%_50%,black,transparent)]"></div>
         <div class="relative z-10 max-w-6xl mx-auto px-6">
             <div class="grid lg:grid-cols-2 gap-12 lg:gap-20">
@@ -475,7 +449,7 @@
                 <div class="p-6 sm:p-8 bg-panel border border-line hover:border-accent transition-colors">
                     <div class="flex items-center justify-between mb-4">
                         <h4 class="text-[1rem] sm:text-lg font-bold text-ink">All-in-one</h4>
-                        <div class="w-8 h-8 bg-accent text-base flex items-center justify-center text-sm shrink-0">
+                        <div class="w-8 h-8 bg-accent text-canvas flex items-center justify-center text-sm shrink-0">
                             <i class="fa-solid fa-layer-group"></i>
                         </div>
                     </div>
@@ -493,7 +467,7 @@
                 <div class="p-6 sm:p-8 bg-panel border border-line hover:border-accent transition-colors">
                     <div class="flex items-center justify-between mb-4">
                         <h4 class="text-[1rem] sm:text-lg font-bold text-ink">Nothing to deploy</h4>
-                        <div class="w-8 h-8 bg-accent text-base flex items-center justify-center text-sm shrink-0">
+                        <div class="w-8 h-8 bg-accent text-canvas flex items-center justify-center text-sm shrink-0">
                             <i class="fa-solid fa-download"></i>
                         </div>
                     </div>
@@ -511,7 +485,7 @@
                 <div class="p-6 sm:p-8 bg-panel border border-line hover:border-accent transition-colors">
                     <div class="flex items-center justify-between mb-4">
                         <h4 class="text-[1rem] sm:text-lg font-bold text-ink">Private by design</h4>
-                        <div class="w-8 h-8 bg-accent text-base flex items-center justify-center text-sm shrink-0">
+                        <div class="w-8 h-8 bg-accent text-canvas flex items-center justify-center text-sm shrink-0">
                             <i class="fa-solid fa-lock"></i>
                         </div>
                     </div>
@@ -531,7 +505,7 @@
     </section>
 
     <!-- ===== FAQ ===== -->
-    <section id="faq" class="py-16 sm:py-24 bg-base">
+    <section id="faq" class="py-16 sm:py-24 bg-canvas">
         <div class="max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
             <div class="lg:sticky lg:top-28">
                 <p class="mono text-xs font-medium tracking-[0.2em] text-accent uppercase mb-4">06 / FAQ</p>
@@ -615,7 +589,7 @@
     </section>
 
     <!-- ===== FOOTER ===== -->
-    <footer class="bg-base border-t border-line pt-14 pb-8">
+    <footer class="bg-canvas border-t border-line pt-14 pb-8">
         <div class="max-w-6xl mx-auto px-6">
             <div class="flex flex-col md:flex-row justify-between items-center gap-6 mb-6">
                 <button type="button" data-theme-logo title="Switch colour scheme" class="flex items-center gap-2.5 cursor-pointer select-none">
