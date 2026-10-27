@@ -31,7 +31,6 @@
     <!-- Speed up the external font/icon/style fetches -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
     <!-- Set the theme before paint so there's no flash. Defaults to dark. -->
     <script>
         (function () {
@@ -42,7 +41,6 @@
     <!-- Prebuilt Tailwind utilities (no runtime compile). Regenerate after class
          changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify -->
     <link rel="stylesheet" href="styles.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 
@@ -58,7 +56,7 @@
             --c-line2: 212 212 212;
             --c-ink: 10 10 10;
             --c-muted: 82 82 82;
-            --c-faint: 163 163 163;
+            --c-faint: 115 115 115;
             --c-accent: 10 10 10;
             --c-accent2: 64 64 64;
             --c-btn: 10 10 10;
@@ -77,7 +75,7 @@
             --c-line2: 42 60 88;
             --c-ink: 230 241 253;
             --c-muted: 130 148 174;
-            --c-faint: 90 104 128;
+            --c-faint: 108 122 148;
             --c-accent: 142 198 250;
             --c-accent2: 187 221 252;
             --c-btn: 51 73 106;
@@ -103,6 +101,7 @@
         .dark .logo-outer  { fill: #8EC6FA; }
         .dark .logo-center { fill: #8EC6FA; }
         .logo-mark { transform-box: fill-box; transform-origin: center; }
+        .faq-icon { transform-box: fill-box; transform-origin: center; }
 
         /* Subtle dotted-particle texture, echoing the reference's icy scatter */
         .dotgrid {
@@ -132,6 +131,8 @@
 </head>
 <body class="bg-canvas text-ink antialiased selection:bg-accent selection:text-canvas">
 
+    <a href="#top" class="sr-only focus:not-sr-only focus:fixed focus:z-[100] focus:top-3 focus:left-3 focus:px-4 focus:py-2 focus:bg-accent focus:text-canvas focus:font-semibold">Skip to content</a>
+
     <!-- ===== NAV ===== -->
     <nav class="fixed w-full z-50 bg-canvas/80 backdrop-blur-xl border-b border-line" id="navbar">
         <div class="max-w-6xl mx-auto px-6">
@@ -157,12 +158,12 @@
                         <a href="https://cal.com/shivansh-sukhija/30min" target="_blank" rel="noopener" class="inline-flex items-center h-9 px-4 text-sm font-medium border border-line2 text-ink hover:border-accent hover:bg-panel2 transition-colors">Let's talk</a>
                         <a href="/signup" class="inline-flex items-stretch h-9 overflow-hidden bg-btn hover:bg-btn2 border border-line2 text-btnink font-semibold transition-colors">
                             <span class="px-5 flex items-center">Sign up</span>
-                            <span class="px-3 flex items-center border-l border-btnink/20"><i class="fa-solid fa-arrow-right text-xs"></i></span>
+                            <span class="px-3 flex items-center border-l border-btnink/20"><svg class="w-[1em] h-[1em] text-xs" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.7 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span>
                         </a>
                     </div>
 
                     <button id="mobile-menu-btn" class="md:hidden text-muted hover:text-ink p-2 -mr-2" aria-label="Menu">
-                        <i class="fa-solid fa-bars text-xl"></i>
+                        <svg class="w-[1em] h-[1em] text-xl" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z"/></svg>
                     </button>
                 </div>
             </div>
@@ -181,7 +182,7 @@
                     </a>
                     <a href="/signup" class="flex-1 flex overflow-hidden bg-btn hover:bg-btn2 border border-line2 text-btnink font-semibold transition-colors">
                         <span class="flex-1 text-center px-4 py-2.5">Sign up</span>
-                        <span class="px-4 flex items-center border-l border-btnink/20"><i class="fa-solid fa-arrow-right text-sm"></i></span>
+                        <span class="px-4 flex items-center border-l border-btnink/20"><svg class="w-[1em] h-[1em] text-sm" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.7 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"/></svg></span>
                     </a>
                 </div>
             </div>
@@ -203,15 +204,15 @@
 
             <ul class="text-sm sm:text-[1rem] md:text-lg text-muted w-fit max-w-full mx-auto mb-10 space-y-3 text-left">
                 <li class="flex gap-3">
-                    <i class="fa-solid fa-check text-accent mt-1.5 text-sm"></i>
+                    <svg class="w-[1em] h-[1em] shrink-0 text-accent mt-1.5 text-sm" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>
                     <span>right-size workloads from real usage, patch in one click</span>
                 </li>
                 <li class="flex gap-3">
-                    <i class="fa-solid fa-check text-accent mt-1.5 text-sm"></i>
+                    <svg class="w-[1em] h-[1em] shrink-0 text-accent mt-1.5 text-sm" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>
                     <span>ask the ai copilot anything about your live cluster</span>
                 </li>
                 <li class="flex gap-3">
-                    <i class="fa-solid fa-check text-accent mt-1.5 text-sm"></i>
+                    <svg class="w-[1em] h-[1em] shrink-0 text-accent mt-1.5 text-sm" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>
                     <span>runs locally, credentials never leave your machine</span>
                 </li>
             </ul>
@@ -450,7 +451,7 @@
                     <div class="flex items-center justify-between mb-4">
                         <h4 class="text-[1rem] sm:text-lg font-bold text-ink">All-in-one</h4>
                         <div class="w-8 h-8 bg-accent text-canvas flex items-center justify-center text-sm shrink-0">
-                            <i class="fa-solid fa-layer-group"></i>
+                            <svg class="w-[1em] h-[1em]" viewBox="0 0 576 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M264.5 5.2c14.9-6.9 32.1-6.9 47 0l218.6 101c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 149.8C37.4 145.8 32 137.3 32 128s5.4-17.9 13.9-21.8L264.5 5.2zM476.9 209.6l53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 277.8C37.4 273.8 32 265.3 32 256s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0l152-70.2zm-152 198.2l152-70.2 53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 405.8C37.4 401.8 32 393.3 32 384s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0z"/></svg>
                         </div>
                     </div>
                     <ul class="space-y-4 text-sm text-muted leading-relaxed">
@@ -468,7 +469,7 @@
                     <div class="flex items-center justify-between mb-4">
                         <h4 class="text-[1rem] sm:text-lg font-bold text-ink">Nothing to deploy</h4>
                         <div class="w-8 h-8 bg-accent text-canvas flex items-center justify-center text-sm shrink-0">
-                            <i class="fa-solid fa-download"></i>
+                            <svg class="w-[1em] h-[1em]" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 242.7-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7 288 32zM64 352c-35.3 0-64 28.7-64 64l0 32c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-32c0-35.3-28.7-64-64-64l-101.5 0-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352 64 352zm368 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg>
                         </div>
                     </div>
                     <ul class="space-y-4 text-sm text-muted leading-relaxed">
@@ -486,7 +487,7 @@
                     <div class="flex items-center justify-between mb-4">
                         <h4 class="text-[1rem] sm:text-lg font-bold text-ink">Private by design</h4>
                         <div class="w-8 h-8 bg-accent text-canvas flex items-center justify-center text-sm shrink-0">
-                            <i class="fa-solid fa-lock"></i>
+                            <svg class="w-[1em] h-[1em]" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M144 144l0 48 160 0 0-48c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192l0-48C80 64.5 144.5 0 224 0s144 64.5 144 144l0 48 16 0c35.3 0 64 28.7 64 64l0 192c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 256c0-35.3 28.7-64 64-64l16 0z"/></svg>
                         </div>
                     </div>
                     <ul class="space-y-4 text-sm text-muted leading-relaxed">
@@ -516,7 +517,7 @@
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">What is Clusterheart?</span>
-                        <i class="faq-icon fa-solid fa-plus text-faint transition-transform duration-200 shrink-0"></i>
+                        <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
                         <p class="text-muted leading-relaxed">It's a desktop app for your Kubernetes cluster. It reads your local kubeconfig and brings inspection, cost tracking, an AI copilot, and resource right sizing together in one place. Nothing ever runs inside your cluster.</p>
@@ -525,7 +526,7 @@
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">What problem does it actually solve?</span>
-                        <i class="faq-icon fa-solid fa-plus text-faint transition-transform duration-200 shrink-0"></i>
+                        <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
                         <p class="text-muted leading-relaxed">Most clusters quietly overpay. Pods ask for far more CPU and memory than they actually use, so you pay for bigger nodes than you need. Clusterheart shows you that waste in plain language, tells you exactly what you can reclaim, and patches the requests so your cluster can safely move down to a smaller, cheaper instance.</p>
@@ -534,7 +535,7 @@
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">What do I need installed?</span>
-                        <i class="faq-icon fa-solid fa-plus text-faint transition-transform duration-200 shrink-0"></i>
+                        <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
                         <p class="text-muted leading-relaxed">Just the desktop app and a working kubeconfig. If you want cost data, it reuses the cloud credentials you already have. There are no agents, operators, or Helm charts to deploy.</p>
@@ -543,7 +544,7 @@
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">Does it work on a cluster that already exists?</span>
-                        <i class="faq-icon fa-solid fa-plus text-faint transition-transform duration-200 shrink-0"></i>
+                        <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
                         <p class="text-muted leading-relaxed">Yes. Point it at any kubeconfig context you already have and it reads the live state without changing anything. It never assumes it set the cluster up, so busy production clusters with many namespaces work perfectly.</p>
@@ -552,7 +553,7 @@
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">What will it refuse to do?</span>
-                        <i class="faq-icon fa-solid fa-plus text-faint transition-transform duration-200 shrink-0"></i>
+                        <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
                         <p class="text-muted leading-relaxed">The AI copilot can only read. Any command that would change your cluster is refused. The one time Clusterheart writes anything is when you press the right sizing <strong class="text-ink">Patch</strong> button yourself.</p>
@@ -561,7 +562,7 @@
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6">
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">Will it resize my whole cluster at once?</span>
-                        <i class="faq-icon fa-solid fa-plus text-faint transition-transform duration-200 shrink-0"></i>
+                        <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
                         <p class="text-muted leading-relaxed">No. It works on one workload at a time and only when you ask. It looks at your real usage history and sizes to your peak load so busy apps never get starved, then patches only the workload you picked. Over time everything packs tighter and your cluster can run on smaller, cheaper machines.</p>
@@ -579,10 +580,10 @@
             <p class="text-[1rem] sm:text-lg text-muted mb-10">Install the desktop app and point it at your kubeconfig. That's the whole setup.</p>
             <div class="flex flex-col sm:flex-row justify-center gap-3">
                 <a href="/downloads/Clusterheart-macOS-AppleSilicon.dmg" class="px-6 py-3.5 bg-btn border border-line2 text-btnink font-semibold text-center hover:bg-btn2 transition-colors">
-                    <i class="fa-brands fa-apple mr-2"></i>macOS
+                    <svg class="w-[1em] h-[1em] inline align-[-0.125em] mr-2" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>macOS
                 </a>
                 <a href="/downloads/Clusterheart-Windows.exe" class="px-6 py-3.5 bg-surface text-ink border border-line2 font-semibold text-center hover:border-accent hover:bg-panel2 transition-colors">
-                    <i class="fa-brands fa-windows mr-2"></i>Windows
+                    <svg class="w-[1em] h-[1em] inline align-[-0.125em] mr-2" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v177.9zm0-380.6v180.1H448V32L203.8 65.7z"/></svg>Windows
                 </a>
             </div>
         </div>
@@ -612,7 +613,7 @@
             <div class="border-t border-line pt-6 flex flex-col md:flex-row justify-between items-center text-sm text-faint gap-4">
                 <p>© 2026 Clusterheart.</p>
                 <div class="flex gap-5">
-                    <a href="#" class="hover:text-ink" aria-label="X"><i class="fa-brands fa-x-twitter"></i></a>
+                    <a href="#" class="hover:text-ink" aria-label="Clusterheart on X"><svg class="w-[1em] h-[1em] inline align-[-0.125em]" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8L200.7 275.5 26.8 48H172.4L272.9 180.9 389.2 48zM364.4 421.8h39.1L151.1 88h-42L364.4 421.8z"/></svg></a>
                 </div>
             </div>
         </div>
