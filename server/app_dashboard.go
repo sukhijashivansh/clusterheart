@@ -186,19 +186,25 @@ async function load(){
   try{
     var r=await fetch('/api/app/clusters',{headers:{'Accept':'application/json'}});
     if(!r.ok){box.innerHTML='<p class="sub">Could not load clusters.</p>';return;}
-    var list=await r.json();
-    if(!Array.isArray(list)||list.length===0){
+    var payload=await r.json();
+    var list=(payload&&payload.clusters)||[];
+    if(list.length===0){
       box.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No clusters yet. Click <b>Add cluster</b> to connect your first one.</p></div></section>';
       return;
     }
     var html='<section class="card2"><table class="users"><thead><tr><th>Cluster</th><th>Status</th><th>Nodes</th><th>Pods</th><th>Last seen</th></tr></thead><tbody>';
     list.forEach(function(c){
-      var healthy=(c.healthy!==false)&&(c.connected!==false);
-      html+='<tr><td><div class="u-name">'+esc(c.name||c.clusterName||c.clusterId)+'</div><div class="u-email">'+esc(c.clusterId||'')+'</div></td>'+
-        '<td><span class="pill '+(healthy?'on':'off')+'"><span class="dot"></span>'+(healthy?'Connected':'Offline')+'</span></td>'+
-        '<td class="u-time">'+(c.nodes!=null?c.nodes:'&mdash;')+'</td>'+
-        '<td class="u-time">'+(c.pods!=null?c.pods:'&mdash;')+'</td>'+
-        '<td class="u-time">'+(c.lastSeen?new Date(c.lastSeen).toLocaleString():'never')+'</td></tr>';
+      var connected=c.connected===true;
+      var n=c.latest&&c.latest.nodes, p=c.latest&&c.latest.pods;
+      var nodes=n?(n.ready+' / '+n.total):'-';
+      var pods=p?(p.running+' / '+p.total):'-';
+      var seen=c.lastHeartbeat?new Date(c.lastHeartbeat).toLocaleString():'never';
+      var env=c.environment?' · '+esc(c.environment):'';
+      html+='<tr><td><div class="u-name">'+esc(c.name||c.clusterId)+'</div><div class="u-email">'+esc(c.clusterId||'')+env+'</div></td>'+
+        '<td><span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></td>'+
+        '<td class="u-time">'+nodes+'</td>'+
+        '<td class="u-time">'+pods+'</td>'+
+        '<td class="u-time">'+seen+'</td></tr>';
     });
     html+='</tbody></table></section>';
     box.innerHTML=html;
