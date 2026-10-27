@@ -119,7 +119,7 @@ input::placeholder{color:var(--faint)}
 /* --- admin (sidebar shell, Apple-style) --- */
 .admin-shell{display:flex;min-height:100vh}
 .admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-.an-brand{display:flex;align-items:center;gap:9px;padding:4px 8px 22px}
+.an-brand{display:flex;align-items:center;gap:10px;padding:2px 14px 16px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
 .an-brand .wordmark{font-size:16px}
 .an-list{display:flex;flex-direction:column;gap:2px}
 .nav-item{display:block;padding:9px 12px;border-radius:0;font-size:14px;font-weight:500;color:var(--muted)}
@@ -150,8 +150,14 @@ input::placeholder{color:var(--faint)}
 .tscroll table.users th{position:sticky;top:0;background:var(--input-bg);z-index:1}
 /* collapsible sidebar via the burger toggle */
 .admin-shell.nav-hidden .admin-nav{display:none}
-.nav-burger{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);cursor:pointer;font-size:16px;line-height:1;margin-bottom:18px}
+.nav-burger{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);cursor:pointer;font-size:15px;line-height:1;flex-shrink:0}
 .nav-burger:hover{border-color:var(--accent)}
+#nav-reopen{display:none;margin-bottom:16px}
+.nav-hidden #nav-reopen{display:inline-flex}
+.seg{display:inline-flex;border:1px solid var(--border-strong);overflow:hidden;flex-shrink:0}
+.seg-btn{padding:7px 15px;font-size:13px;font-weight:600;background:transparent;color:var(--muted);border:none;cursor:pointer;font-family:inherit}
+.seg-btn.active{background:var(--accent);color:var(--accent-ink)}
+.seg-btn+.seg-btn{border-left:1px solid var(--border-strong)}
 .toolbar-input{width:auto;padding:8px 11px;font-size:13px;background:var(--input-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;outline:none}
 .toolbar-input:focus{border-color:var(--accent)}
 

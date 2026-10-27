@@ -159,7 +159,7 @@ var appTmpl = page(appBody)
 
 const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 <aside class="admin-nav">
-  <div class="an-brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
+  <div class="an-brand"><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button>` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
   <nav class="an-list">
     <a class="nav-item active" href="/app">Clusters</a>
     <a class="nav-item" href="/account">Account</a>
@@ -167,7 +167,7 @@ const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
   <div class="an-foot"><div class="an-me">{{.Email}}</div><a href="#" id="logout" class="an-logout">Log out</a></div>
 </aside>
 <main class="admin-main">
-  <button id="nav-toggle" class="nav-burger" aria-label="Toggle menu" title="Hide / show menu">&#9776;</button>
+  <button id="nav-reopen" class="nav-burger" data-nav-toggle aria-label="Show menu" title="Show menu">&#9776;</button>
   <div id="list-head">
     <p class="kicker">Your clusters</p>
     <h1 style="margin:0 0 7px">Clusters</h1>
@@ -181,9 +181,9 @@ const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
 
-var _nt=document.getElementById('nav-toggle'),_sh=document.getElementById('app-shell');
+var _sh=document.getElementById('app-shell');
 if(_sh&&localStorage.getItem('ch-nav')==='hidden')_sh.classList.add('nav-hidden');
-if(_nt)_nt.addEventListener('click',function(){var h=_sh.classList.toggle('nav-hidden');localStorage.setItem('ch-nav',h?'hidden':'shown');});
+document.querySelectorAll('[data-nav-toggle]').forEach(function(b){b.addEventListener('click',function(){var h=_sh.classList.toggle('nav-hidden');localStorage.setItem('ch-nav',h?'hidden':'shown');});});
 
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
@@ -240,7 +240,7 @@ document.getElementById('add-cluster').addEventListener('click',async function()
   showInstall(r.data);load();
 });
 
-function stat(label,val,sub){return '<div style="flex:1;min-width:130px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border)"><div style="font-size:12px;color:var(--faint)">'+label+'</div><div style="font-size:24px;font-weight:700;color:var(--text);margin-top:4px">'+val+'</div>'+(sub?'<div class="u-email" style="margin-top:3px">'+sub+'</div>':'')+'</div>';}
+function stat(label,val,sub){return '<div style="flex:1 1 230px;min-width:230px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border)"><div style="font-size:12px;color:var(--faint)">'+label+'</div><div style="font-size:24px;font-weight:700;color:var(--text);margin-top:4px">'+val+'</div>'+(sub?'<div class="u-email" style="margin-top:3px;white-space:nowrap">'+sub+'</div>':'')+'</div>';}
 
 async function loadDetail(id){
   var box=document.getElementById('clusters');
@@ -271,33 +271,30 @@ async function loadDetail(id){
     function byCpu(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);}
     var svc=all.filter(function(x){return !isJob(x);}).sort(byCpu);
     var jobs=all.filter(isJob).sort(byCpu);
-    function podRow(x){
+    function rowK(x,kind){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
-      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+      return '<tr data-kind="'+kind+'" data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
         '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
         '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
         '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
     }
-    if(svc.length){
-      var nss=Array.from(new Set(svc.map(function(x){return x.namespace;}))).sort();
+    if(svc.length||jobs.length){
+      var nss=Array.from(new Set(all.map(function(x){return x.namespace;}))).sort();
       html+='<section class="card2">'+
-        '<div class="card2-head" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">'+
-          '<div style="flex:1;min-width:150px"><p class="card2-title">Pods ('+svc.length+')</p><p class="card2-desc">'+(hasMetrics?'Live CPU/memory from metrics-server.':'Install metrics-server for CPU/memory.')+'</p></div>'+
-          '<input id="pod-search" class="toolbar-input" placeholder="Search pods…" style="flex:1;min-width:130px">'+
-          '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
+        '<div class="card2-head">'+
+          '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+            '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">Pods ('+svc.length+')</button><button class="seg-btn" data-kind="job">Jobs ('+jobs.length+')</button></div>'+
+            '<input id="pod-search" class="toolbar-input" placeholder="Search…" style="flex:1;min-width:130px">'+
+            '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
+          '</div>'+
+          '<p class="card2-desc" style="margin-top:8px">'+(hasMetrics?'Live CPU/memory from metrics-server.':'Install metrics-server for CPU/memory.')+'</p>'+
         '</div>'+
-        '<div class="tscroll"><table class="users"><thead><tr><th>Pod</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
-        svc.map(podRow).join('')+
+        '<div class="tscroll"><table class="users"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
+        svc.map(function(x){return rowK(x,'pod');}).join('')+jobs.map(function(x){return rowK(x,'job');}).join('')+
         '</tbody></table></div>'+
         (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+
       '</section>';
-    }
-    if(jobs.length){
-      html+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Jobs ('+jobs.length+')</p><p class="card2-desc">Pods created by Jobs.</p></div>'+
-        '<div class="tscroll"><table class="users"><thead><tr><th>Job pod</th><th>Status</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody>'+
-        jobs.map(function(x){var ok=(x.phase==='Running'||x.phase==='Succeeded');return '<tr><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td><td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td><td class="u-time">'+(x.restarts||0)+'</td><td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td><td class="u-email">'+esc(x.node||'')+'</td></tr>';}).join('')+
-        '</tbody></table></div></section>';
     }
     var probs=[];
     (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
@@ -315,16 +312,18 @@ async function loadDetail(id){
     }
     if(!probs.length&&!w.length){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No problems or warnings in the latest snapshot. Looks healthy.</p></div></section>';}
     box.innerHTML=html;
-    var ps=document.getElementById('pod-search'),pn=document.getElementById('pod-ns');
+    var ps=document.getElementById('pod-search'),pn=document.getElementById('pod-ns'),seg=document.getElementById('pj-seg'),_kind='pod';
     function applyPodFilter(){
       var q=((ps&&ps.value)||'').toLowerCase(),ns=(pn&&pn.value)||'';
       document.querySelectorAll('#pods-body tr').forEach(function(tr){
-        var okn=!ns||tr.dataset.ns===ns, okq=!q||(tr.dataset.name||'').indexOf(q)>=0;
-        tr.style.display=(okn&&okq)?'':'none';
+        var okk=tr.dataset.kind===_kind, okn=!ns||tr.dataset.ns===ns, okq=!q||(tr.dataset.name||'').indexOf(q)>=0;
+        tr.style.display=(okk&&okn&&okq)?'':'none';
       });
     }
     if(ps)ps.addEventListener('input',applyPodFilter);
     if(pn)pn.addEventListener('change',applyPodFilter);
+    if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
+    applyPodFilter();
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
 
