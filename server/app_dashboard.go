@@ -167,10 +167,12 @@ const appBody = `{{define "body"}}<div class="admin-shell">
   <div class="an-foot"><div class="an-me">{{.Email}}</div><a href="#" id="logout" class="an-logout">Log out</a></div>
 </aside>
 <main class="admin-main">
-  <p class="kicker">Your clusters</p>
-  <h1 style="margin:0 0 7px">Clusters</h1>
-  <p class="sub">Live health from the read-only agent running in each cluster. Add a cluster to get its one-line install command - your credentials never leave the cluster.</p>
-  <div style="margin:20px 0"><button class="act approve" id="add-cluster">+ Add cluster</button></div>
+  <div id="list-head">
+    <p class="kicker">Your clusters</p>
+    <h1 style="margin:0 0 7px">Clusters</h1>
+    <p class="sub">Live health from the read-only agent running in each cluster. Add a cluster to get its one-line install command - your credentials never leave the cluster.</p>
+    <div style="margin:20px 0"><button class="act approve" id="add-cluster">+ Add cluster</button></div>
+  </div>
   <div id="clusters"></div>
 </main>
 </div>{{end}}
@@ -200,7 +202,8 @@ async function load(){
       var pods=p?(p.running+' / '+p.total):'-';
       var seen=c.lastHeartbeat?new Date(c.lastHeartbeat).toLocaleString():'never';
       var env=c.environment?' · '+esc(c.environment):'';
-      html+='<tr><td><div class="u-name">'+esc(c.name||c.clusterId)+'</div><div class="u-email">'+esc(c.clusterId||'')+env+'</div></td>'+
+      var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
+      html+='<tr style="cursor:pointer" onclick="location.href=\''+link+'\'"><td><div class="u-name"><a href="'+link+'" style="color:var(--accent)">'+esc(c.name||c.clusterId)+'</a></div><div class="u-email">'+esc(c.clusterId||'')+env+'</div></td>'+
         '<td><span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></td>'+
         '<td class="u-time">'+nodes+'</td>'+
         '<td class="u-time">'+pods+'</td>'+
@@ -232,6 +235,56 @@ document.getElementById('add-cluster').addEventListener('click',async function()
   showInstall(r.data);load();
 });
 
-load();
+function stat(label,val,sub){return '<div style="flex:1;min-width:130px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border)"><div style="font-size:12px;color:var(--faint)">'+label+'</div><div style="font-size:24px;font-weight:700;color:var(--text);margin-top:4px">'+val+'</div>'+(sub?'<div class="u-email" style="margin-top:3px">'+sub+'</div>':'')+'</div>';}
+
+async function loadDetail(id){
+  var box=document.getElementById('clusters');
+  box.innerHTML='<p class="sub">Loading…</p>';
+  try{
+    var r=await fetch('/api/app/clusters',{headers:{'Accept':'application/json'}});
+    var payload=await r.json();
+    var list=(payload&&payload.clusters)||[];
+    var c=null;list.forEach(function(x){if(x.clusterId===id)c=x;});
+    if(!c){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Cluster not found.</p>';return;}
+    var connected=c.connected===true;
+    var env=c.environment?esc(c.environment):'';
+    var html='<a href="/app" style="color:var(--muted);text-decoration:none">&larr; All clusters</a>';
+    html+='<h1 style="margin:14px 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
+    html+='<p class="sub">'+esc(c.clusterId)+(env?' · '+env:'')+' · <span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span>'+(c.k8sVersion?' · k8s '+esc(c.k8sVersion):'')+(c.agentVersion?' · agent '+esc(c.agentVersion):'')+'</p>';
+    var L=c.latest;
+    if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
+    var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
+    html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:18px 0">'+
+      stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
+      stat('Pods running',(p.running||0)+' / '+(p.total||0),(p.pending||0)+' pending · '+(p.failed||0)+' failed · '+(p.succeeded||0)+' done')+
+      stat('Workloads',(wl.deployments||0)+' deploy',(wl.daemonSets||0)+' ds · '+(wl.statefulSets||0)+' sts · '+(wl.jobs||0)+' jobs')+
+      stat('Restart pressure',(p.highRestart||0),'pods restarting')+
+    '</div>';
+    var probs=[];
+    (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
+    (L.workloadProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.kind+' '+x.name,msg:x.message});});
+    if(probs.length){
+      html+='<section class="card2"><div class="card2-head"><p class="card2-title">Problems ('+probs.length+')</p><p class="card2-desc">Measured fault signals from the latest snapshot.</p></div><table class="users"><thead><tr><th>Type</th><th>Object</th><th>Detail</th></tr></thead><tbody>';
+      probs.forEach(function(x){html+='<tr><td><span class="pill off"><span class="dot"></span>'+esc(x.type)+'</span></td><td class="u-email">'+esc(x.where)+'</td><td class="u-time">'+esc(x.msg||'')+'</td></tr>';});
+      html+='</tbody></table></section>';
+    }
+    var w=L.warnings||[];
+    if(w.length){
+      html+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Recent warnings ('+w.length+')</p></div><table class="users"><thead><tr><th>Reason</th><th>Object</th><th>Count</th><th>Last seen</th></tr></thead><tbody>';
+      w.forEach(function(e){html+='<tr><td class="u-name" style="font-size:13.5px">'+esc(e.reason)+'</td><td class="u-email">'+esc(e.namespace)+'/'+esc(e.object)+'</td><td class="u-time">'+(e.count||0)+'</td><td class="u-time">'+(e.lastSeen?new Date(e.lastSeen).toLocaleString():'')+'</td></tr>';});
+      html+='</tbody></table></section>';
+    }
+    if(!probs.length&&!w.length){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No problems or warnings in the latest snapshot. Looks healthy.</p></div></section>';}
+    box.innerHTML=html;
+  }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
+}
+
+function route(){
+  var id=new URLSearchParams(location.search).get('cluster');
+  var head=document.getElementById('list-head');
+  if(id){head.style.display='none';loadDetail(id);}
+  else{head.style.display='';load();}
+}
+route();
 </script>{{end}}`
 
