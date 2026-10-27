@@ -15,17 +15,17 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Clusterheart">
     <meta property="og:url" content="https://clusterheart.com/">
-    <meta property="og:title" content="Clusterheart — Your whole Kubernetes cluster. One application.">
-    <meta property="og:description" content="Desktop Kubernetes dashboard: pods, jobs, nodes, FinOps cost, an AI copilot, and one-click rightsizing. Runs locally — your credentials never leave your machine.">
+    <meta property="og:title" content="Clusterheart: Your whole Kubernetes cluster. One application.">
+    <meta property="og:description" content="Desktop Kubernetes dashboard: pods, jobs, nodes, FinOps cost, an AI copilot, and one-click rightsizing. Runs locally. Your credentials never leave your machine.">
     <meta property="og:image" content="https://clusterheart.com/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="Clusterheart — your whole Kubernetes cluster, one application.">
+    <meta property="og:image:alt" content="Clusterheart: your whole Kubernetes cluster, one application.">
 
     <!-- Twitter card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Clusterheart — Your whole Kubernetes cluster. One application.">
-    <meta name="twitter:description" content="Desktop Kubernetes dashboard: pods, jobs, nodes, FinOps cost, an AI copilot, and one-click rightsizing. Runs locally — your credentials never leave your machine.">
+    <meta name="twitter:title" content="Clusterheart: Your whole Kubernetes cluster. One application.">
+    <meta name="twitter:description" content="Desktop Kubernetes dashboard: pods, jobs, nodes, FinOps cost, an AI copilot, and one-click rightsizing. Runs locally. Your credentials never leave your machine.">
     <meta name="twitter:image" content="https://clusterheart.com/og.png">
 
     <!-- Speed up the external font/icon/style fetches -->
@@ -47,7 +47,7 @@
         /* ===== Two schemes, one set of utilities =====
            Values are space-separated RGB channels so Tailwind's /opacity works. */
         :root {
-            /* LIGHT (default) — clean white, black ink */
+            /* LIGHT (default) - clean white, black ink */
             --c-base: 255 255 255;
             --c-surface: 250 250 250;
             --c-panel: 255 255 255;
@@ -66,7 +66,7 @@
             --dot-a: 0.05;
         }
         .dark {
-            /* DARK — true black throughout, icy sky-blue */
+            /* DARK - true black throughout, icy sky-blue */
             --c-base: 0 0 0;
             --c-surface: 0 0 0;
             --c-panel: 17 27 44;
@@ -91,7 +91,7 @@
         }
         /* Smooth cross-fade when switching schemes */
         body, body * { transition: background-color .35s ease, border-color .35s ease, color .35s ease; }
-        /* The cost counter animates its own colour per frame — don't smear it */
+        /* The cost counter animates its own colour per frame - don't smear it */
         #costNum { transition: none; }
         .mono { font-family: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace; }
 
@@ -137,7 +137,7 @@
     <nav class="fixed w-full z-50 bg-canvas/80 backdrop-blur-xl border-b border-line" id="navbar">
         <div class="max-w-6xl mx-auto px-6">
             <div class="relative flex items-center justify-between h-16">
-                <button type="button" data-theme-logo aria-label="Clusterheart — click to switch colour scheme" title="Switch colour scheme" class="flex items-center gap-2.5 cursor-pointer select-none">
+                <button type="button" data-theme-logo aria-label="Clusterheart, click to switch colour scheme" title="Switch colour scheme" class="flex items-center gap-2.5 cursor-pointer select-none">
                     <svg viewBox="0 0 100 100" class="logo-mark w-7 h-7 shrink-0" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="50" cy="50" r="15" class="logo-center"/>
                         <circle cx="50" cy="15" r="10.5" class="logo-outer"/><circle cx="80.3" cy="32.5" r="10.5" class="logo-outer"/><circle cx="80.3" cy="67.5" r="10.5" class="logo-outer"/><circle cx="50" cy="85" r="10.5" class="logo-outer"/><circle cx="19.7" cy="67.5" r="10.5" class="logo-outer"/><circle cx="19.7" cy="32.5" r="10.5" class="logo-outer"/>
