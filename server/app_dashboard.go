@@ -331,14 +331,22 @@ async function load(){
     var html='<div class="cl-grid">';
     list.forEach(function(c){
       var connected=c.connected===true;
-      var n=c.latest&&c.latest.nodes, p=c.latest&&c.latest.pods;
+      var L=c.latest||{},n=L.nodes,p=L.pods||{};
+      // Split service pods from job pods so completed jobs don't inflate the
+      // running/total (keeps parity with the detail view).
+      var all=L.podList||[];
+      var svc=all.filter(function(x){return (x.owner||'').indexOf('Job/')!==0;});
+      var jobsArr=all.filter(function(x){return (x.owner||'').indexOf('Job/')===0;});
+      var havePL=all.length>0;
+      var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
       var nodes=n?(n.ready+' / '+n.total):'—';
-      var pods=p?(p.running+' / '+p.total):'—';
+      var pods=havePL?(podRun+' / '+svc.length):(p.running!=null?(p.running+' / '+p.total):'—');
+      var jobsN=havePL?(''+jobsArr.length):(p.succeeded!=null?(''+p.succeeded):'—');
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
       html+='<div class="cl-card">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
-        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods</span></div></div>'+
+        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div></div>'+
         '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span><div class="cl-foot-actions">'+
           '<button class="act forceout info-btn" data-id="'+esc(c.clusterId||'')+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>'+
           '<button class="act revoke del-btn" data-id="'+esc(c.clusterId||'')+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button>'+
