@@ -172,7 +172,7 @@ const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
     <p class="kicker">Your clusters</p>
     <h1 style="margin:0 0 7px">Clusters</h1>
     <p class="sub">Live health from the read-only agent running in each cluster. Add a cluster to get its one-line install command - your credentials never leave the cluster.</p>
-    <div style="margin:20px 0"><button class="act approve" id="add-cluster">+ Add cluster</button></div>
+    <div style="margin:20px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap"><button class="act approve" id="add-cluster">+ Add cluster</button><a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent);font-size:13.5px;font-weight:600">How to connect a cluster &rarr;</a></div>
   </div>
   <div id="clusters"></div>
 </main>
@@ -221,7 +221,7 @@ async function load(){
 
 function showInstall(d){
   var box=document.getElementById('clusters');
-  var pre='<section class="card2"><div class="card2-head"><p class="card2-title">Install the agent</p><p class="card2-desc">Run this against the cluster you want to watch. The agent is read-only and streams health here. Keep the token secret.</p></div><div class="card2-body">'+
+  var pre='<section class="card2"><div class="card2-head"><p class="card2-title">Install the agent</p><p class="card2-desc">Run this against the cluster you want to watch. The agent is read-only. <b>Save the AGENT_TOKEN now. It is shown only once.</b> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent)">Full guide &rarr;</a></p></div><div class="card2-body">'+
     '<textarea class="nb" rows="6" readonly onclick="this.select()">'+esc(d.install)+'</textarea>'+
     '<div class="nb-actions"><button class="act approve" id="copy-install">Copy</button><span class="nb-msg">Cluster ID: '+esc(d.clusterId)+'</span></div>'+
     '</div></section>';
