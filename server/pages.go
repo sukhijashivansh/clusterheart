@@ -193,6 +193,10 @@ input::placeholder{color:var(--faint)}
 .cl-seen{font-size:12px;color:var(--muted)}
 .cl-foot-actions{display:flex;gap:6px;flex-shrink:0}
 .cl-foot-actions .act{margin:0;padding:6px 12px;font-size:12.5px}
+/* loading spinner (accent comet ring) */
+.spin-wrap{display:flex;justify-content:center;align-items:center;padding:60px 0}
+.spinner{width:36px;height:36px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0%,var(--accent) 95%);-webkit-mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 0);mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 0);animation:ch-spin .75s linear infinite}
+@keyframes ch-spin{to{transform:rotate(1turn)}}
 .seg{display:inline-flex;height:36px;border:1px solid var(--border-strong);overflow:hidden;flex-shrink:0}
 .seg-btn{display:inline-flex;align-items:center;height:100%;padding:0 15px;font-size:12.5px;font-weight:600;background:transparent;color:var(--muted);border:none;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .14s,color .14s}
 .seg-btn:hover:not(.active){color:var(--text)}

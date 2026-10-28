@@ -318,7 +318,7 @@ function chModal(o){return new Promise(function(res){
 
 async function load(){
   var box=document.getElementById('clusters');
-  box.innerHTML='<p class="sub">Loading…</p>';
+  box.innerHTML='<div class="spin-wrap"><div class="spinner"></div></div>';
   try{
     var r=await fetch('/api/app/clusters',{headers:{'Accept':'application/json'}});
     if(!r.ok){box.innerHTML='<p class="sub">Could not load clusters.</p>';return;}
@@ -384,7 +384,7 @@ function stat(label,val,sub){return '<div class="statcard"><div class="stat-labe
 
 async function loadDetail(id){
   var box=document.getElementById('clusters');
-  box.innerHTML='<p class="sub">Loading…</p>';
+  box.innerHTML='<div class="spin-wrap"><div class="spinner"></div></div>';
   try{
     var r=await fetch('/api/app/clusters',{headers:{'Accept':'application/json'}});
     var payload=await r.json();
