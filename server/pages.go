@@ -193,14 +193,23 @@ input::placeholder{color:var(--faint)}
   .tscroll{max-height:62vh}
   .nav-burger{display:none}
   .an-me{display:none}
-  .admin-nav{overflow:visible;white-space:normal}
-  .an-brand{border-bottom:none;margin:0 14px 0 0;padding:0;justify-content:flex-start}
-  .sb-add{width:auto;margin:0 12px 0 0;order:-1}
+  .admin-nav{overflow:visible;white-space:normal;flex-wrap:wrap;gap:10px 14px;padding:12px 14px}
+  .an-brand{border-bottom:none;margin:0;padding:0;justify-content:flex-start}
+  .an-list{gap:16px;flex-wrap:wrap}
+  .sb-add{width:auto;margin:0;padding:7px 12px;font-size:13px;white-space:nowrap;flex-shrink:0}
   .statgrid{gap:6px}
   .statcard{padding:9px 8px}
   .stat-label{font-size:9.5px}
   .stat-val{font-size:16px}
   .stat-sub{display:none}
+  /* app tables keep real columns + headers (scroll sideways) instead of the
+     admin-style label stacking, which has no labels here */
+  #clusters table.users{display:table;width:100%;min-width:600px}
+  #clusters table.users thead{display:table-header-group}
+  #clusters table.users tbody{display:table-row-group}
+  #clusters table.users tr{display:table-row}
+  #clusters table.users th,#clusters table.users td{display:table-cell;width:auto}
+  #clusters table.users td::before{display:none}
 }
 
 /* broadcast notice composer */
