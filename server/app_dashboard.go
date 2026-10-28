@@ -393,18 +393,30 @@ async function loadDetail(id){
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
+    var all=L.podList||[];
+    function isJob(x){return (x.owner||'').indexOf('Job/')===0;}
+    var svc=all.filter(function(x){return !isJob(x);});
+    var jobs=all.filter(isJob);
+    // Split pods from jobs so the counts read clean. Completed job pods were
+    // inflating the "pods running" total (e.g. 35 / 45); show them apart.
+    var havePL=all.length>0;
+    var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
+    var jobDone=jobs.filter(function(x){return x.phase==='Succeeded';}).length;
+    var jobRun=jobs.filter(function(x){return x.phase==='Running';}).length;
+    var podsVal=havePL?(podRun+' / '+svc.length):((p.running||0)+' / '+(p.total||0));
+    var podsSub=havePL?(svc.length+' total'):((p.pending||0)+' pending · '+(p.failed||0)+' failed');
+    var jobsVal=havePL?(''+jobs.length):(''+(wl.jobs||0));
+    var jobsSub=havePL?(jobDone+' done · '+jobRun+' running'):((wl.jobs||0)+' configured');
     html+='<div class="statgrid">'+
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
-      stat('Pods running',(p.running||0)+' / '+(p.total||0),(p.pending||0)+' pending · '+(p.failed||0)+' failed · '+(p.succeeded||0)+' done')+
-      stat('Workloads',(wl.deployments||0)+' deploy',(wl.daemonSets||0)+' ds · '+(wl.statefulSets||0)+' sts · '+(wl.jobs||0)+' jobs')+
+      stat('Pods',podsVal,podsSub)+
+      stat('Jobs',jobsVal,jobsSub)+
       stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
-    var all=L.podList||[];
     var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});
-    function isJob(x){return (x.owner||'').indexOf('Job/')===0;}
     function byCpu(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);}
-    var svc=all.filter(function(x){return !isJob(x);}).sort(byCpu);
-    var jobs=all.filter(isJob).sort(byCpu);
+    svc.sort(byCpu);
+    jobs.sort(byCpu);
     function rowK(x,kind){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
       return '<tr data-kind="'+kind+'" data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
