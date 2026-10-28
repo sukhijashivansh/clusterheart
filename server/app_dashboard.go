@@ -419,11 +419,11 @@ async function loadDetail(id){
         '<div class="card2-head">'+
           '<div class="toolbar-row">'+
             '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">'+svc.length+' Pods</button><button class="seg-btn" data-kind="job">'+jobs.length+' Jobs</button></div>'+
-            '<input id="pod-search" class="toolbar-input grow" placeholder="Search">'+
-            '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
+            '<select id="pod-ns" class="toolbar-input toolbar-ns"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
+            '<input id="pod-search" class="toolbar-input toolbar-search" placeholder="Search">'+
           '</div>'+
         '</div>'+
-        '<div class="tscroll"><table class="users"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
+        '<div class="tscroll"><table class="users ptable"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
         svc.map(function(x){return rowK(x,'pod');}).join('')+jobs.map(function(x){return rowK(x,'job');}).join('')+
         '</tbody></table></div>'+
         (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+

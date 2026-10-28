@@ -201,7 +201,9 @@ input::placeholder{color:var(--faint)}
 .toolbar-input{height:36px;width:auto;padding:0 12px;font-size:13px;background:var(--input-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;outline:none;appearance:none;-webkit-appearance:none}
 .toolbar-input:focus{border-color:var(--accent)}
 .toolbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.toolbar-row .toolbar-input.grow{flex:1 1 180px;min-width:140px}
+.toolbar-row .seg{flex-shrink:0}
+.toolbar-row .toolbar-ns{flex-shrink:0;margin-left:auto}
+.toolbar-row .toolbar-search{order:3;flex:1 1 100%;width:100%}
 /* four-up stat grid (desktop) -> two-up on phones */
 .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
 .statcard{display:flex;flex-direction:column;padding:12px 13px;background:var(--surface2);border:1px solid var(--border);min-width:0;overflow:hidden}
@@ -276,7 +278,11 @@ table.users tbody tr{border-top:1px solid var(--border);transition:background .1
 table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:var(--hover)}
 .u-name{font-weight:600;font-size:14.5px;color:var(--text)}
-.pod-name{font-size:13.5px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pod-name{font-size:13.5px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* pods/jobs table: separate the identity column from the metrics with a
+   divider + breathing room so Status never crowds the pod name */
+.ptable th:first-child,.ptable td:first-child{padding-right:28px;border-right:1px solid var(--border)}
+.ptable th:nth-child(2),.ptable td:nth-child(2){padding-left:24px}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
