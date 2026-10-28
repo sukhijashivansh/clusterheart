@@ -212,3 +212,15 @@ func (s *mongoStore) SetAgentTokenHash(ctx context.Context, clusterID, hash stri
 	}
 	return nil
 }
+
+func (s *mongoStore) DeleteCluster(ctx context.Context, clusterID string) error {
+	res, err := s.clusters.DeleteOne(ctx, bson.M{"_id": clusterID})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return ErrNotFound
+	}
+	_, _ = s.snapshots.DeleteMany(ctx, bson.M{"clusterId": clusterID})
+	return nil
+}

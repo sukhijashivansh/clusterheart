@@ -118,9 +118,9 @@ input::placeholder{color:var(--faint)}
 
 /* --- admin (sidebar shell, Apple-style) --- */
 .admin-shell{display:flex;min-height:100vh}
-.admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-.an-brand{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
-.an-brandrow{display:flex;align-items:center;gap:9px}
+.admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden;white-space:nowrap;transition:width .25s ease,padding .25s ease,opacity .2s ease}
+.an-brand{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
+.an-brandrow{display:flex;align-items:center;gap:9px;min-width:0}
 .an-brand .wordmark{font-size:16px}
 .an-list{display:flex;flex-direction:column;gap:2px}
 .nav-item{display:block;padding:9px 12px;border-radius:0;font-size:14px;font-weight:500;color:var(--muted)}
@@ -150,8 +150,8 @@ input::placeholder{color:var(--faint)}
 .tscroll{max-height:440px;overflow:auto;border-top:1px solid var(--border)}
 .tscroll table.users th{position:sticky;top:0;background:var(--input-bg);z-index:1}
 /* collapsible sidebar via the burger toggle */
-.admin-shell.nav-hidden .admin-nav{display:none}
-.nav-burger{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px}
+.admin-shell.nav-hidden .admin-nav{width:0;padding-left:0;padding-right:0;border-right:none;opacity:0}
+.nav-burger{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);cursor:pointer;font-size:21px;line-height:1;padding:2px;flex-shrink:0}
 .nav-burger:hover{color:var(--accent)}
 #nav-reopen{display:none;margin-bottom:14px}
 .nav-hidden #nav-reopen{display:inline-flex}

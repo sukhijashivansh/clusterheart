@@ -170,6 +170,35 @@ func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAppClusterDelete removes one of the user's clusters (tenant-scoped).
+func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil || !u.Approved {
+		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeJSON(w, 400, map[string]any{"error": "missing cluster id"})
+		return
+	}
+	tenant := tenantFor(u.Email)
+	code, _, err := a.cpDo("DELETE", "/api/v1/clusters/"+url.PathEscape(id)+"?tenantId="+url.QueryEscape(tenant), nil)
+	if err != nil {
+		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
+		return
+	}
+	if code == 404 {
+		writeJSON(w, 404, map[string]any{"error": "cluster not found"})
+		return
+	}
+	if code < 200 || code >= 300 {
+		writeJSON(w, 502, map[string]any{"error": "could not delete cluster"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
 // agentInstallSnippet builds the copy-paste kubectl commands that enroll the
 // read-only agent in the user's cluster. The per-cluster secrets go into a k8s
 // Secret; the manifest itself is generic and hosted publicly.
@@ -202,10 +231,11 @@ var appTmpl = page(appBody)
 
 const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 <aside class="admin-nav">
-  <div class="an-brand"><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button><div class="an-brandrow">` + logoSVG + `<span class="wordmark">Clusterheart</span></div></div>
+  <div class="an-brand"><div class="an-brandrow">` + logoSVG + `<span class="wordmark">Clusterheart</span></div><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button></div>
   <nav class="an-list">
     <a class="nav-item active" href="/app">Clusters</a>
     <a class="nav-item" href="/account">Account</a>
+    <a class="nav-item" href="/docs/connect-a-cluster.md" target="_blank" rel="noopener">Help</a>
   </nav>
   <div class="an-foot"><div class="an-me">{{.Email}}</div><a href="#" id="logout" class="an-logout">Log out</a></div>
 </aside>
@@ -213,9 +243,8 @@ const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
   <button id="nav-reopen" class="nav-burger" data-nav-toggle aria-label="Show menu" title="Show menu">&#9776;</button>
   <div id="list-head">
     <p class="kicker">Your clusters</p>
-    <h1 style="margin:0 0 7px">Clusters</h1>
-    <p class="sub">Live health from the read-only agent running in each cluster. Add a cluster to get its one-line install command - your credentials never leave the cluster.</p>
-    <div style="margin:20px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap"><button class="act approve" id="add-cluster">+ Add cluster</button><a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent);font-size:13.5px;font-weight:600">How to connect a cluster &rarr;</a></div>
+    <h1 style="margin:0 0 16px">Clusters</h1>
+    <div style="margin:0 0 20px"><button class="act approve" id="add-cluster">+ Add cluster</button></div>
   </div>
   <div id="clusters"></div>
 </main>
@@ -242,7 +271,7 @@ async function load(){
       box.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No clusters yet. Click <b>Add cluster</b> to connect your first one.</p></div></section>';
       return;
     }
-    var html='<section class="card2"><table class="users"><thead><tr><th>Cluster</th><th>Status</th><th>Nodes</th><th>Pods</th><th>Last seen</th></tr></thead><tbody>';
+    var html='<section class="card2"><table class="users"><thead><tr><th>Cluster</th><th>Status</th><th>Nodes</th><th>Pods</th><th>Last seen</th><th></th></tr></thead><tbody>';
     list.forEach(function(c){
       var connected=c.connected===true;
       var n=c.latest&&c.latest.nodes, p=c.latest&&c.latest.pods;
@@ -251,11 +280,12 @@ async function load(){
       var seen=c.lastHeartbeat?new Date(c.lastHeartbeat).toLocaleString():'never';
       var env=c.environment?' · '+esc(c.environment):'';
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
-      html+='<tr style="cursor:pointer" onclick="location.href=\''+link+'\'"><td><div class="u-name"><a href="'+link+'" style="color:var(--accent)">'+esc(c.name||c.clusterId)+'</a></div><div class="u-email">'+esc(c.clusterId||'')+env+'</div></td>'+
+      html+='<tr><td><div class="u-name"><a href="'+link+'" style="color:var(--accent)">'+esc(c.name||c.clusterId)+'</a></div><div class="u-email">'+esc(c.clusterId||'')+env+'</div></td>'+
         '<td><span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></td>'+
         '<td class="u-time">'+nodes+'</td>'+
         '<td class="u-time">'+pods+'</td>'+
-        '<td class="u-time">'+seen+'</td></tr>';
+        '<td class="u-time">'+seen+'</td>'+
+        '<td class="cell-act"><button class="act revoke del-btn" data-id="'+esc(c.clusterId||'')+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button></td></tr>';
     });
     html+='</tbody></table></section>';
     box.innerHTML=html;
@@ -373,6 +403,14 @@ async function loadDetail(id){
 
 var _cbox=document.getElementById('clusters');
 if(_cbox)_cbox.addEventListener('click',async function(e){
+  var del=e.target.closest&&e.target.closest('.del-btn');
+  if(del){
+    if(!confirm('Delete "'+(del.dataset.name||del.dataset.id)+'" from Clusterheart? If an agent is still running in that cluster, uninstall it too (see Help).'))return;
+    del.disabled=true;del.textContent='…';
+    var dr=await fetch('/api/app/clusters/'+encodeURIComponent(del.dataset.id),{method:'DELETE',headers:{'Accept':'application/json'}});
+    if(!dr.ok){alert('Could not delete cluster');del.disabled=false;del.textContent='Delete';return;}
+    load();return;
+  }
   var cb=e.target.closest&&e.target.closest('#connect-btn');
   if(!cb)return;
   if(!confirm('This issues a NEW agent token and invalidates any previous token for this cluster. Continue?'))return;

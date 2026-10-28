@@ -76,6 +76,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/clusters", s.requireAdmin(s.handleRegister))
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/agent-token", s.requireAdmin(s.handleRotateAgentToken))
+	mux.HandleFunc("DELETE /api/v1/clusters/{id}", s.requireAdmin(s.handleDeleteCluster))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
 	mux.HandleFunc("GET /api/v1/stats", s.requireAdmin(s.handleStats))
@@ -175,6 +176,27 @@ func (s *Server) handleRotateAgentToken(w http.ResponseWriter, r *http.Request) 
 	}
 	s.log.Info("agent token rotated", "clusterId", clusterID)
 	writeJSON(w, http.StatusOK, contract.RegisterResponse{ClusterID: clusterID, AgentToken: token, APIVersion: contract.APIVersion})
+}
+
+// handleDeleteCluster removes a cluster and its snapshots. Optional ?tenantId
+// guards against deleting a cluster outside the caller's tenant.
+func (s *Server) handleDeleteCluster(w http.ResponseWriter, r *http.Request) {
+	clusterID := r.PathValue("id")
+	c, err := s.store.GetCluster(r.Context(), clusterID)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	if tid := strings.TrimSpace(r.URL.Query().Get("tenantId")); tid != "" && tid != c.TenantID {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	if err := s.store.DeleteCluster(r.Context(), clusterID); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not delete cluster")
+		return
+	}
+	s.log.Info("cluster deleted", "clusterId", clusterID)
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": clusterID})
 }
 
 func (s *Server) handleListClusters(w http.ResponseWriter, r *http.Request) {
