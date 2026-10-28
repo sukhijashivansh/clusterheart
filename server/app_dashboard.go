@@ -263,32 +263,44 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 
 var appTmpl = page(appBody)
 
-const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
-<aside class="admin-nav">
-  <div class="an-brand"><div class="an-brandrow">` + logoSVG + `<span class="wordmark">Clusterheart</span></div><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button></div>
-  <button class="act approve sb-add" id="add-cluster">+ Add cluster</button>
-  <nav class="an-list">
-    <a class="nav-item active" href="/app">Clusters</a>
-    <a class="nav-item" href="/account">Account</a>
-    <a class="nav-item" href="/docs/connect-a-cluster.md" target="_blank" rel="noopener">Help</a>
-  </nav>
-  <div class="an-foot"><div class="an-me">{{.Email}}</div><a href="#" id="logout" class="an-logout">Log out</a></div>
-</aside>
-<main class="admin-main">
-  <button id="nav-reopen" class="nav-burger" data-nav-toggle aria-label="Show menu" title="Show menu">&#9776;</button>
+const burgerSVG = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 5h13M2.5 9h13M2.5 13h13"/></svg>`
+
+const appBody = `{{define "body"}}<div class="app2">
+<header class="topbar">
+  <a class="tb-brand" href="/app">` + logoSVG + `<span class="wordmark">Clusterheart</span></a>
+  <div class="tb-right">
+    <button class="act approve tb-add" id="add-cluster">+ Add cluster</button>
+    <div class="menu" id="menu">
+      <button class="menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">` + burgerSVG + `</button>
+      <div class="menu-pop" role="menu">
+        <div class="menu-email">{{.Email}}</div>
+        <a class="menu-item" role="menuitem" href="/account">Account</a>
+        <a class="menu-item" role="menuitem" href="/docs/connect-a-cluster.md" target="_blank" rel="noopener">Help</a>
+        <div class="menu-sep"></div>
+        <a class="menu-item danger" role="menuitem" href="#" id="logout">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+<main class="app2-main">
   <div id="list-head"></div>
-  <div id="clusters" style="margin-top:4px"></div>
+  <div id="clusters"></div>
 </main>
 </div>{{end}}
 {{define "script"}}<script>
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
 
-var _sh=document.getElementById('app-shell');
-if(_sh&&localStorage.getItem('ch-nav')==='hidden')_sh.classList.add('nav-hidden');
-document.querySelectorAll('[data-nav-toggle]').forEach(function(b){b.addEventListener('click',function(){var h=_sh.classList.toggle('nav-hidden');localStorage.setItem('ch-nav',h?'hidden':'shown');});});
+// burger dropdown menu (options)
+var _menu=document.getElementById('menu'),_mb=document.getElementById('menu-btn');
+if(_mb){
+  _mb.addEventListener('click',function(e){e.stopPropagation();var o=_menu.classList.toggle('open');_mb.setAttribute('aria-expanded',o?'true':'false');});
+  document.addEventListener('click',function(e){if(_menu.classList.contains('open')&&!_menu.contains(e.target)){_menu.classList.remove('open');_mb.setAttribute('aria-expanded','false');}});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&_menu.classList.contains('open')){_menu.classList.remove('open');_mb.setAttribute('aria-expanded','false');}});
+}
 
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function ago(ts){if(!ts)return 'never';var s=(Date.now()-new Date(ts).getTime())/1000;if(s<0)s=0;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 
 // Apple-style modal. Resolves to the input value (or true) on confirm, null on cancel.
 function chModal(o){return new Promise(function(res){
@@ -316,23 +328,24 @@ async function load(){
       box.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No clusters yet. Click <b>Add cluster</b> to connect your first one.</p></div></section>';
       return;
     }
-    var html='<section class="card2"><table class="users"><thead><tr><th>Cluster</th><th>Status</th><th>Nodes</th><th>Pods</th><th>Last seen</th><th></th></tr></thead><tbody>';
+    var html='<div class="cl-grid">';
     list.forEach(function(c){
       var connected=c.connected===true;
       var n=c.latest&&c.latest.nodes, p=c.latest&&c.latest.pods;
-      var nodes=n?(n.ready+' / '+n.total):'-';
-      var pods=p?(p.running+' / '+p.total):'-';
-      var seen=c.lastHeartbeat?new Date(c.lastHeartbeat).toLocaleString():'never';
-      var env=c.environment?' · '+esc(c.environment):'';
+      var nodes=n?(n.ready+' / '+n.total):'—';
+      var pods=p?(p.running+' / '+p.total):'—';
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
-      html+='<tr><td><div class="u-name"><a href="'+link+'" style="color:var(--accent)">'+esc(c.name||c.clusterId)+'</a></div><div class="u-email">'+esc(c.clusterId||'')+env+'</div></td>'+
-        '<td><span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></td>'+
-        '<td class="u-time">'+nodes+'</td>'+
-        '<td class="u-time">'+pods+'</td>'+
-        '<td class="u-time">'+seen+'</td>'+
-        '<td class="cell-act"><button class="act revoke del-btn" data-id="'+esc(c.clusterId||'')+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button></td></tr>';
+      html+='<div class="cl-card">'+
+        '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
+          '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
+        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods</span></div></div>'+
+        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span><div class="cl-foot-actions">'+
+          '<button class="act forceout info-btn" data-id="'+esc(c.clusterId||'')+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>'+
+          '<button class="act revoke del-btn" data-id="'+esc(c.clusterId||'')+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button>'+
+        '</div></div>'+
+      '</div>';
     });
-    html+='</tbody></table></section>';
+    html+='</div>';
     box.innerHTML=html;
   }catch(e){box.innerHTML='<p class="sub">Could not load clusters.</p>';}
 }
@@ -372,10 +385,9 @@ async function loadDetail(id){
     var connected=c.connected===true;
     var env=c.environment?esc(c.environment):'';
     var statusHtml='<span class="pill '+(connected?'on':'off')+'" style="font-size:13px;margin-left:10px;vertical-align:middle">'+(connected?'Connected':'Offline')+'</span>';
-    var btns='<button class="act forceout" id="info-btn" data-id="'+esc(c.clusterId)+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
+    var btns='';
     if(!connected){btns+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Install</button>';}
     btns+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
-    btns+='<button class="act revoke del-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||c.clusterId)+'">Delete</button>';
     var html='<div class="detail-head"><h1 style="margin:0">'+esc(c.name||c.clusterId)+statusHtml+'</h1><div class="actbar">'+btns+'</div></div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
@@ -384,7 +396,7 @@ async function loadDetail(id){
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
       stat('Pods running',(p.running||0)+' / '+(p.total||0),(p.pending||0)+' pending · '+(p.failed||0)+' failed · '+(p.succeeded||0)+' done')+
       stat('Workloads',(wl.deployments||0)+' deploy',(wl.daemonSets||0)+' ds · '+(wl.statefulSets||0)+' sts · '+(wl.jobs||0)+' jobs')+
-      stat('Restart pressure',(p.highRestart||0),'pods restarting')+
+      stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
     var all=L.podList||[];
     var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});
@@ -404,9 +416,9 @@ async function loadDetail(id){
       var nss=Array.from(new Set(all.map(function(x){return x.namespace;}))).sort();
       html+='<section class="card2">'+
         '<div class="card2-head">'+
-          '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+          '<div class="toolbar-row">'+
             '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">'+svc.length+' Pods</button><button class="seg-btn" data-kind="job">'+jobs.length+' Jobs</button></div>'+
-            '<input id="pod-search" class="toolbar-input" placeholder="Search" style="flex:1;min-width:130px">'+
+            '<input id="pod-search" class="toolbar-input grow" placeholder="Search">'+
             '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
           '</div>'+
         '</div>'+
@@ -450,7 +462,7 @@ async function loadDetail(id){
 var _cbox=document.getElementById('clusters');
 if(_cbox)_cbox.addEventListener('click',async function(e){
   var inDetail=!!new URLSearchParams(location.search).get('cluster');
-  var ib=e.target.closest&&e.target.closest('#info-btn');
+  var ib=e.target.closest&&e.target.closest('.info-btn');
   if(ib){
     var d=ib.dataset;var seen=d.seen?new Date(d.seen).toLocaleString():'never';
     var rows=[['Status',d.conn],['Cluster ID',d.id],['Environment',d.env||'-'],['Kubernetes',d.k8s||'-'],['Agent',d.agent||'-'],['Last seen',seen]];
