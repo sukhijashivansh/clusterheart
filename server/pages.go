@@ -163,9 +163,11 @@ input::placeholder{color:var(--faint)}
 .menu-pop{position:absolute;top:calc(100% + 10px);right:0;min-width:214px;background:var(--panel);border:1px solid var(--border-strong);border-radius:13px;box-shadow:0 20px 52px -16px rgba(0,0,0,.42),0 2px 8px -2px rgba(0,0,0,.14);padding:6px;opacity:0;transform:translateY(-6px) scale(.98);transform-origin:top right;pointer-events:none;transition:opacity .16s ease,transform .18s cubic-bezier(.4,0,.2,1);z-index:60}
 .menu.open .menu-pop{opacity:1;transform:none;pointer-events:auto}
 .menu-email{padding:7px 12px 10px;font-size:12px;color:var(--faint);border-bottom:1px solid var(--border);margin:0 0 4px;word-break:break-all}
-.menu-item{display:block;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;color:var(--text)}
+.menu-item{display:block;width:100%;text-align:left;padding:9px 12px;border:none;background:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:500;color:var(--text);cursor:pointer}
 .menu-item:hover{background:var(--hover);color:var(--text)}
 .menu-item.active{font-weight:650}
+.menu-item.accent{color:var(--accent);font-weight:650}
+.menu-item.accent:hover{background:var(--hover);color:var(--accent)}
 .menu-sep{height:1px;background:var(--border);margin:4px 6px}
 .menu-item.danger{color:var(--red)}
 .menu-item.danger:hover{background:color-mix(in srgb,var(--red) 12%,transparent)}
@@ -209,6 +211,8 @@ input::placeholder{color:var(--faint)}
 .stat-sub{font-size:10.5px;color:var(--faint);margin-top:auto;padding-top:4px}
 .admin-main h1{font-size:22px;letter-spacing:-.5px}
 .detail-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.rename-name{cursor:default;border-radius:4px}
+.rename-name:hover{text-decoration:underline;text-decoration-color:var(--border-strong);text-decoration-thickness:1px;text-underline-offset:4px}
 .actbar{display:flex;gap:6px;flex-wrap:wrap}
 .actbar .act{padding:6px 12px;font-size:12.5px}
 /* apple-style small modal */

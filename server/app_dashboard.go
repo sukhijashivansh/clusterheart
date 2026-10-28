@@ -269,11 +269,11 @@ const appBody = `{{define "body"}}<div class="app2">
 <header class="topbar">
   <a class="tb-brand" href="/app">` + logoSVG + `<span class="wordmark">Clusterheart</span></a>
   <div class="tb-right">
-    <button class="act approve tb-add" id="add-cluster">+ Add cluster</button>
     <div class="menu" id="menu">
       <button class="menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">` + burgerSVG + `</button>
       <div class="menu-pop" role="menu">
         <div class="menu-email">{{.Email}}</div>
+        <button class="menu-item accent" role="menuitem" id="add-cluster">+ Add cluster</button>
         <a class="menu-item" role="menuitem" href="/account">Account</a>
         <a class="menu-item" role="menuitem" href="/docs/connect-a-cluster.md" target="_blank" rel="noopener">Help</a>
         <div class="menu-sep"></div>
@@ -362,6 +362,7 @@ function showInstall(d){
 }
 
 document.getElementById('add-cluster').addEventListener('click',async function(){
+  if(_menu){_menu.classList.remove('open');if(_mb)_mb.setAttribute('aria-expanded','false');}
   var name=prompt('Name this cluster (e.g. prod-us-east):','my-cluster');
   if(name===null)return;
   var btn=this;btn.disabled=true;btn.textContent='Creating…';
@@ -388,7 +389,7 @@ async function loadDetail(id){
     var btns='';
     if(!connected){btns+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Install</button>';}
     btns+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
-    var html='<div class="detail-head"><h1 style="margin:0">'+esc(c.name||c.clusterId)+statusHtml+'</h1><div class="actbar">'+btns+'</div></div>';
+    var html='<div class="detail-head"><h1 style="margin:0"><span class="rename-name" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'" title="Double-click to rename">'+esc(c.name||c.clusterId)+'</span>'+statusHtml+'</h1><div class="actbar">'+btns+'</div></div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
@@ -459,7 +460,19 @@ async function loadDetail(id){
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
 
+async function doRename(id,cur){
+  var nn=await chModal({title:'Rename cluster',input:cur,confirm:'Save'});
+  if(nn==null||nn===''||nn===cur)return;
+  var rn=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/rename',{name:nn});
+  if(!rn.ok){await chModal({title:'Failed',body:'Could not rename the cluster.',confirm:'OK'});return;}
+  if(new URLSearchParams(location.search).get('cluster')){loadDetail(id);}else{load();}
+}
+
 var _cbox=document.getElementById('clusters');
+if(_cbox)_cbox.addEventListener('dblclick',function(e){
+  var rn=e.target.closest&&e.target.closest('.rename-name');
+  if(rn){e.preventDefault();doRename(rn.dataset.id,rn.dataset.name||'');}
+});
 if(_cbox)_cbox.addEventListener('click',async function(e){
   var inDetail=!!new URLSearchParams(location.search).get('cluster');
   var ib=e.target.closest&&e.target.closest('.info-btn');
@@ -481,15 +494,7 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
     return;
   }
   var rb=e.target.closest&&e.target.closest('#rename-btn');
-  if(rb){
-    var cur=rb.dataset.name||'';
-    var nn=await chModal({title:'Rename cluster',input:cur,confirm:'Save'});
-    if(nn==null||nn===''||nn===cur)return;
-    var rn=await _post('/api/app/clusters/'+encodeURIComponent(rb.dataset.id)+'/rename',{name:nn});
-    if(!rn.ok){await chModal({title:'Failed',body:'Could not rename the cluster.',confirm:'OK'});return;}
-    if(inDetail){loadDetail(rb.dataset.id);}else{load();}
-    return;
-  }
+  if(rb){doRename(rb.dataset.id,rb.dataset.name||'');return;}
   var cb=e.target.closest&&e.target.closest('#connect-btn');
   if(!cb)return;
   if(!await chModal({title:'Issue a new token?',body:'This creates a NEW agent token and invalidates any previous one for this cluster.',confirm:'Continue'}))return;
