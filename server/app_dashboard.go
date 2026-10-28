@@ -405,8 +405,8 @@ async function loadDetail(id){
       html+='<section class="card2">'+
         '<div class="card2-head">'+
           '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
-            '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">Pods ('+svc.length+')</button><button class="seg-btn" data-kind="job">Jobs ('+jobs.length+')</button></div>'+
-            '<input id="pod-search" class="toolbar-input" placeholder="Search…" style="flex:1;min-width:130px">'+
+            '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">'+svc.length+' Pods</button><button class="seg-btn" data-kind="job">'+jobs.length+' Jobs</button></div>'+
+            '<input id="pod-search" class="toolbar-input" placeholder="Search" style="flex:1;min-width:130px">'+
             '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
           '</div>'+
         '</div>'+

@@ -141,7 +141,7 @@ input::placeholder{color:var(--faint)}
 .count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 7px;margin-right:7px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:11.5px;font-weight:700;vertical-align:middle}
 
 /* cards */
-.card2{background:var(--surface2);border:1px solid var(--border);border-radius:0;box-shadow:0 24px 60px -30px rgba(0,0,0,.8);overflow:hidden;margin:0 0 20px}
+.card2{background:var(--surface2);border:1px solid var(--border);border-radius:0;overflow:hidden;margin:0 0 20px}
 .card2-head{padding:20px 22px 16px;border-bottom:1px solid var(--border)}
 .card2-title{font-size:15px;font-weight:650;letter-spacing:-.2px;color:var(--text);margin:0}
 .card2-desc{font-size:13px;color:var(--muted);margin:3px 0 0}
@@ -151,7 +151,7 @@ input::placeholder{color:var(--faint)}
 .tscroll table.users th{position:sticky;top:0;background:var(--input-bg);z-index:1}
 /* collapsible sidebar via the burger toggle */
 .admin-shell.nav-hidden .admin-nav{width:0;min-width:0;padding-left:0;padding-right:0;border-right:none;opacity:0}
-.admin-shell.nav-hidden .admin-main{padding-top:62px}
+.admin-shell.nav-hidden .admin-main{padding-top:62px;border-left:1px solid var(--border)}
 .nav-burger{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);cursor:pointer;font-size:21px;line-height:1;padding:2px;flex-shrink:0}
 .nav-burger:hover{color:var(--accent)}
 #nav-reopen{position:absolute;top:20px;left:22px;opacity:0;pointer-events:none;transition:opacity .2s ease .12s}
