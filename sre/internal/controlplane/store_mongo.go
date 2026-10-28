@@ -213,6 +213,17 @@ func (s *mongoStore) SetAgentTokenHash(ctx context.Context, clusterID, hash stri
 	return nil
 }
 
+func (s *mongoStore) RenameCluster(ctx context.Context, clusterID, name string) error {
+	res, err := s.clusters.UpdateOne(ctx, bson.M{"_id": clusterID}, bson.M{"$set": bson.M{"name": name}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *mongoStore) DeleteCluster(ctx context.Context, clusterID string) error {
 	res, err := s.clusters.DeleteOne(ctx, bson.M{"_id": clusterID})
 	if err != nil {

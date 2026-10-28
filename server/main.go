@@ -586,6 +586,7 @@ func main() {
 	mux.HandleFunc("/api/app/clusters", a.handleAppClusters)
 	mux.HandleFunc("POST /api/app/clusters/{id}/connect", a.handleAppClusterConnect)
 	mux.HandleFunc("DELETE /api/app/clusters/{id}", a.handleAppClusterDelete)
+	mux.HandleFunc("POST /api/app/clusters/{id}/rename", a.handleAppClusterRename)
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage

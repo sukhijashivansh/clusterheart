@@ -48,6 +48,7 @@ type Store interface {
 	AllClusters(ctx context.Context) ([]Cluster, error)
 	SetRemediationTokenHash(ctx context.Context, clusterID, hash string) error
 	SetAgentTokenHash(ctx context.Context, clusterID, hash string) error
+	RenameCluster(ctx context.Context, clusterID, name string) error
 	DeleteCluster(ctx context.Context, clusterID string) error
 	RecordHeartbeat(ctx context.Context, clusterID string, hb contract.Heartbeat, at time.Time) error
 	SaveSnapshots(ctx context.Context, clusterID string, snaps []contract.ClusterSnapshot) error
@@ -100,6 +101,18 @@ func (m *memStore) SetAgentTokenHash(_ context.Context, clusterID, hash string) 
 		return ErrNotFound
 	}
 	c.AgentTokenHash = hash
+	m.clusters[clusterID] = c
+	return nil
+}
+
+func (m *memStore) RenameCluster(_ context.Context, clusterID, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.clusters[clusterID]
+	if !ok {
+		return ErrNotFound
+	}
+	c.Name = name
 	m.clusters[clusterID] = c
 	return nil
 }

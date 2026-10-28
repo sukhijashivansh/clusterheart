@@ -163,9 +163,23 @@ input::placeholder{color:var(--faint)}
 .toolbar-input:focus{border-color:var(--accent)}
 /* four-up stat grid (desktop) -> two-up on phones */
 .statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+.statcard{padding:13px 14px;background:var(--surface2);border:1px solid var(--border);min-width:0}
+.stat-label{font-size:11px;color:var(--faint);line-height:1.25}
+.stat-val{font-size:20px;font-weight:700;color:var(--text);margin-top:2px;white-space:nowrap}
+.stat-sub{font-size:10.5px;color:var(--faint);margin-top:3px}
 .admin-main h1{font-size:22px;letter-spacing:-.5px}
+/* apple-style small modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:mfade .15s ease}
+@keyframes mfade{from{opacity:0}to{opacity:1}}
+.modal{width:100%;max-width:300px;background:var(--surface2);border:1px solid var(--border-strong);border-radius:14px;padding:20px;text-align:center;box-shadow:0 24px 64px -18px rgba(0,0,0,.85)}
+.modal h3{margin:0 0 6px;font-size:16px;font-weight:650;color:var(--text)}
+.modal p{margin:0 0 14px;font-size:13px;color:var(--muted);line-height:1.5}
+.modal input{width:100%;margin:2px 0 14px;font-size:14px;padding:9px 11px}
+.modal-actions{display:flex;gap:8px}
+.modal-actions button{flex:1;padding:9px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--border-strong);background:transparent;color:var(--text);border-radius:8px}
+.modal-actions .primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.modal-actions .danger{background:#b91c1c;border-color:#b91c1c;color:#fff}
 @media(max-width:720px){
-  .statgrid{grid-template-columns:repeat(2,1fr)}
   .admin-main{padding:18px 14px}
   .admin-main h1{font-size:19px}
   .card2{overflow-x:auto}
@@ -173,6 +187,14 @@ input::placeholder{color:var(--faint)}
   table.users th,table.users td{padding:10px 12px;font-size:12.5px}
   .tscroll{max-height:62vh}
   .nav-burger{display:none}
+  .an-me{display:none}
+  .admin-nav{overflow:visible;white-space:normal}
+  .an-brand{border-bottom:none;margin:0 14px 0 0;padding:0;justify-content:flex-start}
+  .statgrid{gap:6px}
+  .statcard{padding:9px 8px}
+  .stat-label{font-size:9.5px}
+  .stat-val{font-size:16px}
+  .stat-sub{display:none}
 }
 
 /* broadcast notice composer */

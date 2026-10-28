@@ -170,6 +170,40 @@ func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAppClusterRename changes a cluster's display name (tenant-scoped).
+func (a *app) handleAppClusterRename(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil || !u.Approved {
+		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	var in struct {
+		Name string `json:"name"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in)
+	name := strings.TrimSpace(in.Name)
+	if id == "" || name == "" {
+		writeJSON(w, 400, map[string]any{"error": "id and name are required"})
+		return
+	}
+	tenant := tenantFor(u.Email)
+	code, _, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(id)+"/rename?tenantId="+url.QueryEscape(tenant), map[string]any{"name": name})
+	if err != nil {
+		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
+		return
+	}
+	if code == 404 {
+		writeJSON(w, 404, map[string]any{"error": "cluster not found"})
+		return
+	}
+	if code < 200 || code >= 300 {
+		writeJSON(w, 502, map[string]any{"error": "could not rename cluster"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "name": name})
+}
+
 // handleAppClusterDelete removes one of the user's clusters (tenant-scoped).
 func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
 	u := a.sessionUser(r)
@@ -259,6 +293,19 @@ document.querySelectorAll('[data-nav-toggle]').forEach(function(b){b.addEventLis
 
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
+// Apple-style modal. Resolves to the input value (or true) on confirm, null on cancel.
+function chModal(o){return new Promise(function(res){
+  var bg=document.createElement('div');bg.className='modal-bg';
+  var inp=o.input!=null?'<input class="toolbar-input" id="_mi" value="'+esc(o.input)+'">':'';
+  bg.innerHTML='<div class="modal"><h3>'+esc(o.title||'')+'</h3>'+(o.body?'<p>'+o.body+'</p>':'')+inp+'<div class="modal-actions"><button id="_mc">'+esc(o.cancel||'Cancel')+'</button><button class="'+(o.danger?'danger':'primary')+'" id="_mo">'+esc(o.confirm||'OK')+'</button></div></div>';
+  document.body.appendChild(bg);
+  var mi=bg.querySelector('#_mi');if(mi){mi.focus();mi.select();mi.addEventListener('keydown',function(e){if(e.key==='Enter')bg.querySelector('#_mo').click();});}
+  function done(v){bg.remove();res(v);}
+  bg.querySelector('#_mc').onclick=function(){done(null);};
+  bg.querySelector('#_mo').onclick=function(){done(mi?mi.value.trim():true);};
+  bg.addEventListener('click',function(e){if(e.target===bg)done(null);});
+});}
+
 async function load(){
   var box=document.getElementById('clusters');
   box.innerHTML='<p class="sub">Loading…</p>';
@@ -313,7 +360,7 @@ document.getElementById('add-cluster').addEventListener('click',async function()
   showInstall(r.data);load();
 });
 
-function stat(label,val,sub){return '<div style="padding:13px 15px;background:var(--surface2);border:1px solid var(--border);min-width:0"><div style="font-size:11px;color:var(--faint)">'+label+'</div><div style="font-size:20px;font-weight:700;color:var(--text);margin-top:3px">'+val+'</div>'+(sub?'<div class="u-email" style="margin-top:3px;font-size:10.5px">'+sub+'</div>':'')+'</div>';}
+function stat(label,val,sub){return '<div class="statcard"><div class="stat-label">'+label+'</div><div class="stat-val">'+val+'</div>'+(sub?'<div class="stat-sub">'+sub+'</div>':'')+'</div>';}
 
 async function loadDetail(id){
   var box=document.getElementById('clusters');
@@ -329,7 +376,11 @@ async function loadDetail(id){
     var html='<a href="/app" style="color:var(--muted);text-decoration:none">All clusters</a>';
     html+='<h1 style="margin:14px 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
     html+='<p class="sub">'+esc(c.clusterId)+(env?' · '+env:'')+' · <span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span>'+(c.k8sVersion?' · k8s '+esc(c.k8sVersion):'')+(c.agentVersion?' · agent '+esc(c.agentVersion):'')+'</p>';
-    if(!connected){html+='<div style="margin:14px 0 4px"><button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent);font-size:12.5px;margin-left:8px">guide</a></div>';}
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px">';
+    if(!connected){html+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button>';}
+    html+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
+    html+='<button class="act revoke del-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||c.clusterId)+'">Delete</button>';
+    html+='</div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
@@ -403,21 +454,35 @@ async function loadDetail(id){
 
 var _cbox=document.getElementById('clusters');
 if(_cbox)_cbox.addEventListener('click',async function(e){
+  var inDetail=!!new URLSearchParams(location.search).get('cluster');
   var del=e.target.closest&&e.target.closest('.del-btn');
   if(del){
-    if(!confirm('Delete "'+(del.dataset.name||del.dataset.id)+'" from Clusterheart? If an agent is still running in that cluster, uninstall it too (see Help).'))return;
-    del.disabled=true;del.textContent='…';
+    var nm=esc(del.dataset.name||del.dataset.id);
+    if(!await chModal({title:'Delete cluster?',body:'Remove <b>'+nm+'</b> from Clusterheart.',confirm:'Delete',danger:true}))return;
+    if(!await chModal({title:'Are you sure?',body:'This cannot be undone.',confirm:'Yes, delete',danger:true}))return;
+    if(!await chModal({title:'Final confirmation',body:'Permanently delete <b>'+nm+'</b>? If an agent is still running there, uninstall it too (see Help).',confirm:'Delete permanently',danger:true}))return;
     var dr=await fetch('/api/app/clusters/'+encodeURIComponent(del.dataset.id),{method:'DELETE',headers:{'Accept':'application/json'}});
-    if(!dr.ok){alert('Could not delete cluster');del.disabled=false;del.textContent='Delete';return;}
-    load();return;
+    if(!dr.ok){await chModal({title:'Failed',body:'Could not delete the cluster.',confirm:'OK'});return;}
+    if(inDetail){location.href='/app';}else{load();}
+    return;
+  }
+  var rb=e.target.closest&&e.target.closest('#rename-btn');
+  if(rb){
+    var cur=rb.dataset.name||'';
+    var nn=await chModal({title:'Rename cluster',input:cur,confirm:'Save'});
+    if(nn==null||nn===''||nn===cur)return;
+    var rn=await _post('/api/app/clusters/'+encodeURIComponent(rb.dataset.id)+'/rename',{name:nn});
+    if(!rn.ok){await chModal({title:'Failed',body:'Could not rename the cluster.',confirm:'OK'});return;}
+    if(inDetail){loadDetail(rb.dataset.id);}else{load();}
+    return;
   }
   var cb=e.target.closest&&e.target.closest('#connect-btn');
   if(!cb)return;
-  if(!confirm('This issues a NEW agent token and invalidates any previous token for this cluster. Continue?'))return;
+  if(!await chModal({title:'Issue a new token?',body:'This creates a NEW agent token and invalidates any previous one for this cluster.',confirm:'Continue'}))return;
   cb.disabled=true;cb.textContent='…';
   var rr=await _post('/api/app/clusters/'+encodeURIComponent(cb.dataset.id)+'/connect',{});
   cb.disabled=false;cb.textContent='Get install command';
-  if(!rr.ok){alert((rr.data&&rr.data.error)||'Failed to issue token');return;}
+  if(!rr.ok){await chModal({title:'Failed',body:(rr.data&&rr.data.error)||'Failed to issue token',confirm:'OK'});return;}
   showInstall(rr.data);window.scrollTo(0,0);
 });
 

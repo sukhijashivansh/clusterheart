@@ -77,6 +77,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/agent-token", s.requireAdmin(s.handleRotateAgentToken))
 	mux.HandleFunc("DELETE /api/v1/clusters/{id}", s.requireAdmin(s.handleDeleteCluster))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/rename", s.requireAdmin(s.handleRenameCluster))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
 	mux.HandleFunc("GET /api/v1/stats", s.requireAdmin(s.handleStats))
@@ -197,6 +198,37 @@ func (s *Server) handleDeleteCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("cluster deleted", "clusterId", clusterID)
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": clusterID})
+}
+
+// handleRenameCluster changes a cluster's display name. Tenant-guarded.
+func (s *Server) handleRenameCluster(w http.ResponseWriter, r *http.Request) {
+	clusterID := r.PathValue("id")
+	c, err := s.store.GetCluster(r.Context(), clusterID)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	if tid := strings.TrimSpace(r.URL.Query().Get("tenantId")); tid != "" && tid != c.TenantID {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeErr(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if err := s.store.RenameCluster(r.Context(), clusterID, name); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not rename cluster")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"clusterId": clusterID, "name": name})
 }
 
 func (s *Server) handleListClusters(w http.ResponseWriter, r *http.Request) {
