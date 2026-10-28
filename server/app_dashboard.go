@@ -455,11 +455,11 @@ function fmtCpu(m){m=m||0;return m>=1000?(m/1000).toFixed(m%1000?1:0):(m+'m');}
 // or just the capacity text when live metrics aren't available.
 function utilCell(usage,alloc,sub,hasM){
   if(hasM&&alloc){
-    var pct=Math.round((usage||0)/alloc*100);if(pct>100)pct=100;
-    var cls=pct>=90?'crit':(pct>=70?'warn':'');
-    return '<div class="util"><div class="util-bar '+cls+'"><span style="width:'+pct+'%"></span></div><div class="util-sub">'+sub+'</div></div>';
+    var pct=Math.round((usage||0)/alloc*100);
+    var cls=pct>=90?'crit':(pct>=70?'warn':'ok');
+    return '<div class="util-val '+cls+'">'+sub+'</div>';
   }
-  return '<div class="util-sub util-cap">'+sub+'</div>';
+  return '<div class="util-val cap">'+sub+'</div>';
 }
 function nodesSection(nl){
   if(!nl||!nl.length)return '';

@@ -298,14 +298,12 @@ table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:var(--hover)}
 .u-name{font-weight:600;font-size:14.5px;color:var(--text)}
 .pod-name{font-size:13.5px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* node utilization bars */
-.util{min-width:120px;max-width:180px}
-.util-bar{height:7px;border-radius:999px;background:var(--border);overflow:hidden}
-.util-bar>span{display:block;height:100%;border-radius:999px;background:var(--green);transition:width .35s ease}
-.util-bar.warn>span{background:var(--amber)}
-.util-bar.crit>span{background:var(--red)}
-.util-sub{font-size:11px;color:var(--faint);margin-top:5px;white-space:nowrap}
-.util-cap{font-size:12.5px;color:var(--muted);margin:0}
+/* node utilization: colour-coded usage number (no bar) */
+.util-val{font-size:13px;font-weight:600;white-space:nowrap}
+.util-val.ok{color:var(--green)}
+.util-val.warn{color:var(--amber)}
+.util-val.crit{color:var(--red)}
+.util-val.cap{color:var(--muted);font-weight:500}
 /* detail tabs (Pods / Nodes) */
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:4px 0 18px}
 .tab{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
