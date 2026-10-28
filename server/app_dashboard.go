@@ -508,7 +508,15 @@ async function loadDetail(id){
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
     var all=L.podList||[];
-    var jl=L.jobList||[];
+    // Collapse CronJob runs to just the latest run per owner (one row per
+    // scheduled job) so we don't list every historical run. Standalone Jobs
+    // (no owner) are kept as-is.
+    var jl=(function(list){
+      var s=(list||[]).slice().sort(function(a,b){return new Date(b.startedAt||b.finishedAt||0)-new Date(a.startedAt||a.finishedAt||0);});
+      var seen={},out=[];
+      s.forEach(function(j){if(j.owner){if(seen[j.owner])return;seen[j.owner]=true;}out.push(j);});
+      return out;
+    })(L.jobList);
     function isJob(x){return (x.owner||'').indexOf('Job/')===0;}
     var svc=all.filter(function(x){return !isJob(x);});
     var havePL=all.length>0,haveJL=jl.length>0;

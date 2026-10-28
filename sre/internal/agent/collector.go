@@ -163,14 +163,25 @@ func (c *Collector) jobList(ctx context.Context) ([]contract.JobInfo, int) {
 	}
 	items := jl.Items
 	sort.Slice(items, func(i, j int) bool { return jobStart(&items[i]).After(jobStart(&items[j])) })
+	// Collapse CronJob runs to the latest run per owner (one entry per scheduled
+	// job); keep standalone Jobs as-is. Keeps the payload small and surfaces each
+	// job's current state rather than its whole history.
+	seen := map[string]bool{}
 	var out []contract.JobInfo
 	trunc := 0
 	for i := range items {
+		ji := jobInfo(&items[i])
+		if ji.Owner != "" {
+			if seen[ji.Owner] {
+				continue
+			}
+			seen[ji.Owner] = true
+		}
 		if len(out) >= maxJobInventory {
 			trunc++
 			continue
 		}
-		out = append(out, jobInfo(&items[i]))
+		out = append(out, ji)
 	}
 	return out, trunc
 }
