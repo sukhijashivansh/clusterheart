@@ -535,7 +535,7 @@ async function loadDetail(id){
     html+='<div class="statgrid">'+
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
       stat('Pods'+fbadge(havePL?podFail:(p.failed||0)),podsVal,podsSub)+
-      stat('Jobs'+fbadge(jobFail),jobsVal,jobsSub)+
+      stat('Jobs',jobsVal,jobsSub)+
       stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
     var nodesHtml=nodesSection(L.nodeList);
