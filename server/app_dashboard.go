@@ -448,6 +448,38 @@ document.getElementById('add-cluster').addEventListener('click',async function()
 
 function stat(label,val,sub){return '<div class="statcard"><div class="stat-label">'+label+'</div><div class="stat-val">'+val+'</div>'+(sub?'<div class="stat-sub">'+sub+'</div>':'')+'</div>';}
 
+function fmtMem(mi){mi=mi||0;return mi>=1024?(mi/1024).toFixed(1)+'Gi':mi+'Mi';}
+function fmtCpu(m){m=m||0;return m>=1000?(m/1000).toFixed(m%1000?1:0):(m+'m');}
+// utilCell renders a utilization bar (usage vs allocatable) with %, colour-coded,
+// or just the capacity text when live metrics aren't available.
+function utilCell(usage,alloc,sub,hasM){
+  if(hasM&&alloc){
+    var pct=Math.round((usage||0)/alloc*100);if(pct>100)pct=100;
+    var cls=pct>=90?'crit':(pct>=70?'warn':'');
+    return '<div class="util"><div class="util-pct">'+pct+'%</div><div class="util-bar '+cls+'"><span style="width:'+pct+'%"></span></div><div class="util-sub">'+sub+'</div></div>';
+  }
+  return '<div class="util-sub util-cap">'+sub+'</div>';
+}
+function nodesSection(nl){
+  if(!nl||!nl.length)return '';
+  var hasM=nl.some(function(n){return n.cpuUsageMilli||n.memUsageMi;});
+  var rows=nl.map(function(n){
+    var ok=n.ready===true;
+    var cpuSub=(hasM?fmtCpu(n.cpuUsageMilli):'—')+' / '+fmtCpu(n.cpuAllocMilli);
+    var memSub=(hasM?fmtMem(n.memUsageMi):'—')+' / '+fmtMem(n.memAllocMi);
+    var meta=esc(n.roles||'')+(n.kubeletVersion?' · '+esc(n.kubeletVersion):'');
+    var podsTxt=(n.pods||0)+(n.podsCapacity?' / '+n.podsCapacity:'');
+    return '<tr><td><div class="u-name pod-name" title="'+esc(n.name)+'">'+esc(n.name)+'</div><div class="u-email">'+meta+'</div></td>'+
+      '<td><span class="pill '+(ok?'on':'off')+'">'+(ok?'Ready':'NotReady')+'</span></td>'+
+      '<td>'+utilCell(n.cpuUsageMilli,n.cpuAllocMilli,cpuSub,hasM)+'</td>'+
+      '<td>'+utilCell(n.memUsageMi,n.memAllocMi,memSub,hasM)+'</td>'+
+      '<td class="u-time">'+podsTxt+'</td></tr>';
+  }).join('');
+  var desc=hasM?'Live CPU and memory usage per node.':'Allocatable capacity per node. Install metrics-server for live usage.';
+  return '<section class="card2"><div class="card2-head"><p class="card2-title">Nodes ('+nl.length+')</p><p class="card2-desc">'+desc+'</p></div>'+
+    '<div class="tscroll"><table class="users ptable"><thead><tr><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>Pods</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>';
+}
+
 async function loadDetail(id){
   var box=document.getElementById('clusters');
   box.innerHTML='<div class="spin-wrap"><div class="spinner"></div></div>';
@@ -486,6 +518,7 @@ async function loadDetail(id){
       stat('Jobs'+fbadge(havePL?jobFail:0),jobsVal,jobsSub)+
       stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
+    html+=nodesSection(L.nodeList);
     var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});
     function byCpu(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);}
     svc.sort(byCpu);

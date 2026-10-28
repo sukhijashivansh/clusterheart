@@ -27,6 +27,9 @@ import (
 // dropped and counted in PodListTruncated.
 const maxPodInventory = 300
 
+// maxNodeInventory bounds how many node rows a snapshot carries.
+const maxNodeInventory = 100
+
 // maxWarnings bounds how many warning events a snapshot carries.
 const maxWarnings = 50
 
@@ -98,8 +101,12 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 		return snap, err
 	}
 	snap.Pods.Total = len(pods.Items)
+	podsPerNode := make(map[string]int, len(nodes.Items))
 	for i := range pods.Items {
 		p := &pods.Items[i]
+		if p.Spec.NodeName != "" && p.Status.Phase != corev1.PodSucceeded && p.Status.Phase != corev1.PodFailed {
+			podsPerNode[p.Spec.NodeName]++
+		}
 		switch p.Status.Phase {
 		case corev1.PodRunning:
 			snap.Pods.Running++
@@ -126,11 +133,83 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 		snap.PodProblems = snap.PodProblems[:maxProblems]
 	}
 
+	for i := range nodes.Items {
+		if len(snap.NodeList) >= maxNodeInventory {
+			break
+		}
+		snap.NodeList = append(snap.NodeList, nodeInfo(&nodes.Items[i], podsPerNode[nodes.Items[i].Name]))
+	}
+
 	snap.Workloads = c.workloadCounts(ctx)
 	snap.WorkloadProblems = c.deploymentProblems(ctx)
 	snap.Warnings = c.warnings(ctx)
 	c.mergePodMetrics(ctx, snap.PodList)
+	c.mergeNodeMetrics(ctx, snap.NodeList)
 	return snap, nil
+}
+
+// nodeInfo builds one node row from its object (capacity/allocatable); usage is
+// filled later by mergeNodeMetrics when metrics-server is present.
+func nodeInfo(n *corev1.Node, pods int) contract.NodeInfo {
+	ni := contract.NodeInfo{
+		Name:           n.Name,
+		Ready:          nodeReady(n),
+		Roles:          nodeRoles(n),
+		KubeletVersion: n.Status.NodeInfo.KubeletVersion,
+		Pods:           pods,
+	}
+	alloc := n.Status.Allocatable
+	if q, ok := alloc[corev1.ResourceCPU]; ok {
+		ni.CPUAllocMilli = q.MilliValue()
+	}
+	if q, ok := alloc[corev1.ResourceMemory]; ok {
+		ni.MemAllocMi = q.Value() / (1024 * 1024)
+	}
+	if q, ok := alloc[corev1.ResourcePods]; ok {
+		ni.PodsCapacity = int(q.Value())
+	}
+	return ni
+}
+
+// nodeRoles reads the node-role.kubernetes.io/* labels; defaults to "worker".
+func nodeRoles(n *corev1.Node) string {
+	var roles []string
+	for k := range n.Labels {
+		if r := strings.TrimPrefix(k, "node-role.kubernetes.io/"); r != k && r != "" {
+			roles = append(roles, r)
+		}
+	}
+	sort.Strings(roles)
+	if len(roles) == 0 {
+		return "worker"
+	}
+	return strings.Join(roles, ",")
+}
+
+// mergeNodeMetrics fills live CPU/memory usage from metrics-server, by node
+// name. Best-effort: if metrics are unavailable the fields stay zero.
+func (c *Collector) mergeNodeMetrics(ctx context.Context, list []contract.NodeInfo) {
+	if c.metrics == nil || len(list) == 0 {
+		return
+	}
+	nm, err := c.metrics.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	type usage struct{ cpu, mem int64 }
+	byName := make(map[string]usage, len(nm.Items))
+	for i := range nm.Items {
+		m := &nm.Items[i]
+		cpu := m.Usage.Cpu().MilliValue()
+		mem := m.Usage.Memory().Value() / (1024 * 1024)
+		byName[m.Name] = usage{cpu: cpu, mem: mem}
+	}
+	for i := range list {
+		if u, ok := byName[list[i].Name]; ok {
+			list[i].CPUUsageMilli = u.cpu
+			list[i].MemUsageMi = u.mem
+		}
+	}
 }
 
 // podInfo builds one inventory row from a pod's status (no metrics yet).

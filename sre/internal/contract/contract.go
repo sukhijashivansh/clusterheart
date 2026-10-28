@@ -67,6 +67,26 @@ type ClusterSnapshot struct {
 	// PodListTruncated is how many pods the cap dropped.
 	PodList          []PodInfo `json:"podList,omitempty"`
 	PodListTruncated int       `json:"podListTruncated,omitempty"`
+	// NodeList is a bounded per-node capacity/utilization inventory so the
+	// dashboard can show real node CPU/memory pressure.
+	NodeList []NodeInfo `json:"nodeList,omitempty"`
+}
+
+// NodeInfo is one node's capacity and (when metrics-server is present) live
+// utilization. Usage fields are omitted when metrics are unavailable;
+// allocatable/capacity always come from the node object. CPU is millicores,
+// memory is mebibytes.
+type NodeInfo struct {
+	Name           string `json:"name"`
+	Ready          bool   `json:"ready"`
+	Roles          string `json:"roles,omitempty"`          // e.g. "control-plane" or "worker"
+	KubeletVersion string `json:"kubeletVersion,omitempty"` // e.g. "v1.29.4"
+	Pods           int    `json:"pods"`                     // pods scheduled on this node
+	PodsCapacity   int    `json:"podsCapacity,omitempty"`   // max schedulable pods
+	CPUAllocMilli  int64  `json:"cpuAllocMilli,omitempty"`  // allocatable CPU (millicores)
+	CPUUsageMilli  int64  `json:"cpuUsageMilli,omitempty"`  // live CPU usage (metrics-server)
+	MemAllocMi     int64  `json:"memAllocMi,omitempty"`     // allocatable memory (Mi)
+	MemUsageMi     int64  `json:"memUsageMi,omitempty"`     // live memory usage (metrics-server)
 }
 
 // PodInfo is one pod's inventory row: identity, status, and (when metrics-server
