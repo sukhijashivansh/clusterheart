@@ -202,7 +202,7 @@ var appTmpl = page(appBody)
 
 const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 <aside class="admin-nav">
-  <div class="an-brand"><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button>` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
+  <div class="an-brand"><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button><div class="an-brandrow">` + logoSVG + `<span class="wordmark">Clusterheart</span></div></div>
   <nav class="an-list">
     <a class="nav-item active" href="/app">Clusters</a>
     <a class="nav-item" href="/account">Account</a>
@@ -283,7 +283,7 @@ document.getElementById('add-cluster').addEventListener('click',async function()
   showInstall(r.data);load();
 });
 
-function stat(label,val,sub){return '<div style="flex:1 1 230px;min-width:230px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border)"><div style="font-size:12px;color:var(--faint)">'+label+'</div><div style="font-size:24px;font-weight:700;color:var(--text);margin-top:4px">'+val+'</div>'+(sub?'<div class="u-email" style="margin-top:3px;white-space:nowrap">'+sub+'</div>':'')+'</div>';}
+function stat(label,val,sub){return '<div style="padding:13px 15px;background:var(--surface2);border:1px solid var(--border);min-width:0"><div style="font-size:11px;color:var(--faint)">'+label+'</div><div style="font-size:20px;font-weight:700;color:var(--text);margin-top:3px">'+val+'</div>'+(sub?'<div class="u-email" style="margin-top:3px;font-size:10.5px">'+sub+'</div>':'')+'</div>';}
 
 async function loadDetail(id){
   var box=document.getElementById('clusters');
@@ -293,17 +293,17 @@ async function loadDetail(id){
     var payload=await r.json();
     var list=(payload&&payload.clusters)||[];
     var c=null;list.forEach(function(x){if(x.clusterId===id)c=x;});
-    if(!c){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Cluster not found.</p>';return;}
+    if(!c){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Cluster not found.</p>';return;}
     var connected=c.connected===true;
     var env=c.environment?esc(c.environment):'';
-    var html='<a href="/app" style="color:var(--muted);text-decoration:none">&larr; All clusters</a>';
+    var html='<a href="/app" style="color:var(--muted);text-decoration:none">All clusters</a>';
     html+='<h1 style="margin:14px 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
     html+='<p class="sub">'+esc(c.clusterId)+(env?' · '+env:'')+' · <span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span>'+(c.k8sVersion?' · k8s '+esc(c.k8sVersion):'')+(c.agentVersion?' · agent '+esc(c.agentVersion):'')+'</p>';
-    html+='<div style="margin:14px 0 4px"><button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent);font-size:13px;margin-left:8px">guide &rarr;</a></div>';
+    if(!connected){html+='<div style="margin:14px 0 4px"><button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent);font-size:12.5px;margin-left:8px">guide</a></div>';}
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
-    html+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin:18px 0">'+
+    html+='<div class="statgrid">'+
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
       stat('Pods running',(p.running||0)+' / '+(p.total||0),(p.pending||0)+' pending · '+(p.failed||0)+' failed · '+(p.succeeded||0)+' done')+
       stat('Workloads',(wl.deployments||0)+' deploy',(wl.daemonSets||0)+' ds · '+(wl.statefulSets||0)+' sts · '+(wl.jobs||0)+' jobs')+
@@ -368,7 +368,7 @@ async function loadDetail(id){
     if(pn)pn.addEventListener('change',applyPodFilter);
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
     applyPodFilter();
-  }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
+  }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
 
 var _cbox=document.getElementById('clusters');
