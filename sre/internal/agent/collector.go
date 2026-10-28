@@ -14,6 +14,7 @@ import (
 	"clusterheart/sre/internal/contract"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -29,6 +30,9 @@ const maxPodInventory = 300
 
 // maxNodeInventory bounds how many node rows a snapshot carries.
 const maxNodeInventory = 100
+
+// maxJobInventory bounds how many Job rows a snapshot carries.
+const maxJobInventory = 200
 
 // maxWarnings bounds how many warning events a snapshot carries.
 const maxWarnings = 50
@@ -143,9 +147,90 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 	snap.Workloads = c.workloadCounts(ctx)
 	snap.WorkloadProblems = c.deploymentProblems(ctx)
 	snap.Warnings = c.warnings(ctx)
+	snap.JobList, snap.JobListTruncated = c.jobList(ctx)
 	c.mergePodMetrics(ctx, snap.PodList)
 	c.mergeNodeMetrics(ctx, snap.NodeList)
 	return snap, nil
+}
+
+// jobList reads batch Jobs and their status directly from the Job objects (not
+// their pods, which get garbage-collected), so failed and complete runs stay
+// visible. Most recent first, so the latest runs survive the cap.
+func (c *Collector) jobList(ctx context.Context) ([]contract.JobInfo, int) {
+	jl, err := c.clientset.BatchV1().Jobs(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, 0
+	}
+	items := jl.Items
+	sort.Slice(items, func(i, j int) bool { return jobStart(&items[i]).After(jobStart(&items[j])) })
+	var out []contract.JobInfo
+	trunc := 0
+	for i := range items {
+		if len(out) >= maxJobInventory {
+			trunc++
+			continue
+		}
+		out = append(out, jobInfo(&items[i]))
+	}
+	return out, trunc
+}
+
+func jobInfo(j *batchv1.Job) contract.JobInfo {
+	ji := contract.JobInfo{
+		Namespace: j.Namespace,
+		Name:      j.Name,
+		Owner:     controllerRef(j.OwnerReferences),
+		Failed:    j.Status.Failed,
+		Status:    "Pending",
+	}
+	comp := int32(1)
+	if j.Spec.Completions != nil {
+		comp = *j.Spec.Completions
+	}
+	ji.Completions = fmt.Sprintf("%d/%d", j.Status.Succeeded, comp)
+	for _, cond := range j.Status.Conditions {
+		if cond.Status != corev1.ConditionTrue {
+			continue
+		}
+		switch cond.Type {
+		case batchv1.JobComplete:
+			ji.Status = "Complete"
+		case batchv1.JobFailed:
+			ji.Status = "Failed"
+		}
+	}
+	if ji.Status == "Pending" && j.Status.Active > 0 {
+		ji.Status = "Running"
+	}
+	if j.Status.StartTime != nil {
+		t := j.Status.StartTime.Time.UTC()
+		ji.StartedAt = &t
+	}
+	if j.Status.CompletionTime != nil {
+		t := j.Status.CompletionTime.Time.UTC()
+		ji.FinishedAt = &t
+	}
+	return ji
+}
+
+func jobStart(j *batchv1.Job) time.Time {
+	if j.Status.StartTime != nil {
+		return j.Status.StartTime.Time
+	}
+	return j.CreationTimestamp.Time
+}
+
+// controllerRef returns the owning controller as "Kind/Name" (e.g. the CronJob).
+func controllerRef(refs []metav1.OwnerReference) string {
+	for _, r := range refs {
+		if r.Controller != nil && *r.Controller {
+			return r.Kind + "/" + r.Name
+		}
+	}
+	if len(refs) > 0 {
+		return refs[0].Kind + "/" + refs[0].Name
+	}
+	return ""
 }
 
 // nodeInfo builds one node row from its object (capacity/allocatable); usage is

@@ -70,6 +70,23 @@ type ClusterSnapshot struct {
 	// NodeList is a bounded per-node capacity/utilization inventory so the
 	// dashboard can show real node CPU/memory pressure.
 	NodeList []NodeInfo `json:"nodeList,omitempty"`
+	// JobList is a bounded inventory of batch Jobs with their real status so the
+	// dashboard shows failed/complete runs even after their pods are GC'd.
+	JobList          []JobInfo `json:"jobList,omitempty"`
+	JobListTruncated int       `json:"jobListTruncated,omitempty"`
+}
+
+// JobInfo is one batch Job's status, read from the Job object (not its pods, which
+// Kubernetes garbage-collects). Status is Complete, Failed, Running, or Pending.
+type JobInfo struct {
+	Namespace   string     `json:"namespace"`
+	Name        string     `json:"name"`
+	Owner       string     `json:"owner,omitempty"`       // e.g. "CronJob/nightly"
+	Status      string     `json:"status"`                // Complete | Failed | Running | Pending
+	Completions string     `json:"completions,omitempty"` // "1/1"
+	Failed      int32      `json:"failed,omitempty"`      // failed pod attempts
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
 }
 
 // NodeInfo is one node's capacity and (when metrics-server is present) live

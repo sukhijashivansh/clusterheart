@@ -508,58 +508,74 @@ async function loadDetail(id){
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
     var all=L.podList||[];
+    var jl=L.jobList||[];
     function isJob(x){return (x.owner||'').indexOf('Job/')===0;}
     var svc=all.filter(function(x){return !isJob(x);});
-    var jobs=all.filter(isJob);
-    // Split pods from jobs so the counts read clean. Completed job pods were
-    // inflating the "pods running" total (e.g. 35 / 45); show them apart.
-    var havePL=all.length>0;
+    var havePL=all.length>0,haveJL=jl.length>0;
     var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
     var podFail=svc.filter(function(x){return x.phase==='Failed';}).length;
-    var jobDone=jobs.filter(function(x){return x.phase==='Succeeded';}).length;
-    var jobRun=jobs.filter(function(x){return x.phase==='Running';}).length;
-    var jobFail=jobs.filter(function(x){return x.phase==='Failed';}).length;
+    // Job status comes from the Job objects (not their pods, which get GC'd), so
+    // failed/complete runs stay visible.
+    var jobDone=jl.filter(function(x){return x.status==='Complete';}).length;
+    var jobRun=jl.filter(function(x){return x.status==='Running';}).length;
+    var jobFail=jl.filter(function(x){return x.status==='Failed';}).length;
+    var jobPend=Math.max(jl.length-jobDone-jobRun-jobFail,0);
     var podsVal=havePL?(podRun+' / '+svc.length):((p.running||0)+' / '+(p.total||0));
     var podsSub=havePL?(svc.length+' total'):((p.pending||0)+' pending · '+(p.failed||0)+' failed');
-    var jobsVal=havePL?(jobDone+' / '+jobs.length):(''+(wl.jobs||0));
-    var jobsSub=havePL?(jobRun+' running · '+Math.max(jobs.length-jobDone-jobRun-jobFail,0)+' pending'):((wl.jobs||0)+' configured');
+    var jobsVal=haveJL?(jobDone+' / '+jl.length):(''+(wl.jobs||0));
+    var jobsSub=haveJL?(jobRun+' running · '+jobPend+' pending'):((wl.jobs||0)+' configured');
     html+='<div class="statgrid">'+
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
       stat('Pods'+fbadge(havePL?podFail:(p.failed||0)),podsVal,podsSub)+
-      stat('Jobs'+fbadge(havePL?jobFail:0),jobsVal,jobsSub)+
+      stat('Jobs'+fbadge(jobFail),jobsVal,jobsSub)+
       stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
     var nodesHtml=nodesSection(L.nodeList);
     var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});
     function byCpu(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);}
     svc.sort(byCpu);
-    jobs.sort(byCpu);
-    function rowK(x,kind){
+    function rowK(x){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
-      return '<tr data-kind="'+kind+'" data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
         '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
         '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
         '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
     }
+    function rowJob(j){
+      var st=j.status||'Pending';
+      var cls=st==='Failed'?'bad':(st==='Pending'?'off':'on');
+      var fin=j.finishedAt?ago(j.finishedAt):(j.startedAt?ago(j.startedAt):'');
+      var sub=j.owner?esc(j.owner):esc(j.namespace);
+      return '<tr data-ns="'+esc(j.namespace)+'" data-name="'+esc((j.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(j.name)+'">'+esc(j.name)+'</div><div class="u-email">'+sub+'</div></td>'+
+        '<td><span class="pill '+cls+'">'+esc(st)+'</span></td>'+
+        '<td class="u-time">'+esc(j.completions||'')+'</td>'+
+        '<td class="'+(j.failed?'util-val crit':'u-time')+'">'+(j.failed||0)+'</td>'+
+        '<td class="u-time">'+fin+'</td>'+
+        '<td class="u-email">'+esc(j.namespace)+'</td></tr>';
+    }
     var podsHtml='';
-    if(svc.length||jobs.length){
-      var nss=Array.from(new Set(all.map(function(x){return x.namespace;}))).sort();
+    if(svc.length||jl.length){
+      var nss=Array.from(new Set(all.map(function(x){return x.namespace;}).concat(jl.map(function(x){return x.namespace;})))).sort();
       podsHtml='<section class="card2">'+
         '<div class="card2-head">'+
           '<div class="toolbar-row">'+
-            '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">'+svc.length+' Pods</button><button class="seg-btn" data-kind="job">'+jobs.length+' Jobs</button></div>'+
+            '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">'+svc.length+' Pods</button><button class="seg-btn" data-kind="job">'+jl.length+' Jobs</button></div>'+
             '<select id="pod-ns" class="toolbar-input toolbar-ns"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
             '<input id="pod-search" class="toolbar-input toolbar-search" placeholder="Search">'+
           '</div>'+
         '</div>'+
-        '<div class="tscroll"><table class="users ptable"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
-        svc.map(function(x){return rowK(x,'pod');}).join('')+jobs.map(function(x){return rowK(x,'job');}).join('')+
-        '</tbody></table></div>'+
-        (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+
+        '<div class="tscroll" id="pods-wrap"><table class="users ptable"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
+        svc.map(rowK).join('')+
+        '</tbody></table>'+
+        (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+'</div>'+
+        '<div class="tscroll" id="jobs-wrap" style="display:none"><table class="users ptable"><thead><tr><th>Job</th><th>Status</th><th>Completions</th><th>Failed</th><th>Finished</th><th>Namespace</th></tr></thead><tbody id="jobs-body">'+
+        jl.map(rowJob).join('')+
+        '</tbody></table>'+
+        (L.jobListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.jobListTruncated+' more jobs (capped).</p></div>':'')+'</div>'+
       '</section>';
     }else{
-      podsHtml='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No pods reported in the latest snapshot.</p></div></section>';
+      podsHtml='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No pods or jobs reported in the latest snapshot.</p></div></section>';
     }
     // Pods / Nodes tabs. The Nodes tab only appears when the agent reports node
     // data; otherwise the pods table shows on its own (no lone tab bar).
@@ -592,9 +608,12 @@ async function loadDetail(id){
     var ps=document.getElementById('pod-search'),pn=document.getElementById('pod-ns'),seg=document.getElementById('pj-seg'),_kind='pod';
     function applyPodFilter(){
       var q=((ps&&ps.value)||'').toLowerCase(),ns=(pn&&pn.value)||'';
-      document.querySelectorAll('#pods-body tr').forEach(function(tr){
-        var okk=tr.dataset.kind===_kind, okn=!ns||tr.dataset.ns===ns, okq=!q||(tr.dataset.name||'').indexOf(q)>=0;
-        tr.style.display=(okk&&okn&&okq)?'':'none';
+      var pw=document.getElementById('pods-wrap'),jw=document.getElementById('jobs-wrap');
+      if(pw)pw.style.display=_kind==='pod'?'':'none';
+      if(jw)jw.style.display=_kind==='job'?'':'none';
+      document.querySelectorAll((_kind==='pod'?'#pods-body':'#jobs-body')+' tr').forEach(function(tr){
+        var okn=!ns||tr.dataset.ns===ns, okq=!q||(tr.dataset.name||'').indexOf(q)>=0;
+        tr.style.display=(okn&&okq)?'':'none';
       });
     }
     if(ps)ps.addEventListener('input',applyPodFilter);

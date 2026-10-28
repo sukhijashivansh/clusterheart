@@ -329,6 +329,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .pill{display:inline-flex;align-items:center;padding:0;font-size:13px;font-weight:600;background:none}
 .pill.on{color:var(--green)}
 .pill.off{color:var(--amber)}
+.pill.bad{color:var(--red)}
 .pill .dot{display:none}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .empty{padding:48px 18px;text-align:center;color:var(--muted)}
