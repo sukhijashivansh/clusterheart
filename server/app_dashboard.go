@@ -333,9 +333,33 @@ if(_mb){
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&_menu.classList.contains('open')){_menu.classList.remove('open');_mb.setAttribute('aria-expanded','false');}});
 }
 
+// three-dot options menus (on cards + detail header): toggle on the button,
+// close on any other click or Escape.
+document.addEventListener('click',function(e){
+  var btn=e.target.closest&&e.target.closest('.kebab-btn');
+  var open=document.querySelectorAll('.kebab.open');
+  if(btn){var k=btn.closest('.kebab');var was=k.classList.contains('open');open.forEach(function(o){o.classList.remove('open');});if(!was)k.classList.add('open');return;}
+  open.forEach(function(o){o.classList.remove('open');});
+});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')document.querySelectorAll('.kebab.open').forEach(function(o){o.classList.remove('open');});});
+
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function ago(ts){if(!ts)return 'never';var s=(Date.now()-new Date(ts).getTime())/1000;if(s<0)s=0;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 function fbadge(nf){return nf>0?'<span class="fail-badge" title="'+nf+' failed">'+nf+' failed</span>':'';}
+var dotsSVG='<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><circle cx="9" cy="3.6" r="1.5"/><circle cx="9" cy="9" r="1.5"/><circle cx="9" cy="14.4" r="1.5"/></svg>';
+// kebab builds the three-dot options menu used on both the cluster cards and
+// the detail header. All items are class-based so multiple menus coexist.
+function kebab(c){
+  var connected=c.connected===true,id=esc(c.clusterId||'');
+  var h='<div class="kebab"><button class="kebab-btn" aria-label="Options" aria-haspopup="true">'+dotsSVG+'</button><div class="kebab-pop">';
+  h+='<button class="kebab-item info-btn" data-id="'+id+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
+  h+='<button class="kebab-item rename-btn" data-id="'+id+'" data-name="'+esc(c.name||'')+'">Rename</button>';
+  h+='<button class="kebab-item env-btn" data-id="'+id+'" data-env="'+esc(c.environment||'')+'">Environment</button>';
+  if(!connected){h+='<button class="kebab-item connect-btn" data-id="'+id+'">Install</button>';}
+  h+='<div class="kebab-sep"></div>';
+  h+='<button class="kebab-item danger del-btn" data-id="'+id+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button>';
+  return h+'</div></div>';
+}
 
 // Apple-style modal. Resolves to the input value (or true) on confirm, null on cancel.
 function chModal(o){return new Promise(function(res){
@@ -386,10 +410,7 @@ async function load(){
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
         '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs'+fbadge(havePL?jobFail:0)+'</span></div></div>'+
-        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span><div class="cl-foot-actions">'+
-          '<button class="act forceout info-btn" data-id="'+esc(c.clusterId||'')+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>'+
-          '<button class="act revoke del-btn" data-id="'+esc(c.clusterId||'')+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button>'+
-        '</div></div>'+
+        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span>'+kebab(c)+'</div>'+
       '</div>';
     });
     html+='</div>';
@@ -433,12 +454,7 @@ async function loadDetail(id){
     var connected=c.connected===true;
     var env=c.environment?esc(c.environment):'';
     var statusHtml='<span class="pill '+(connected?'on':'off')+'" style="font-size:13px;margin-left:10px;vertical-align:middle">'+(connected?'Connected':'Offline')+'</span>';
-    var btns='';
-    if(!connected){btns+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Install</button>';}
-    btns+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
-    btns+='<button class="act forceout" id="env-btn" data-id="'+esc(c.clusterId)+'" data-env="'+esc(c.environment||'')+'">Environment</button>';
-    var envHtml=c.environment?'<span class="env-chip">'+esc(c.environment)+'</span>':'';
-    var html='<div class="detail-head"><h1 style="margin:0"><span class="rename-name" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'" title="Double-click to rename">'+esc(c.name||c.clusterId)+'</span>'+statusHtml+envHtml+'</h1><div class="actbar">'+btns+'</div></div>';
+    var html='<div class="detail-head"><h1 style="margin:0"><span class="rename-name" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'" title="Double-click to rename">'+esc(c.name||c.clusterId)+'</span>'+statusHtml+'</h1><div class="actbar">'+kebab(c)+'</div></div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
@@ -556,9 +572,9 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
     if(inDetail){location.href='/app';}else{load();}
     return;
   }
-  var rb=e.target.closest&&e.target.closest('#rename-btn');
+  var rb=e.target.closest&&e.target.closest('.rename-btn');
   if(rb){doRename(rb.dataset.id,rb.dataset.name||'');return;}
-  var eb=e.target.closest&&e.target.closest('#env-btn');
+  var eb=e.target.closest&&e.target.closest('.env-btn');
   if(eb){
     var curEnv=eb.dataset.env||'';
     var nv=await chModal({title:'Set environment',body:'Common: <b>production</b>, <b>staging</b>, <b>dev</b>. <b>production</b> is protected from auto-remediation.',input:curEnv,confirm:'Save'});
@@ -568,12 +584,10 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
     loadDetail(eb.dataset.id);
     return;
   }
-  var cb=e.target.closest&&e.target.closest('#connect-btn');
+  var cb=e.target.closest&&e.target.closest('.connect-btn');
   if(!cb)return;
   if(!await chModal({title:'Issue a new token?',body:'This creates a NEW agent token and invalidates any previous one for this cluster.',confirm:'Continue'}))return;
-  cb.disabled=true;cb.textContent='…';
   var rr=await _post('/api/app/clusters/'+encodeURIComponent(cb.dataset.id)+'/connect',{});
-  cb.disabled=false;cb.textContent='Get install command';
   if(!rr.ok){await chModal({title:'Failed',body:(rr.data&&rr.data.error)||'Failed to issue token',confirm:'OK'});return;}
   showInstall(rr.data);window.scrollTo(0,0);
 });

@@ -219,7 +219,18 @@ input::placeholder{color:var(--faint)}
 .stat-sub{font-size:10.5px;color:var(--faint);margin-top:auto;padding-top:4px}
 .admin-main h1{font-size:22px;letter-spacing:-.5px}
 .detail-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
-.env-chip{display:inline-block;margin-left:10px;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);background:var(--hover);vertical-align:middle}
+/* three-dot (kebab) options menu — cards + detail header */
+.kebab{position:relative;display:inline-flex}
+.kebab-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;transition:background .14s,color .14s,border-color .14s}
+.kebab-btn:hover{background:var(--hover);color:var(--text)}
+.kebab.open .kebab-btn{background:var(--hover);color:var(--text);border-color:var(--border)}
+.kebab-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:170px;background:var(--panel);border:1px solid var(--border-strong);border-radius:11px;box-shadow:0 16px 44px -14px rgba(0,0,0,.5),0 2px 8px -2px rgba(0,0,0,.2);padding:5px;opacity:0;transform:translateY(-6px) scale(.98);transform-origin:top right;pointer-events:none;transition:opacity .14s ease,transform .16s cubic-bezier(.4,0,.2,1);z-index:60}
+.kebab.open .kebab-pop{opacity:1;transform:none;pointer-events:auto}
+.kebab-item{display:block;width:100%;text-align:left;padding:8px 11px;border:none;background:none;border-radius:7px;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text);cursor:pointer;white-space:nowrap}
+.kebab-item:hover{background:var(--hover)}
+.kebab-item.danger{color:var(--red)}
+.kebab-item.danger:hover{background:color-mix(in srgb,var(--red) 12%,transparent)}
+.kebab-sep{height:1px;background:var(--border);margin:4px 6px}
 .rename-name{cursor:default;border-radius:4px}
 .rename-name:hover{text-decoration:underline;text-decoration-color:var(--border-strong);text-decoration-thickness:1px;text-underline-offset:4px}
 .actbar{display:flex;gap:6px;flex-wrap:wrap}
