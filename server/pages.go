@@ -129,7 +129,7 @@ input::placeholder{color:var(--faint)}
 .an-foot{margin-top:auto;padding:14px 10px 4px;font-size:12.5px;color:var(--muted)}
 .an-me{font-weight:500;color:var(--text);margin-bottom:3px}
 .an-logout{color:var(--muted)}.an-logout:hover{color:var(--accent)}
-.admin-main{flex:1 1 auto;min-width:0;padding:52px 56px;max-width:1040px}
+.admin-main{flex:1 1 auto;min-width:0;padding:32px 40px}
 @media(max-width:720px){
   .admin-shell{flex-direction:column}
   .admin-nav{width:100%;height:auto;position:static;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--border);padding:12px 16px}
@@ -168,6 +168,7 @@ input::placeholder{color:var(--faint)}
 .stat-val{font-size:20px;font-weight:700;color:var(--text);margin-top:2px;white-space:nowrap}
 .stat-sub{font-size:10.5px;color:var(--faint);margin-top:3px}
 .admin-main h1{font-size:22px;letter-spacing:-.5px}
+.sb-add{width:100%;margin:0 0 12px}
 /* apple-style small modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:mfade .15s ease}
 @keyframes mfade{from{opacity:0}to{opacity:1}}
@@ -190,6 +191,7 @@ input::placeholder{color:var(--faint)}
   .an-me{display:none}
   .admin-nav{overflow:visible;white-space:normal}
   .an-brand{border-bottom:none;margin:0 14px 0 0;padding:0;justify-content:flex-start}
+  .sb-add{width:auto;margin:0 12px 0 0;order:-1}
   .statgrid{gap:6px}
   .statcard{padding:9px 8px}
   .stat-label{font-size:9.5px}

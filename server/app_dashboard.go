@@ -266,6 +266,7 @@ var appTmpl = page(appBody)
 const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 <aside class="admin-nav">
   <div class="an-brand"><div class="an-brandrow">` + logoSVG + `<span class="wordmark">Clusterheart</span></div><button class="nav-burger" data-nav-toggle aria-label="Hide menu" title="Hide menu">&#9776;</button></div>
+  <button class="act approve sb-add" id="add-cluster">+ Add cluster</button>
   <nav class="an-list">
     <a class="nav-item active" href="/app">Clusters</a>
     <a class="nav-item" href="/account">Account</a>
@@ -275,12 +276,8 @@ const appBody = `{{define "body"}}<div class="admin-shell" id="app-shell">
 </aside>
 <main class="admin-main">
   <button id="nav-reopen" class="nav-burger" data-nav-toggle aria-label="Show menu" title="Show menu">&#9776;</button>
-  <div id="list-head">
-    <p class="kicker">Your clusters</p>
-    <h1 style="margin:0 0 16px">Clusters</h1>
-    <div style="margin:0 0 20px"><button class="act approve" id="add-cluster">+ Add cluster</button></div>
-  </div>
-  <div id="clusters"></div>
+  <div id="list-head"></div>
+  <div id="clusters" style="margin-top:4px"></div>
 </main>
 </div>{{end}}
 {{define "script"}}<script>
@@ -413,7 +410,6 @@ async function loadDetail(id){
             '<input id="pod-search" class="toolbar-input" placeholder="Search…" style="flex:1;min-width:130px">'+
             '<select id="pod-ns" class="toolbar-input"><option value="">All namespaces</option>'+nss.map(function(n){return '<option>'+esc(n)+'</option>';}).join('')+'</select>'+
           '</div>'+
-          '<p class="card2-desc" style="margin-top:8px">'+(hasMetrics?'Live CPU/memory from metrics-server.':'Install metrics-server for CPU/memory.')+'</p>'+
         '</div>'+
         '<div class="tscroll"><table class="users"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
         svc.map(function(x){return rowK(x,'pod');}).join('')+jobs.map(function(x){return rowK(x,'job');}).join('')+
