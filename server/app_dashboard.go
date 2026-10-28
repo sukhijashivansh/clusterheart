@@ -204,6 +204,40 @@ func (a *app) handleAppClusterRename(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true, "name": name})
 }
 
+// handleAppClusterSetEnv changes a cluster's environment label (tenant-scoped).
+func (a *app) handleAppClusterSetEnv(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil || !u.Approved {
+		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	var in struct {
+		Environment string `json:"environment"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in)
+	env := strings.TrimSpace(in.Environment)
+	if id == "" || env == "" {
+		writeJSON(w, 400, map[string]any{"error": "id and environment are required"})
+		return
+	}
+	tenant := tenantFor(u.Email)
+	code, _, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(id)+"/environment?tenantId="+url.QueryEscape(tenant), map[string]any{"environment": env})
+	if err != nil {
+		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
+		return
+	}
+	if code == 404 {
+		writeJSON(w, 404, map[string]any{"error": "cluster not found"})
+		return
+	}
+	if code < 200 || code >= 300 {
+		writeJSON(w, 502, map[string]any{"error": "could not update environment"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "environment": env})
+}
+
 // handleAppClusterDelete removes one of the user's clusters (tenant-scoped).
 func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
 	u := a.sessionUser(r)
@@ -402,7 +436,9 @@ async function loadDetail(id){
     var btns='';
     if(!connected){btns+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Install</button>';}
     btns+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
-    var html='<div class="detail-head"><h1 style="margin:0"><span class="rename-name" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'" title="Double-click to rename">'+esc(c.name||c.clusterId)+'</span>'+statusHtml+'</h1><div class="actbar">'+btns+'</div></div>';
+    btns+='<button class="act forceout" id="env-btn" data-id="'+esc(c.clusterId)+'" data-env="'+esc(c.environment||'')+'">Environment</button>';
+    var envHtml=c.environment?'<span class="env-chip">'+esc(c.environment)+'</span>':'';
+    var html='<div class="detail-head"><h1 style="margin:0"><span class="rename-name" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'" title="Double-click to rename">'+esc(c.name||c.clusterId)+'</span>'+statusHtml+envHtml+'</h1><div class="actbar">'+btns+'</div></div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
@@ -522,6 +558,16 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
   }
   var rb=e.target.closest&&e.target.closest('#rename-btn');
   if(rb){doRename(rb.dataset.id,rb.dataset.name||'');return;}
+  var eb=e.target.closest&&e.target.closest('#env-btn');
+  if(eb){
+    var curEnv=eb.dataset.env||'';
+    var nv=await chModal({title:'Set environment',body:'Common: <b>production</b>, <b>staging</b>, <b>dev</b>. <b>production</b> is protected from auto-remediation.',input:curEnv,confirm:'Save'});
+    if(nv==null||nv===''||nv===curEnv)return;
+    var er=await _post('/api/app/clusters/'+encodeURIComponent(eb.dataset.id)+'/environment',{environment:nv});
+    if(!er.ok){await chModal({title:'Failed',body:(er.data&&er.data.error)||'Could not update the environment.',confirm:'OK'});return;}
+    loadDetail(eb.dataset.id);
+    return;
+  }
   var cb=e.target.closest&&e.target.closest('#connect-btn');
   if(!cb)return;
   if(!await chModal({title:'Issue a new token?',body:'This creates a NEW agent token and invalidates any previous one for this cluster.',confirm:'Continue'}))return;

@@ -224,6 +224,17 @@ func (s *mongoStore) RenameCluster(ctx context.Context, clusterID, name string) 
 	return nil
 }
 
+func (s *mongoStore) SetClusterEnvironment(ctx context.Context, clusterID, environment string) error {
+	res, err := s.clusters.UpdateOne(ctx, bson.M{"_id": clusterID}, bson.M{"$set": bson.M{"environment": environment}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *mongoStore) DeleteCluster(ctx context.Context, clusterID string) error {
 	res, err := s.clusters.DeleteOne(ctx, bson.M{"_id": clusterID})
 	if err != nil {

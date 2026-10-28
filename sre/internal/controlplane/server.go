@@ -78,6 +78,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/clusters/{id}/agent-token", s.requireAdmin(s.handleRotateAgentToken))
 	mux.HandleFunc("DELETE /api/v1/clusters/{id}", s.requireAdmin(s.handleDeleteCluster))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/rename", s.requireAdmin(s.handleRenameCluster))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/environment", s.requireAdmin(s.handleSetClusterEnvironment))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
 	mux.HandleFunc("GET /api/v1/stats", s.requireAdmin(s.handleStats))
@@ -229,6 +230,39 @@ func (s *Server) handleRenameCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"clusterId": clusterID, "name": name})
+}
+
+// handleSetClusterEnvironment changes a cluster's environment label (e.g.
+// production, staging, dev). The environment drives remediation policy, so a
+// change here can flip production-protection on or off. Tenant-guarded.
+func (s *Server) handleSetClusterEnvironment(w http.ResponseWriter, r *http.Request) {
+	clusterID := r.PathValue("id")
+	c, err := s.store.GetCluster(r.Context(), clusterID)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	if tid := strings.TrimSpace(r.URL.Query().Get("tenantId")); tid != "" && tid != c.TenantID {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	var req struct {
+		Environment string `json:"environment"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	env := strings.TrimSpace(req.Environment)
+	if env == "" {
+		writeErr(w, http.StatusBadRequest, "environment is required")
+		return
+	}
+	if err := s.store.SetClusterEnvironment(r.Context(), clusterID, env); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not update environment")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"clusterId": clusterID, "environment": env})
 }
 
 func (s *Server) handleListClusters(w http.ResponseWriter, r *http.Request) {

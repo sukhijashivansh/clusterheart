@@ -219,6 +219,7 @@ input::placeholder{color:var(--faint)}
 .stat-sub{font-size:10.5px;color:var(--faint);margin-top:auto;padding-top:4px}
 .admin-main h1{font-size:22px;letter-spacing:-.5px}
 .detail-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.env-chip{display:inline-block;margin-left:10px;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);background:var(--hover);vertical-align:middle}
 .rename-name{cursor:default;border-radius:4px}
 .rename-name:hover{text-decoration:underline;text-decoration-color:var(--border-strong);text-decoration-thickness:1px;text-underline-offset:4px}
 .actbar{display:flex;gap:6px;flex-wrap:wrap}
