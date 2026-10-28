@@ -370,8 +370,7 @@ async function loadDetail(id){
     if(!c){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Cluster not found.</p>';return;}
     var connected=c.connected===true;
     var env=c.environment?esc(c.environment):'';
-    var html='<a href="/app" style="color:var(--muted);text-decoration:none">All clusters</a>';
-    html+='<h1 style="margin:14px 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
+    var html='<h1 style="margin:0 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
     html+='<p class="sub">'+esc(c.clusterId)+(env?' · '+env:'')+' · <span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span>'+(c.k8sVersion?' · k8s '+esc(c.k8sVersion):'')+(c.agentVersion?' · agent '+esc(c.agentVersion):'')+'</p>';
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px">';
     if(!connected){html+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button>';}
