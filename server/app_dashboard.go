@@ -301,6 +301,7 @@ if(_mb){
 
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function ago(ts){if(!ts)return 'never';var s=(Date.now()-new Date(ts).getTime())/1000;if(s<0)s=0;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+function fbadge(nf){return nf>0?'<span class="fail-badge" title="'+nf+' failed">'+nf+' failed</span>':'';}
 
 // Apple-style modal. Resolves to the input value (or true) on confirm, null on cancel.
 function chModal(o){return new Promise(function(res){
@@ -340,7 +341,9 @@ async function load(){
       var jobsArr=all.filter(function(x){return (x.owner||'').indexOf('Job/')===0;});
       var havePL=all.length>0;
       var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
+      var podFail=svc.filter(function(x){return x.phase==='Failed';}).length;
       var jobDone=jobsArr.filter(function(x){return x.phase==='Succeeded';}).length;
+      var jobFail=jobsArr.filter(function(x){return x.phase==='Failed';}).length;
       var nodes=n?(n.ready+' / '+n.total):'—';
       var pods=havePL?(podRun+' / '+svc.length):(p.running!=null?(p.running+' / '+p.total):'—');
       var jobsN=havePL?(jobDone+' / '+jobsArr.length):(wl.jobs!=null?(''+wl.jobs):'—');
@@ -348,7 +351,7 @@ async function load(){
       html+='<div class="cl-card">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
-        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div></div>'+
+        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs'+fbadge(havePL?jobFail:0)+'</span></div></div>'+
         '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span><div class="cl-foot-actions">'+
           '<button class="act forceout info-btn" data-id="'+esc(c.clusterId||'')+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>'+
           '<button class="act revoke del-btn" data-id="'+esc(c.clusterId||'')+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button>'+
@@ -411,16 +414,18 @@ async function loadDetail(id){
     // inflating the "pods running" total (e.g. 35 / 45); show them apart.
     var havePL=all.length>0;
     var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
+    var podFail=svc.filter(function(x){return x.phase==='Failed';}).length;
     var jobDone=jobs.filter(function(x){return x.phase==='Succeeded';}).length;
     var jobRun=jobs.filter(function(x){return x.phase==='Running';}).length;
+    var jobFail=jobs.filter(function(x){return x.phase==='Failed';}).length;
     var podsVal=havePL?(podRun+' / '+svc.length):((p.running||0)+' / '+(p.total||0));
     var podsSub=havePL?(svc.length+' total'):((p.pending||0)+' pending · '+(p.failed||0)+' failed');
     var jobsVal=havePL?(jobDone+' / '+jobs.length):(''+(wl.jobs||0));
-    var jobsSub=havePL?(jobRun+' running · '+Math.max(jobs.length-jobDone-jobRun,0)+' pending'):((wl.jobs||0)+' configured');
+    var jobsSub=havePL?(jobRun+' running · '+Math.max(jobs.length-jobDone-jobRun-jobFail,0)+' pending'):((wl.jobs||0)+' configured');
     html+='<div class="statgrid">'+
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
-      stat('Pods',podsVal,podsSub)+
-      stat('Jobs',jobsVal,jobsSub)+
+      stat('Pods'+fbadge(havePL?podFail:(p.failed||0)),podsVal,podsSub)+
+      stat('Jobs'+fbadge(havePL?jobFail:0),jobsVal,jobsSub)+
       stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
     var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});

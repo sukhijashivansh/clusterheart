@@ -197,6 +197,8 @@ input::placeholder{color:var(--faint)}
 .spin-wrap{display:flex;justify-content:center;align-items:center;padding:60px 0}
 .spinner{width:36px;height:36px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0%,var(--accent) 95%);-webkit-mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 0);mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 0);animation:ch-spin .75s linear infinite}
 @keyframes ch-spin{to{transform:rotate(1turn)}}
+/* red "failed" badge shown on Pods/Jobs labels when there are failures */
+.fail-badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red);font-size:10px;font-weight:700;letter-spacing:.01em;vertical-align:middle;white-space:nowrap}
 .seg{display:inline-flex;height:36px;border:1px solid var(--border-strong);overflow:hidden;flex-shrink:0}
 .seg-btn{display:inline-flex;align-items:center;height:100%;padding:0 15px;font-size:12.5px;font-weight:600;background:transparent;color:var(--muted);border:none;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .14s,color .14s}
 .seg-btn:hover:not(.active){color:var(--text)}
