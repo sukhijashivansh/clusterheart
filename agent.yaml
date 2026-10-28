@@ -41,7 +41,7 @@ rules:
   # Live CPU/memory from metrics-server (read-only). If metrics-server is
   # absent the agent just omits usage - this grant is harmless when unused.
   - apiGroups: ["metrics.k8s.io"]
-    resources: [pods]
+    resources: [pods, nodes]
     verbs: [get, list]
   - nonResourceURLs: ["/version", "/version/"]
     verbs: ["get"]
