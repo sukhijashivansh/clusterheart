@@ -476,7 +476,7 @@ function nodesSection(nl){
       '<td class="u-time">'+podsTxt+'</td></tr>';
   }).join('');
   var desc=hasM?'Live CPU and memory usage per node.':'Allocatable capacity per node. Install metrics-server for live usage.';
-  return '<section class="card2"><div class="card2-head"><p class="card2-title">Nodes ('+nl.length+')</p><p class="card2-desc">'+desc+'</p></div>'+
+  return '<section class="card2"><div class="card2-head"><p class="card2-desc" style="margin:0">'+desc+'</p></div>'+
     '<div class="tscroll"><table class="users ptable"><thead><tr><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>Pods</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>';
 }
 
@@ -518,7 +518,7 @@ async function loadDetail(id){
       stat('Jobs'+fbadge(havePL?jobFail:0),jobsVal,jobsSub)+
       stat('Restarts',(p.highRestart||0),'pods restarting')+
     '</div>';
-    html+=nodesSection(L.nodeList);
+    var nodesHtml=nodesSection(L.nodeList);
     var hasMetrics=all.some(function(x){return x.cpuMilli||x.memMi;});
     function byCpu(a,b){return (b.cpuMilli||0)-(a.cpuMilli||0);}
     svc.sort(byCpu);
@@ -531,9 +531,10 @@ async function loadDetail(id){
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
         '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
     }
+    var podsHtml='';
     if(svc.length||jobs.length){
       var nss=Array.from(new Set(all.map(function(x){return x.namespace;}))).sort();
-      html+='<section class="card2">'+
+      podsHtml='<section class="card2">'+
         '<div class="card2-head">'+
           '<div class="toolbar-row">'+
             '<div class="seg" id="pj-seg"><button class="seg-btn active" data-kind="pod">'+svc.length+' Pods</button><button class="seg-btn" data-kind="job">'+jobs.length+' Jobs</button></div>'+
@@ -546,6 +547,20 @@ async function loadDetail(id){
         '</tbody></table></div>'+
         (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+
       '</section>';
+    }else{
+      podsHtml='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No pods reported in the latest snapshot.</p></div></section>';
+    }
+    // Pods / Nodes tabs. The Nodes tab only appears when the agent reports node
+    // data; otherwise the pods table shows on its own (no lone tab bar).
+    if(nodesHtml){
+      html+='<div class="tabs" role="tablist">'+
+        '<button class="tab active" data-tab="pods">Pods</button>'+
+        '<button class="tab" data-tab="nodes">Nodes <span class="tcount">'+(L.nodeList||[]).length+'</span></button>'+
+      '</div>'+
+      '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
+      '<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>';
+    }else{
+      html+=podsHtml;
     }
     var probs=[];
     (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
@@ -575,6 +590,11 @@ async function loadDetail(id){
     if(pn)pn.addEventListener('change',applyPodFilter);
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
     applyPodFilter();
+    document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
+      var name=t.dataset.tab;
+      document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===t);});
+      document.querySelectorAll('.tabpanel').forEach(function(pnl){pnl.classList.toggle('active',pnl.dataset.panel===name);});
+    });});
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
 

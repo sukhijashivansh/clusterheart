@@ -307,6 +307,15 @@ table.users tbody tr:hover{background:var(--hover)}
 .util-bar.crit>span{background:var(--red)}
 .util-sub{font-size:11px;color:var(--faint);margin-top:5px;white-space:nowrap}
 .util-cap{font-size:12.5px;color:var(--muted);margin:0}
+/* detail tabs (Pods / Nodes) */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:4px 0 18px}
+.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.tab .tcount{font-size:11.5px;font-weight:600;color:var(--faint);background:var(--hover);border-radius:999px;padding:1px 7px;line-height:1.5}
+.tab.active .tcount{color:var(--muted)}
+.tabpanel{display:none}
+.tabpanel.active{display:block}
 /* app data tables (pods/problems/warnings): consistent header+body padding so
    columns line up, an identity column that hugs its content with a divider
    after it, and single-line truncation for long values. id-scoped so it wins
