@@ -570,12 +570,8 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
   var del=e.target.closest&&e.target.closest('.del-btn');
   if(del){
     var rawNm=del.dataset.name||del.dataset.id,nm=esc(rawNm);
-    var ok=await chModal({
-      title:'Delete cluster',
-      body:'This permanently deletes <b>'+nm+'</b> and its history. This cannot be undone. If an agent is still running there, uninstall it too (see Help).<span class="modal-confirm">Type <b>'+nm+'</b> to confirm.</span>',
-      input:'',placeholder:rawNm,requireMatch:rawNm,
-      confirm:'Delete permanently',danger:true
-    });
+    if(!await chModal({title:'Delete cluster?',body:'Permanently delete <b>'+nm+'</b> and its history? This cannot be undone.',confirm:'Continue',danger:true}))return;
+    var ok=await chModal({title:'Confirm deletion',body:'Type <b>'+nm+'</b> to confirm.',input:'',placeholder:rawNm,requireMatch:rawNm,confirm:'Delete permanently',danger:true});
     if(ok==null)return;
     var dr=await fetch('/api/app/clusters/'+encodeURIComponent(del.dataset.id),{method:'DELETE',headers:{'Accept':'application/json'}});
     if(!dr.ok){await chModal({title:'Failed',body:'Could not delete the cluster.',confirm:'OK'});return;}
