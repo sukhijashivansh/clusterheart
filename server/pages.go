@@ -300,8 +300,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .pod-name{font-size:13.5px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* node utilization bars */
 .util{min-width:120px;max-width:180px}
-.util-pct{font-size:13px;font-weight:650;color:var(--text);margin-bottom:5px;line-height:1}
-.util-bar{height:6px;border-radius:999px;background:var(--border);overflow:hidden}
+.util-bar{height:7px;border-radius:999px;background:var(--border);overflow:hidden}
 .util-bar>span{display:block;height:100%;border-radius:999px;background:var(--green);transition:width .35s ease}
 .util-bar.warn>span{background:var(--amber)}
 .util-bar.crit>span{background:var(--red)}
@@ -312,10 +311,10 @@ table.users tbody tr:hover{background:var(--hover)}
 .tab{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--accent)}
-.tab .tcount{font-size:11.5px;font-weight:600;color:var(--faint);background:var(--hover);border-radius:999px;padding:1px 7px;line-height:1.5}
-.tab.active .tcount{color:var(--muted)}
 .tabpanel{display:none}
 .tabpanel.active{display:block}
+/* table flush to the card top when there's no header above it (nodes) */
+.card2>.tscroll:first-child{border-top:none}
 /* app data tables (pods/problems/warnings): consistent header+body padding so
    columns line up, an identity column that hugs its content with a divider
    after it, and single-line truncation for long values. id-scoped so it wins

@@ -456,7 +456,7 @@ function utilCell(usage,alloc,sub,hasM){
   if(hasM&&alloc){
     var pct=Math.round((usage||0)/alloc*100);if(pct>100)pct=100;
     var cls=pct>=90?'crit':(pct>=70?'warn':'');
-    return '<div class="util"><div class="util-pct">'+pct+'%</div><div class="util-bar '+cls+'"><span style="width:'+pct+'%"></span></div><div class="util-sub">'+sub+'</div></div>';
+    return '<div class="util"><div class="util-bar '+cls+'"><span style="width:'+pct+'%"></span></div><div class="util-sub">'+sub+'</div></div>';
   }
   return '<div class="util-sub util-cap">'+sub+'</div>';
 }
@@ -475,8 +475,8 @@ function nodesSection(nl){
       '<td>'+utilCell(n.memUsageMi,n.memAllocMi,memSub,hasM)+'</td>'+
       '<td class="u-time">'+podsTxt+'</td></tr>';
   }).join('');
-  var desc=hasM?'Live CPU and memory usage per node.':'Allocatable capacity per node. Install metrics-server for live usage.';
-  return '<section class="card2"><div class="card2-head"><p class="card2-desc" style="margin:0">'+desc+'</p></div>'+
+  var head=hasM?'':'<div class="card2-head"><p class="card2-desc" style="margin:0">Allocatable capacity per node. Install metrics-server for live usage.</p></div>';
+  return '<section class="card2">'+head+
     '<div class="tscroll"><table class="users ptable"><thead><tr><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>Pods</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>';
 }
 
@@ -555,7 +555,7 @@ async function loadDetail(id){
     if(nodesHtml){
       html+='<div class="tabs" role="tablist">'+
         '<button class="tab active" data-tab="pods">Pods</button>'+
-        '<button class="tab" data-tab="nodes">Nodes <span class="tcount">'+(L.nodeList||[]).length+'</span></button>'+
+        '<button class="tab" data-tab="nodes">Nodes</button>'+
       '</div>'+
       '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
       '<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>';
