@@ -364,14 +364,20 @@ function kebab(c){
 // Apple-style modal. Resolves to the input value (or true) on confirm, null on cancel.
 function chModal(o){return new Promise(function(res){
   var bg=document.createElement('div');bg.className='modal-bg';
-  var inp=o.input!=null?'<input class="toolbar-input" id="_mi" value="'+esc(o.input)+'">':'';
+  var ph=o.placeholder?' placeholder="'+esc(o.placeholder)+'"':'';
+  var extra=o.requireMatch?' autocomplete="off" autocapitalize="off" spellcheck="false"':'';
+  var inp=o.input!=null?'<input class="toolbar-input" id="_mi"'+ph+extra+' value="'+esc(o.input)+'">':'';
   var cancelBtn=o.single?'':'<button id="_mc">'+esc(o.cancel||'Cancel')+'</button>';
   bg.innerHTML='<div class="modal"><h3>'+esc(o.title||'')+'</h3>'+(o.body?'<p>'+o.body+'</p>':'')+inp+'<div class="modal-actions">'+cancelBtn+'<button class="'+(o.danger?'danger':'primary')+'" id="_mo">'+esc(o.confirm||'OK')+'</button></div></div>';
   document.body.appendChild(bg);
-  var mi=bg.querySelector('#_mi');if(mi){mi.focus();mi.select();mi.addEventListener('keydown',function(e){if(e.key==='Enter')bg.querySelector('#_mo').click();});}
+  var mi=bg.querySelector('#_mi'),mo=bg.querySelector('#_mo');
+  function matched(){return !o.requireMatch||(mi&&mi.value.trim()===o.requireMatch);}
+  function sync(){if(o.requireMatch)mo.disabled=!matched();}
+  if(mi){mi.focus();if(o.input)mi.select();mi.addEventListener('input',sync);mi.addEventListener('keydown',function(e){if(e.key==='Enter'&&matched())mo.click();});}
+  sync();
   function done(v){bg.remove();res(v);}
   var mc=bg.querySelector('#_mc');if(mc)mc.onclick=function(){done(null);};
-  bg.querySelector('#_mo').onclick=function(){done(mi?mi.value.trim():true);};
+  mo.onclick=function(){if(!matched())return;done(mi?mi.value.trim():true);};
   bg.addEventListener('click',function(e){if(e.target===bg)done(null);});
 });}
 
@@ -563,10 +569,14 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
   }
   var del=e.target.closest&&e.target.closest('.del-btn');
   if(del){
-    var nm=esc(del.dataset.name||del.dataset.id);
-    if(!await chModal({title:'Delete cluster?',body:'Remove <b>'+nm+'</b> from Clusterheart.',confirm:'Delete',danger:true}))return;
-    if(!await chModal({title:'Are you sure?',body:'This cannot be undone.',confirm:'Yes, delete',danger:true}))return;
-    if(!await chModal({title:'Final confirmation',body:'Permanently delete <b>'+nm+'</b>? If an agent is still running there, uninstall it too (see Help).',confirm:'Delete permanently',danger:true}))return;
+    var rawNm=del.dataset.name||del.dataset.id,nm=esc(rawNm);
+    var ok=await chModal({
+      title:'Delete cluster',
+      body:'This permanently deletes <b>'+nm+'</b> and its history. This cannot be undone. If an agent is still running there, uninstall it too (see Help).<span class="modal-confirm">Type <b>'+nm+'</b> to confirm.</span>',
+      input:'',placeholder:rawNm,requireMatch:rawNm,
+      confirm:'Delete permanently',danger:true
+    });
+    if(ok==null)return;
     var dr=await fetch('/api/app/clusters/'+encodeURIComponent(del.dataset.id),{method:'DELETE',headers:{'Accept':'application/json'}});
     if(!dr.ok){await chModal({title:'Failed',body:'Could not delete the cluster.',confirm:'OK'});return;}
     if(inDetail){location.href='/app';}else{load();}

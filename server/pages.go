@@ -246,6 +246,8 @@ input::placeholder{color:var(--faint)}
 .modal-actions button{flex:1;padding:9px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--border-strong);background:transparent;color:var(--text);border-radius:8px}
 .modal-actions .primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .modal-actions .danger{background:#b91c1c;border-color:#b91c1c;color:#fff}
+.modal-actions button:disabled{opacity:.4;cursor:default}
+.modal-confirm{display:block;margin-top:13px;color:var(--text)}
 @media(max-width:720px){
   .admin-main{padding:18px 14px}
   .admin-main h1{font-size:19px}
