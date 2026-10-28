@@ -201,3 +201,14 @@ func (s *mongoStore) SetRemediationTokenHash(ctx context.Context, clusterID, has
 	}
 	return nil
 }
+
+func (s *mongoStore) SetAgentTokenHash(ctx context.Context, clusterID, hash string) error {
+	res, err := s.clusters.UpdateOne(ctx, bson.M{"_id": clusterID}, bson.M{"$set": bson.M{"agentTokenHash": hash}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

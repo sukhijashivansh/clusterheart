@@ -75,6 +75,7 @@ func (s *Server) Routes() http.Handler {
 	// Operator / admin.
 	mux.HandleFunc("POST /api/v1/clusters", s.requireAdmin(s.handleRegister))
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/agent-token", s.requireAdmin(s.handleRotateAgentToken))
 	mux.HandleFunc("GET /api/v1/incidents", s.requireAdmin(s.handleListIncidents))
 	mux.HandleFunc("GET /api/v1/incidents/{id}", s.requireAdmin(s.handleGetIncident))
 	mux.HandleFunc("GET /api/v1/stats", s.requireAdmin(s.handleStats))
@@ -146,6 +147,34 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		AgentToken: token, // shown once; only the hash is stored
 		APIVersion: contract.APIVersion,
 	})
+}
+
+// handleRotateAgentToken mints a FRESH agent token for an existing cluster and
+// stores its new hash, invalidating the old token. Lets an operator re-issue a
+// token they never saved (it is shown only once at registration). Optional
+// ?tenantId guards against rotating a cluster outside the caller's tenant.
+func (s *Server) handleRotateAgentToken(w http.ResponseWriter, r *http.Request) {
+	clusterID := r.PathValue("id")
+	c, err := s.store.GetCluster(r.Context(), clusterID)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	if tid := strings.TrimSpace(r.URL.Query().Get("tenantId")); tid != "" && tid != c.TenantID {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	token, hash, err := mintAgentToken()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not mint agent token")
+		return
+	}
+	if err := s.store.SetAgentTokenHash(r.Context(), clusterID, hash); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not store agent token")
+		return
+	}
+	s.log.Info("agent token rotated", "clusterId", clusterID)
+	writeJSON(w, http.StatusOK, contract.RegisterResponse{ClusterID: clusterID, AgentToken: token, APIVersion: contract.APIVersion})
 }
 
 func (s *Server) handleListClusters(w http.ResponseWriter, r *http.Request) {

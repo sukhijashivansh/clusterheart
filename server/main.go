@@ -584,6 +584,7 @@ func main() {
 	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
 	mux.HandleFunc("/api/sre-bootstrap", a.handleSREBootstrap)
 	mux.HandleFunc("/api/app/clusters", a.handleAppClusters)
+	mux.HandleFunc("POST /api/app/clusters/{id}/connect", a.handleAppClusterConnect)
 
 	// Serve the desktop-app installers straight from this server (no GitHub
 	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage

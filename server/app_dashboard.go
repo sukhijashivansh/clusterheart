@@ -127,6 +127,49 @@ func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleAppClusterConnect re-issues a FRESH agent token for one of the user's
+// clusters and returns the install snippet. This is how you recover a token you
+// never saved (it is shown only once). Scoped to the user's tenant.
+func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
+	u := a.sessionUser(r)
+	if u == nil || !u.Approved {
+		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeJSON(w, 400, map[string]any{"error": "missing cluster id"})
+		return
+	}
+	tenant := tenantFor(u.Email)
+	code, data, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(id)+"/agent-token?tenantId="+url.QueryEscape(tenant), nil)
+	if err != nil {
+		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
+		return
+	}
+	if code == 404 {
+		writeJSON(w, 404, map[string]any{"error": "cluster not found"})
+		return
+	}
+	if code < 200 || code >= 300 {
+		writeJSON(w, 502, map[string]any{"error": "could not issue token"})
+		return
+	}
+	var reg struct {
+		ClusterID  string `json:"clusterId"`
+		AgentToken string `json:"agentToken"`
+	}
+	if err := json.Unmarshal(data, &reg); err != nil || reg.AgentToken == "" {
+		writeJSON(w, 502, map[string]any{"error": "bad control plane response"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"clusterId":  reg.ClusterID,
+		"agentToken": reg.AgentToken,
+		"install":    agentInstallSnippet(reg.ClusterID, reg.AgentToken),
+	})
+}
+
 // agentInstallSnippet builds the copy-paste kubectl commands that enroll the
 // read-only agent in the user's cluster. The per-cluster secrets go into a k8s
 // Secret; the manifest itself is generic and hosted publicly.
@@ -256,6 +299,7 @@ async function loadDetail(id){
     var html='<a href="/app" style="color:var(--muted);text-decoration:none">&larr; All clusters</a>';
     html+='<h1 style="margin:14px 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
     html+='<p class="sub">'+esc(c.clusterId)+(env?' · '+env:'')+' · <span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span>'+(c.k8sVersion?' · k8s '+esc(c.k8sVersion):'')+(c.agentVersion?' · agent '+esc(c.agentVersion):'')+'</p>';
+    html+='<div style="margin:14px 0 4px"><button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent);font-size:13px;margin-left:8px">guide &rarr;</a></div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
@@ -326,6 +370,18 @@ async function loadDetail(id){
     applyPodFilter();
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">&larr; All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
+
+var _cbox=document.getElementById('clusters');
+if(_cbox)_cbox.addEventListener('click',async function(e){
+  var cb=e.target.closest&&e.target.closest('#connect-btn');
+  if(!cb)return;
+  if(!confirm('This issues a NEW agent token and invalidates any previous token for this cluster. Continue?'))return;
+  cb.disabled=true;cb.textContent='…';
+  var rr=await _post('/api/app/clusters/'+encodeURIComponent(cb.dataset.id)+'/connect',{});
+  cb.disabled=false;cb.textContent='Get install command';
+  if(!rr.ok){alert((rr.data&&rr.data.error)||'Failed to issue token');return;}
+  showInstall(rr.data);window.scrollTo(0,0);
+});
 
 function route(){
   var id=new URLSearchParams(location.search).get('cluster');
