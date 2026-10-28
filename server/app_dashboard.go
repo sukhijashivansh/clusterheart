@@ -331,17 +331,19 @@ async function load(){
     var html='<div class="cl-grid">';
     list.forEach(function(c){
       var connected=c.connected===true;
-      var L=c.latest||{},n=L.nodes,p=L.pods||{};
+      var L=c.latest||{},n=L.nodes,p=L.pods||{},wl=L.workloads||{};
       // Split service pods from job pods so completed jobs don't inflate the
-      // running/total (keeps parity with the detail view).
+      // running/total (keeps parity with the detail view). Pods show running /
+      // total; Jobs show completed (passed) / total.
       var all=L.podList||[];
       var svc=all.filter(function(x){return (x.owner||'').indexOf('Job/')!==0;});
       var jobsArr=all.filter(function(x){return (x.owner||'').indexOf('Job/')===0;});
       var havePL=all.length>0;
       var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
+      var jobDone=jobsArr.filter(function(x){return x.phase==='Succeeded';}).length;
       var nodes=n?(n.ready+' / '+n.total):'—';
       var pods=havePL?(podRun+' / '+svc.length):(p.running!=null?(p.running+' / '+p.total):'—');
-      var jobsN=havePL?(''+jobsArr.length):(p.succeeded!=null?(''+p.succeeded):'—');
+      var jobsN=havePL?(jobDone+' / '+jobsArr.length):(wl.jobs!=null?(''+wl.jobs):'—');
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
       html+='<div class="cl-card">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
@@ -413,8 +415,8 @@ async function loadDetail(id){
     var jobRun=jobs.filter(function(x){return x.phase==='Running';}).length;
     var podsVal=havePL?(podRun+' / '+svc.length):((p.running||0)+' / '+(p.total||0));
     var podsSub=havePL?(svc.length+' total'):((p.pending||0)+' pending · '+(p.failed||0)+' failed');
-    var jobsVal=havePL?(''+jobs.length):(''+(wl.jobs||0));
-    var jobsSub=havePL?(jobDone+' done · '+jobRun+' running'):((wl.jobs||0)+' configured');
+    var jobsVal=havePL?(jobDone+' / '+jobs.length):(''+(wl.jobs||0));
+    var jobsSub=havePL?(jobRun+' running · '+Math.max(jobs.length-jobDone-jobRun,0)+' pending'):((wl.jobs||0)+' configured');
     html+='<div class="statgrid">'+
       stat('Nodes ready',(n.ready||0)+' / '+(n.total||0),(n.notReady?n.notReady+' not ready':'all ready'))+
       stat('Pods',podsVal,podsSub)+
