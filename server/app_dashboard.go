@@ -292,7 +292,7 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
 		return
 	}
-	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email})
+	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email, "ManifestURL": envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml")})
 }
 
 var appTmpl = page(appBody)
@@ -322,6 +322,7 @@ const appBody = `{{define "body"}}<div class="app2">
 </main>
 </div>{{end}}
 {{define "script"}}<script>
+var NODE_MANIFEST_URL={{.ManifestURL}};
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
 
@@ -475,9 +476,19 @@ function nodesSection(nl){
       '<td>'+utilCell(n.memUsageMi,n.memAllocMi,memSub,hasM)+'</td>'+
       '<td class="u-time">'+podsTxt+'</td></tr>';
   }).join('');
-  var head=hasM?'':'<div class="card2-head"><p class="card2-desc" style="margin:0">Allocatable capacity per node. Install metrics-server for live usage.</p></div>';
-  return '<section class="card2">'+head+
+  var head=hasM?'':'<div class="card2-head"><p class="card2-desc" style="margin:0">Allocatable capacity per node. Run the setup above for live usage.</p></div>';
+  var table='<section class="card2">'+head+
     '<div class="tscroll"><table class="users ptable"><thead><tr><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>Pods</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>';
+  if(hasM)return table;
+  // No live usage yet: surface the exact one-time setup (adds the namespace,
+  // the agent + its node-metrics permission, and installs metrics-server).
+  var cmds='kubectl apply -f '+NODE_MANIFEST_URL+'\n'+
+    'kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml\n'+
+    'kubectl -n clusterheart-sre rollout restart deployment clusterheart-agent';
+  var setup='<section class="card2"><div class="card2-head"><p class="card2-title">Enable live CPU &amp; memory</p><p class="card2-desc">Live node usage needs metrics-server and the latest agent permissions. Run this once, then reopen this tab.</p></div>'+
+    '<div class="card2-body"><textarea class="nb" rows="3" readonly onclick="this.select()">'+esc(cmds)+'</textarea>'+
+    '<div class="nb-actions"><button class="act approve copy-setup">Copy</button><span class="nb-msg">Adds the clusterheart-sre namespace &amp; agent, grants node-metrics access, and installs metrics-server.</span></div></div></section>';
+  return setup+table;
 }
 
 async function loadDetail(id){
@@ -595,6 +606,7 @@ async function loadDetail(id){
       document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===t);});
       document.querySelectorAll('.tabpanel').forEach(function(pnl){pnl.classList.toggle('active',pnl.dataset.panel===name);});
     });});
+    document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
 
