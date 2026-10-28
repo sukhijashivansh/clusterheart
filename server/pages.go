@@ -279,11 +279,14 @@ table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:var(--hover)}
 .u-name{font-weight:600;font-size:14.5px;color:var(--text)}
 .pod-name{font-size:13.5px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* pods/jobs table: separate the identity column from the metrics with a
-   divider + breathing room so Status never crowds the pod name */
-.ptable th:first-child,.ptable td:first-child{padding-right:28px;border-right:1px solid var(--border)}
-.ptable th:nth-child(2),.ptable td:nth-child(2){padding-left:24px}
-/* keep rows to a single line - long object/detail values truncate (full text on hover) */
+/* app data tables (pods/problems/warnings): consistent header+body padding so
+   columns line up, an identity column that hugs its content with a divider
+   after it, and single-line truncation for long values. id-scoped so it wins
+   over the shared .users mobile "stacked card" rules that otherwise zero out
+   body-cell padding. */
+#clusters table.ptable th,#clusters table.ptable td{padding:12px 16px;vertical-align:middle}
+#clusters table.ptable th:first-child,#clusters table.ptable td:first-child{width:1%;white-space:nowrap;padding-left:18px;padding-right:26px;border-right:1px solid var(--border)}
+#clusters table.ptable tbody tr{border-bottom:none}
 .ptable td.u-email,.ptable td.u-time{max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
