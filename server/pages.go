@@ -283,6 +283,8 @@ table.users tbody tr:hover{background:var(--hover)}
    divider + breathing room so Status never crowds the pod name */
 .ptable th:first-child,.ptable td:first-child{padding-right:28px;border-right:1px solid var(--border)}
 .ptable th:nth-child(2),.ptable td:nth-child(2){padding-left:24px}
+/* keep rows to a single line - long object/detail values truncate (full text on hover) */
+.ptable td.u-email,.ptable td.u-time{max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
