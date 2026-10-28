@@ -371,13 +371,12 @@ async function loadDetail(id){
     if(!c){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Cluster not found.</p>';return;}
     var connected=c.connected===true;
     var env=c.environment?esc(c.environment):'';
-    var html='<h1 style="margin:0 0 2px">'+esc(c.name||c.clusterId)+' <span class="pill '+(connected?'on':'off')+'" style="font-size:14px;margin-left:8px;vertical-align:middle">'+(connected?'Connected':'Offline')+'</span></h1>';
-    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px">';
-    html+='<button class="act forceout" id="info-btn" data-id="'+esc(c.clusterId)+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
-    if(!connected){html+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button>';}
-    html+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
-    html+='<button class="act revoke del-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||c.clusterId)+'">Delete</button>';
-    html+='</div>';
+    var statusHtml='<span class="pill '+(connected?'on':'off')+'" style="font-size:13px;margin-left:10px;vertical-align:middle">'+(connected?'Connected':'Offline')+'</span>';
+    var btns='<button class="act forceout" id="info-btn" data-id="'+esc(c.clusterId)+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
+    if(!connected){btns+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Install</button>';}
+    btns+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
+    btns+='<button class="act revoke del-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||c.clusterId)+'">Delete</button>';
+    var html='<div class="detail-head"><h1 style="margin:0">'+esc(c.name||c.clusterId)+statusHtml+'</h1><div class="actbar">'+btns+'</div></div>';
     var L=c.latest;
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};

@@ -118,7 +118,7 @@ input::placeholder{color:var(--faint)}
 
 /* --- admin (sidebar shell, Apple-style) --- */
 .admin-shell{display:flex;min-height:100vh}
-.admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden;white-space:nowrap;transition:width .25s ease,padding .25s ease,opacity .2s ease}
+.admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden;white-space:nowrap;transition:width .28s cubic-bezier(.4,0,.2,1),padding .28s cubic-bezier(.4,0,.2,1),opacity .2s ease}
 .an-brand{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
 .an-brandrow{display:flex;align-items:center;gap:9px;min-width:0}
 .an-brand .wordmark{font-size:16px}
@@ -129,7 +129,7 @@ input::placeholder{color:var(--faint)}
 .an-foot{margin-top:auto;padding:14px 10px 4px;font-size:12.5px;color:var(--muted)}
 .an-me{font-weight:500;color:var(--text);margin-bottom:3px}
 .an-logout{color:var(--muted)}.an-logout:hover{color:var(--accent)}
-.admin-main{flex:1 1 auto;min-width:0;padding:32px 40px}
+.admin-main{flex:1 1 auto;min-width:0;padding:32px 40px;position:relative;transition:padding .28s cubic-bezier(.4,0,.2,1)}
 @media(max-width:720px){
   .admin-shell{flex-direction:column}
   .admin-nav{width:100%;height:auto;position:static;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--border);padding:12px 16px}
@@ -150,11 +150,12 @@ input::placeholder{color:var(--faint)}
 .tscroll{max-height:440px;overflow:auto;border-top:1px solid var(--border)}
 .tscroll table.users th{position:sticky;top:0;background:var(--input-bg);z-index:1}
 /* collapsible sidebar via the burger toggle */
-.admin-shell.nav-hidden .admin-nav{width:0;padding-left:0;padding-right:0;border-right:none;opacity:0}
+.admin-shell.nav-hidden .admin-nav{width:0;min-width:0;padding-left:0;padding-right:0;border-right:none;opacity:0}
+.admin-shell.nav-hidden .admin-main{padding-top:62px}
 .nav-burger{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);cursor:pointer;font-size:21px;line-height:1;padding:2px;flex-shrink:0}
 .nav-burger:hover{color:var(--accent)}
-#nav-reopen{display:none;margin-bottom:14px}
-.nav-hidden #nav-reopen{display:inline-flex}
+#nav-reopen{position:absolute;top:20px;left:22px;opacity:0;pointer-events:none;transition:opacity .2s ease .12s}
+.nav-hidden #nav-reopen{opacity:1;pointer-events:auto}
 .seg{display:inline-flex;border:1px solid var(--border-strong);overflow:hidden;flex-shrink:0}
 .seg-btn{padding:6px 13px;font-size:12.5px;font-weight:600;background:transparent;color:var(--muted);border:none;cursor:pointer;font-family:inherit}
 .seg-btn.active{background:var(--accent);color:var(--accent-ink)}
@@ -169,6 +170,9 @@ input::placeholder{color:var(--faint)}
 .stat-sub{font-size:10.5px;color:var(--faint);margin-top:3px}
 .admin-main h1{font-size:22px;letter-spacing:-.5px}
 .sb-add{width:100%;margin:0 0 12px}
+.detail-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.actbar{display:flex;gap:6px;flex-wrap:wrap}
+.actbar .act{padding:6px 12px;font-size:12.5px}
 /* apple-style small modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:mfade .15s ease}
 @keyframes mfade{from{opacity:0}to{opacity:1}}
