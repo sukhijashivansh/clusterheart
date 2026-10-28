@@ -227,9 +227,10 @@ table.users tbody tr:hover{background:var(--hover)}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
 .cell-act{text-align:right;white-space:nowrap}
-.pill{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600}
-.pill.on{background:rgba(74,222,128,.12);color:var(--green)}
-.pill.off{background:rgba(251,146,60,.12);color:var(--amber)}
+.pill{display:inline-flex;align-items:center;padding:0;font-size:13px;font-weight:600;background:none}
+.pill.on{color:var(--green)}
+.pill.off{color:var(--amber)}
+.pill .dot{display:none}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .empty{padding:48px 18px;text-align:center;color:var(--muted)}
 

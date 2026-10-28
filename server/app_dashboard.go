@@ -294,11 +294,12 @@ function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;'
 function chModal(o){return new Promise(function(res){
   var bg=document.createElement('div');bg.className='modal-bg';
   var inp=o.input!=null?'<input class="toolbar-input" id="_mi" value="'+esc(o.input)+'">':'';
-  bg.innerHTML='<div class="modal"><h3>'+esc(o.title||'')+'</h3>'+(o.body?'<p>'+o.body+'</p>':'')+inp+'<div class="modal-actions"><button id="_mc">'+esc(o.cancel||'Cancel')+'</button><button class="'+(o.danger?'danger':'primary')+'" id="_mo">'+esc(o.confirm||'OK')+'</button></div></div>';
+  var cancelBtn=o.single?'':'<button id="_mc">'+esc(o.cancel||'Cancel')+'</button>';
+  bg.innerHTML='<div class="modal"><h3>'+esc(o.title||'')+'</h3>'+(o.body?'<p>'+o.body+'</p>':'')+inp+'<div class="modal-actions">'+cancelBtn+'<button class="'+(o.danger?'danger':'primary')+'" id="_mo">'+esc(o.confirm||'OK')+'</button></div></div>';
   document.body.appendChild(bg);
   var mi=bg.querySelector('#_mi');if(mi){mi.focus();mi.select();mi.addEventListener('keydown',function(e){if(e.key==='Enter')bg.querySelector('#_mo').click();});}
   function done(v){bg.remove();res(v);}
-  bg.querySelector('#_mc').onclick=function(){done(null);};
+  var mc=bg.querySelector('#_mc');if(mc)mc.onclick=function(){done(null);};
   bg.querySelector('#_mo').onclick=function(){done(mi?mi.value.trim():true);};
   bg.addEventListener('click',function(e){if(e.target===bg)done(null);});
 });}
@@ -370,9 +371,9 @@ async function loadDetail(id){
     if(!c){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Cluster not found.</p>';return;}
     var connected=c.connected===true;
     var env=c.environment?esc(c.environment):'';
-    var html='<h1 style="margin:0 0 6px">'+esc(c.name||c.clusterId)+'</h1>';
-    html+='<p class="sub">'+esc(c.clusterId)+(env?' · '+env:'')+' · <span class="pill '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span>'+(c.k8sVersion?' · k8s '+esc(c.k8sVersion):'')+(c.agentVersion?' · agent '+esc(c.agentVersion):'')+'</p>';
+    var html='<h1 style="margin:0 0 2px">'+esc(c.name||c.clusterId)+' <span class="pill '+(connected?'on':'off')+'" style="font-size:14px;margin-left:8px;vertical-align:middle">'+(connected?'Connected':'Offline')+'</span></h1>';
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px">';
+    html+='<button class="act forceout" id="info-btn" data-id="'+esc(c.clusterId)+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
     if(!connected){html+='<button class="act approve" id="connect-btn" data-id="'+esc(c.clusterId)+'">Get install command</button>';}
     html+='<button class="act forceout" id="rename-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'">Rename</button>';
     html+='<button class="act revoke del-btn" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||c.clusterId)+'">Delete</button>';
@@ -450,6 +451,13 @@ async function loadDetail(id){
 var _cbox=document.getElementById('clusters');
 if(_cbox)_cbox.addEventListener('click',async function(e){
   var inDetail=!!new URLSearchParams(location.search).get('cluster');
+  var ib=e.target.closest&&e.target.closest('#info-btn');
+  if(ib){
+    var d=ib.dataset;var seen=d.seen?new Date(d.seen).toLocaleString():'never';
+    var rows=[['Status',d.conn],['Cluster ID',d.id],['Environment',d.env||'-'],['Kubernetes',d.k8s||'-'],['Agent',d.agent||'-'],['Last seen',seen]];
+    var body='<div style="text-align:left;font-size:12.5px;line-height:1.95;word-break:break-all">'+rows.map(function(r){return '<div><span style="color:var(--muted)">'+r[0]+':</span> '+esc(r[1])+'</div>';}).join('')+'</div>';
+    await chModal({title:'Cluster info',body:body,confirm:'Close',single:true});return;
+  }
   var del=e.target.closest&&e.target.closest('.del-btn');
   if(del){
     var nm=esc(del.dataset.name||del.dataset.id);
