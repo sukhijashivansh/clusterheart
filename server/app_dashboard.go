@@ -406,7 +406,7 @@ async function loadDetail(id){
     var jobs=all.filter(isJob).sort(byCpu);
     function rowK(x,kind){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
-      return '<tr data-kind="'+kind+'" data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name" style="font-size:13.5px">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+      return '<tr data-kind="'+kind+'" data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
         '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
         '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+

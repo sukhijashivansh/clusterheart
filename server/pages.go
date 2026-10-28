@@ -201,8 +201,9 @@ input::placeholder{color:var(--faint)}
 .toolbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .toolbar-row .toolbar-input.grow{flex:1 1 180px;min-width:140px}
 /* four-up stat grid (desktop) -> two-up on phones */
-.statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
-.statcard{display:flex;flex-direction:column;padding:12px 13px;background:var(--surface2);border:1px solid var(--border);min-width:0}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
+.statcard{display:flex;flex-direction:column;padding:12px 13px;background:var(--surface2);border:1px solid var(--border);min-width:0;overflow:hidden}
+.stat-val,.stat-label,.stat-sub{overflow:hidden;text-overflow:ellipsis}
 .stat-label{font-size:11px;color:var(--faint);line-height:1.3;min-height:2.2em}
 .stat-val{font-size:18px;font-weight:700;color:var(--text);margin-top:2px;white-space:nowrap}
 .stat-sub{font-size:10.5px;color:var(--faint);margin-top:auto;padding-top:4px}
@@ -271,6 +272,7 @@ table.users tbody tr{border-top:1px solid var(--border);transition:background .1
 table.users tbody tr:first-child{border-top:none}
 table.users tbody tr:hover{background:var(--hover)}
 .u-name{font-weight:600;font-size:14.5px;color:var(--text)}
+.pod-name{font-size:13.5px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
