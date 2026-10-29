@@ -347,6 +347,15 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')document.que
 function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function ago(ts){if(!ts)return 'never';var s=(Date.now()-new Date(ts).getTime())/1000;if(s<0)s=0;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 function fbadge(nf){return nf>0?'<span class="fail-badge" title="'+nf+' failed">'+nf+' failed</span>':'';}
+// dedupeJobs collapses CronJob runs to the latest run per owner (one entry per
+// scheduled job); standalone Jobs are kept. Used by both the cards and detail
+// so their Job counts match.
+function dedupeJobs(list){
+  var s=(list||[]).slice().sort(function(a,b){return new Date(b.startedAt||b.finishedAt||0)-new Date(a.startedAt||a.finishedAt||0);});
+  var seen={},out=[];
+  s.forEach(function(j){if(j.owner){if(seen[j.owner])return;seen[j.owner]=true;}out.push(j);});
+  return out;
+}
 var dotsSVG='<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><circle cx="9" cy="3.6" r="1.5"/><circle cx="9" cy="9" r="1.5"/><circle cx="9" cy="14.4" r="1.5"/></svg>';
 // kebab builds the three-dot options menu used on both the cluster cards and
 // the detail header. All items are class-based so multiple menus coexist.
@@ -398,25 +407,24 @@ async function load(){
     list.forEach(function(c){
       var connected=c.connected===true;
       var L=c.latest||{},n=L.nodes,p=L.pods||{},wl=L.workloads||{};
-      // Split service pods from job pods so completed jobs don't inflate the
-      // running/total (keeps parity with the detail view). Pods show running /
-      // total; Jobs show completed (passed) / total.
+      // Pods show running / total (service pods only); Jobs show completed /
+      // total scheduled jobs from the deduped Job objects — same source as the
+      // detail view, so the numbers match.
       var all=L.podList||[];
       var svc=all.filter(function(x){return (x.owner||'').indexOf('Job/')!==0;});
-      var jobsArr=all.filter(function(x){return (x.owner||'').indexOf('Job/')===0;});
-      var havePL=all.length>0;
+      var jl=dedupeJobs(L.jobList);
+      var havePL=all.length>0,haveJL=jl.length>0;
       var podRun=svc.filter(function(x){return x.phase==='Running';}).length;
       var podFail=svc.filter(function(x){return x.phase==='Failed';}).length;
-      var jobDone=jobsArr.filter(function(x){return x.phase==='Succeeded';}).length;
-      var jobFail=jobsArr.filter(function(x){return x.phase==='Failed';}).length;
+      var jobDone=jl.filter(function(x){return x.status==='Complete';}).length;
       var nodes=n?(n.ready+' / '+n.total):'—';
       var pods=havePL?(podRun+' / '+svc.length):(p.running!=null?(p.running+' / '+p.total):'—');
-      var jobsN=havePL?(jobDone+' / '+jobsArr.length):(wl.jobs!=null?(''+wl.jobs):'—');
+      var jobsN=haveJL?(jobDone+' / '+jl.length):(wl.jobs!=null?(''+wl.jobs):'—');
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
       html+='<div class="cl-card">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
-        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs'+fbadge(havePL?jobFail:0)+'</span></div></div>'+
+        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div></div>'+
         '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span>'+kebab(c)+'</div>'+
       '</div>';
     });
@@ -508,15 +516,8 @@ async function loadDetail(id){
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
     var all=L.podList||[];
-    // Collapse CronJob runs to just the latest run per owner (one row per
-    // scheduled job) so we don't list every historical run. Standalone Jobs
-    // (no owner) are kept as-is.
-    var jl=(function(list){
-      var s=(list||[]).slice().sort(function(a,b){return new Date(b.startedAt||b.finishedAt||0)-new Date(a.startedAt||a.finishedAt||0);});
-      var seen={},out=[];
-      s.forEach(function(j){if(j.owner){if(seen[j.owner])return;seen[j.owner]=true;}out.push(j);});
-      return out;
-    })(L.jobList);
+    // One row per scheduled job (latest CronJob run); see dedupeJobs.
+    var jl=dedupeJobs(L.jobList);
     function isJob(x){return (x.owner||'').indexOf('Job/')===0;}
     var svc=all.filter(function(x){return !isJob(x);});
     var havePL=all.length>0,haveJL=jl.length>0;
