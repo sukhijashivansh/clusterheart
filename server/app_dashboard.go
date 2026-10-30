@@ -267,6 +267,148 @@ func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// appSREUser gates the SRE endpoints the same way as the cluster ones and
+// returns the caller's tenant.
+func (a *app) appSREUser(w http.ResponseWriter, r *http.Request) (*User, string, bool) {
+	u := a.sessionUser(r)
+	if u == nil || !u.Approved {
+		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+		return nil, "", false
+	}
+	return u, tenantFor(u.Email), true
+}
+
+// cpRelay passes a control-plane response straight through. Error bodies from
+// the control plane are already {"error": "..."} so the browser can show them.
+func cpRelay(w http.ResponseWriter, code int, data []byte, err error) {
+	if err != nil {
+		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_, _ = w.Write(data)
+}
+
+// handleAppClusterSRE returns one cluster's SRE view: its incidents and
+// remediation proposals (the control plane lists them tenant-wide; we keep only
+// this cluster's) plus the automation policy state.
+func (a *app) handleAppClusterSRE(w http.ResponseWriter, r *http.Request) {
+	_, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	q := "?tenantId=" + url.QueryEscape(tenant)
+
+	var incs struct {
+		Incidents []map[string]any `json:"incidents"`
+	}
+	var props struct {
+		Proposals []map[string]any `json:"proposals"`
+	}
+	var pol struct {
+		Mode           string   `json:"mode"`
+		Paused         bool     `json:"paused"`
+		PausedClusters []string `json:"pausedClusters"`
+	}
+	for _, c := range []struct {
+		path string
+		out  any
+	}{
+		{"/api/v1/incidents" + q, &incs},
+		{"/api/v1/proposals" + q, &props},
+		{"/api/v1/policy" + q, &pol},
+	} {
+		code, data, err := a.cpDo("GET", c.path, nil)
+		if err != nil {
+			writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
+			return
+		}
+		if code != 200 || json.Unmarshal(data, c.out) != nil {
+			writeJSON(w, 502, map[string]any{"error": "could not load SRE data"})
+			return
+		}
+	}
+	mine := func(items []map[string]any) []map[string]any {
+		out := []map[string]any{}
+		for _, it := range items {
+			if cid, _ := it["clusterId"].(string); cid == id {
+				out = append(out, it)
+			}
+		}
+		return out
+	}
+	clusterPaused := false
+	for _, c := range pol.PausedClusters {
+		if c == id {
+			clusterPaused = true
+		}
+	}
+	writeJSON(w, 200, map[string]any{
+		"incidents": mine(incs.Incidents),
+		"proposals": mine(props.Proposals),
+		"policy":    map[string]any{"mode": pol.Mode, "paused": pol.Paused, "clusterPaused": clusterPaused},
+	})
+}
+
+// handleAppIncidentAction runs AI diagnosis or turns it into a policy-checked
+// remediation proposal: POST /api/app/incidents/{id}/{diagnose|propose}.
+func (a *app) handleAppIncidentAction(w http.ResponseWriter, r *http.Request) {
+	_, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	action := r.PathValue("action")
+	if action != "diagnose" && action != "propose" {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	code, data, err := a.cpDo("POST", "/api/v1/incidents/"+url.PathEscape(r.PathValue("id"))+"/"+action+"?tenantId="+url.QueryEscape(tenant), nil)
+	cpRelay(w, code, data, err)
+}
+
+// handleAppProposalAction approves or rejects a remediation proposal:
+// POST /api/app/proposals/{id}/{approve|reject}. The approver is always the
+// logged-in user, never taken from the request.
+func (a *app) handleAppProposalAction(w http.ResponseWriter, r *http.Request) {
+	u, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	action := r.PathValue("action")
+	if action != "approve" && action != "reject" {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	var in struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
+	body := map[string]any{"approver": "user:" + u.Email}
+	if action == "reject" && strings.TrimSpace(in.Reason) != "" {
+		body["reason"] = strings.TrimSpace(in.Reason)
+	}
+	code, data, err := a.cpDo("POST", "/api/v1/proposals/"+url.PathEscape(r.PathValue("id"))+"/"+action+"?tenantId="+url.QueryEscape(tenant), body)
+	cpRelay(w, code, data, err)
+}
+
+// handleAppClusterAutomation pauses or resumes automated remediation for one
+// cluster: POST /api/app/clusters/{id}/automation/{pause|resume}.
+func (a *app) handleAppClusterAutomation(w http.ResponseWriter, r *http.Request) {
+	_, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	action := r.PathValue("action")
+	if action != "pause" && action != "resume" {
+		writeJSON(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	code, data, err := a.cpDo("POST", "/api/v1/policy/"+action+"?tenantId="+url.QueryEscape(tenant)+"&clusterId="+url.QueryEscape(r.PathValue("id")), nil)
+	cpRelay(w, code, data, err)
+}
+
 // agentInstallSnippet builds the copy-paste kubectl commands that enroll the
 // read-only agent in the user's cluster. The per-cluster secrets go into a k8s
 // Secret; the manifest itself is generic and hosted publicly.
@@ -586,18 +728,20 @@ async function loadDetail(id){
     }else{
       podsHtml='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No pods or jobs reported in the latest snapshot.</p></div></section>';
     }
-    // Pods / Nodes tabs. The Nodes tab only appears when the agent reports node
-    // data; otherwise the pods table shows on its own (no lone tab bar).
-    if(nodesHtml){
-      html+='<div class="tabs" role="tablist">'+
-        '<button class="tab active" data-tab="pods">Pods</button>'+
-        '<button class="tab" data-tab="nodes">Nodes</button>'+
-      '</div>'+
-      '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
-      '<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>';
-    }else{
-      html+=podsHtml;
-    }
+    // Pods / Nodes / SRE tabs. The Nodes tab only appears when the agent reports
+    // node data. The SRE panels load lazily from the control plane on first open.
+    html+='<div class="tabs" role="tablist">'+
+      '<button class="tab active" data-tab="pods">Pods</button>'+
+      (nodesHtml?'<button class="tab" data-tab="nodes">Nodes</button>':'')+
+      '<button class="tab" data-tab="sre-overview">SRE overview</button>'+
+      '<button class="tab" data-tab="incidents">Incidents</button>'+
+      '<button class="tab" data-tab="remediation">Remediation</button>'+
+    '</div>'+
+    '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
+    (nodesHtml?'<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>':'')+
+    '<div class="tabpanel" data-panel="sre-overview"></div>'+
+    '<div class="tabpanel" data-panel="incidents"></div>'+
+    '<div class="tabpanel" data-panel="remediation"></div>';
     var probs=[];
     (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
     (L.workloadProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.kind+' '+x.name,msg:x.message});});
@@ -629,14 +773,193 @@ async function loadDetail(id){
     if(pn)pn.addEventListener('change',applyPodFilter);
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
     applyPodFilter();
+    sreState.cluster=id;sreState.data=null;
     document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
       var name=t.dataset.tab;
+      _activeTab=name;
       document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===t);});
       document.querySelectorAll('.tabpanel').forEach(function(pnl){pnl.classList.toggle('active',pnl.dataset.panel===name);});
+      if(SRE_TABS.indexOf(name)>=0&&!sreState.data)loadSRE();
     });});
+    // Keep the open tab across re-renders (rename, environment change).
+    var _keep=document.querySelector('.tab[data-tab="'+_activeTab+'"]');
+    if(_keep&&_activeTab!=='pods')_keep.click();
     document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
+
+// ---------- SRE: overview / incidents / remediation ----------
+// One fetch (/api/app/clusters/{id}/sre) feeds all three tabs; the server keeps
+// only this cluster's incidents and proposals.
+var SRE_TABS=['sre-overview','incidents','remediation'];
+var _activeTab='pods';
+var sreState={cluster:null,data:null,incFilter:'open',propFilter:'',diag:{}};
+function srePanel(name){return document.querySelector('.tabpanel[data-panel="'+name+'"]');}
+function sreMsg(text){return '<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">'+text+'</p></div></section>';}
+function sevPill(s){var c=s==='high'||s==='critical'?'bad':(s==='medium'?'off':'on');return '<span class="pill '+c+'">'+esc(s||'-')+'</span>';}
+function propPill(s){var c=s==='executed'?'on':(s==='failed'||s==='blocked'||s==='rejected'?'bad':'off');return '<span class="pill '+c+'">'+esc(s||'-')+'</span>';}
+function count(list,f){return list.filter(f).length;}
+
+async function loadSRE(){
+  var id=sreState.cluster;
+  SRE_TABS.forEach(function(t){var p=srePanel(t);if(p)p.innerHTML='<div class="spin-wrap"><div class="spinner"></div></div>';});
+  try{
+    var r=await fetch('/api/app/clusters/'+encodeURIComponent(id)+'/sre',{headers:{'Accept':'application/json'}});
+    var d=await r.json().catch(function(){return {};});
+    if(id!==sreState.cluster)return;
+    if(!r.ok){var m=sreMsg('Could not load SRE data'+(d&&d.error?': '+esc(d.error):'')+'.');SRE_TABS.forEach(function(t){var p=srePanel(t);if(p)p.innerHTML=m;});return;}
+    sreState.data=d;
+  }catch(e){SRE_TABS.forEach(function(t){var p=srePanel(t);if(p)p.innerHTML=sreMsg('Could not load SRE data.');});return;}
+  renderSRE();
+}
+function renderSRE(){renderSREOverview();renderIncidents();renderRemediation();}
+
+function automationCard(pol){
+  var paused=pol.paused||pol.clusterPaused;
+  var state=pol.paused?'Paused for all clusters':(pol.clusterPaused?'Paused for this cluster':'Active');
+  var btn=pol.paused?'':(pol.clusterPaused
+    ?'<button class="act approve sre-auto" data-action="resume">Resume automation</button>'
+    :'<button class="act revoke sre-auto" data-action="pause">Pause automation</button>');
+  return '<section class="card2"><div class="card2-head"><p class="card2-title">Automated remediation</p><p class="card2-desc">Mode <b>'+esc(pol.mode||'-')+'</b> · <span class="pill '+(paused?'off':'on')+'">'+state+'</span>. Pausing is an emergency stop: no fix runs on this cluster until you resume.</p></div>'+
+    (btn?'<div class="card2-body"><div class="nb-actions">'+btn+'</div></div>':'')+'</section>';
+}
+
+function renderSREOverview(){
+  var p=srePanel('sre-overview'),d=sreState.data;if(!p||!d)return;
+  var inc=d.incidents||[],pr=d.proposals||[],pol=d.policy||{};
+  var open=inc.filter(function(i){return i.status==='open';});
+  var hi=count(open,function(i){return i.severity==='high'||i.severity==='critical';});
+  var pend=count(pr,function(x){return x.status==='proposed';});
+  var exe=count(pr,function(x){return x.status==='executed';}),fail=count(pr,function(x){return x.status==='failed';});
+  var paused=pol.paused||pol.clusterPaused;
+  var html='<div class="statgrid">'+
+    stat('Open incidents',open.length,hi+' high · '+(open.length-hi)+' other')+
+    stat('Awaiting approval',pend,'remediation proposals')+
+    stat('Executed fixes',exe,fail+' failed')+
+    stat('Automation',paused?'Paused':'Active',esc(pol.mode||'-'))+
+  '</div>';
+  var byType={};open.forEach(function(i){byType[i.type]=(byType[i.type]||0)+1;});
+  var types=Object.keys(byType).sort(function(a,b){return byType[b]-byType[a];});
+  if(types.length){
+    html+='<section class="card2"><div class="card2-head"><p class="card2-title">Open incidents by type</p></div><table class="users ptable"><thead><tr><th>Type</th><th>Open</th></tr></thead><tbody>'+
+      types.map(function(t){return '<tr><td class="u-name" style="font-size:13.5px">'+esc(t)+'</td><td class="u-time">'+byType[t]+'</td></tr>';}).join('')+
+      '</tbody></table></section>';
+  }else{
+    html+=sreMsg('No open incidents on this cluster.');
+  }
+  html+='<div style="margin-top:16px">'+automationCard(pol)+'</div>';
+  p.innerHTML=html;
+}
+
+function diagHtml(dg){
+  if(!dg)return '';
+  if(dg.loading)return '<p class="sub" style="margin:0">Diagnosing…</p>';
+  if(dg.error)return '<p class="sub" style="margin:0;color:var(--red)">'+esc(dg.error)+'</p>';
+  var h='<div style="font-size:13px;line-height:1.6"><div><b>'+esc(dg.summary||'')+'</b> <span class="u-email">('+esc(dg.confidence||'-')+' confidence, '+esc(dg.source||'')+')</span></div>';
+  if((dg.observedFacts||[]).length)h+='<div style="margin-top:6px;color:var(--muted)">Observed</div><ul style="margin:2px 0 0 18px;padding:0">'+dg.observedFacts.map(function(f){return '<li>'+esc(f)+'</li>';}).join('')+'</ul>';
+  if((dg.hypotheses||[]).length)h+='<div style="margin-top:6px;color:var(--muted)">Likely causes</div><ul style="margin:2px 0 0 18px;padding:0">'+dg.hypotheses.map(function(x){return '<li>'+esc(x.cause)+' <span class="u-email">('+esc(x.confidence||'-')+')</span></li>';}).join('')+'</ul>';
+  var t=dg.recommendedTarget;
+  h+='<div style="margin-top:6px"><span style="color:var(--muted)">Recommended:</span> '+esc(dg.recommendedAction||'-')+(t?' on '+esc(t.kind+'/'+t.namespace+'/'+t.name):'')+'</div>';
+  if(dg.risks)h+='<div><span style="color:var(--muted)">Risks:</span> '+esc(dg.risks)+'</div>';
+  if(dg.rollback)h+='<div><span style="color:var(--muted)">Rollback:</span> '+esc(dg.rollback)+'</div>';
+  return h+'<div class="u-email" style="margin-top:6px">Advisory only. A fix still needs a policy-checked proposal and your approval.</div></div>';
+}
+
+function renderIncidents(){
+  var p=srePanel('incidents'),d=sreState.data;if(!p||!d)return;
+  var all=d.incidents||[],f=sreState.incFilter;
+  var list=all.filter(function(i){return !f||i.status===f;}).sort(function(a,b){return new Date(b.lastSeen||0)-new Date(a.lastSeen||0);});
+  var nOpen=count(all,function(i){return i.status==='open';});
+  var seg='<div class="seg" id="inc-seg">'+[['open',nOpen+' Open'],['resolved',(all.length-nOpen)+' Resolved'],['','All']].map(function(o){return '<button class="seg-btn'+(o[0]===f?' active':'')+'" data-f="'+o[0]+'">'+o[1]+'</button>';}).join('')+'</div>';
+  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row">'+seg+'<button class="act revoke sre-refresh" style="margin-left:auto">Refresh</button></div></div>';
+  if(!list.length){
+    html+='<div class="card2-body"><p class="sub" style="margin:0">No '+(f||'')+' incidents.</p></div></section>';
+  }else{
+    html+='<div class="tscroll"><table class="users ptable"><thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Seen</th><th>Last seen</th><th></th></tr></thead><tbody>';
+    list.forEach(function(i){
+      var where=(i.namespace?i.namespace+'/':'')+(i.workload||i.node||'');
+      var acts=i.status==='open'?'<button class="act revoke sre-diag" data-id="'+esc(i.id)+'">Diagnose</button> <button class="act approve sre-propose" data-id="'+esc(i.id)+'" title="Turn the recommendation into a policy-checked proposal">Propose fix</button>':'';
+      html+='<tr><td><div class="u-name pod-name" title="'+esc(i.title||i.type)+'">'+esc(i.title||i.type)+'</div><div class="u-email">'+esc(i.type)+(where?' · '+esc(where):'')+'</div></td>'+
+        '<td>'+sevPill(i.severity)+'</td><td><span class="pill '+(i.status==='open'?'bad':'on')+'">'+esc(i.status||'-')+'</span></td>'+
+        '<td class="u-time">'+(i.occurrences||0)+'×</td><td class="u-time">'+ago(i.lastSeen)+'</td>'+
+        '<td style="white-space:nowrap;text-align:right">'+acts+'</td></tr>';
+      var dg=sreState.diag[i.id];
+      if(dg)html+='<tr><td colspan="6" style="background:var(--active-bg)">'+diagHtml(dg)+'</td></tr>';
+    });
+    html+='</tbody></table></div></section>';
+  }
+  p.innerHTML=html;
+}
+
+function renderRemediation(){
+  var p=srePanel('remediation'),d=sreState.data;if(!p||!d)return;
+  var all=d.proposals||[],f=sreState.propFilter;
+  var list=all.filter(function(x){return !f||x.status===f;}).sort(function(a,b){return new Date(b.createdAt||0)-new Date(a.createdAt||0);});
+  var opts=['','proposed','approved','executed','failed','blocked','rejected'];
+  var sel='<select id="prop-status" class="toolbar-input">'+opts.map(function(o){return '<option value="'+o+'"'+(o===f?' selected':'')+'>'+(o?o.charAt(0).toUpperCase()+o.slice(1):'All statuses')+'</option>';}).join('')+'</select>';
+  var html=automationCard(d.policy||{})+'<section class="card2" style="margin-top:16px"><div class="card2-head"><div class="toolbar-row">'+sel+'<button class="act revoke sre-refresh" style="margin-left:auto">Refresh</button></div></div>';
+  if(!list.length){
+    html+='<div class="card2-body"><p class="sub" style="margin:0">No proposals'+(f?' with status '+esc(f):'')+'. Use <b>Propose fix</b> on an incident to create one.</p></div></section>';
+  }else{
+    html+='<div class="tscroll"><table class="users ptable"><thead><tr><th>Action</th><th>Status</th><th>Risk</th><th>Why / result</th><th>Created</th><th></th></tr></thead><tbody>';
+    list.forEach(function(x){
+      var t=x.target||{};
+      var res='';
+      if(x.execution){var e=x.execution;res='<div class="'+(e.success?'u-time':'util-val crit')+'">'+(e.success?'OK':'Failed')+(e.dryRun?' (dry run)':'')+(e.error?': '+esc(e.error):'')+'</div>';}
+      else if(x.decision&&(x.decision.reasons||[]).length&&!x.decision.allowed){res='<div class="u-email">'+esc(x.decision.reasons.join('; '))+'</div>';}
+      var acts=x.status==='proposed'?'<button class="act approve sre-approve" data-id="'+esc(x.id)+'">Approve</button> <button class="act revoke sre-reject" data-id="'+esc(x.id)+'">Reject</button>':'';
+      html+='<tr><td><div class="u-name pod-name">'+esc(x.action)+'</div><div class="u-email">'+esc((t.kind||'')+'/'+(t.namespace||'')+'/'+(t.name||''))+'</div></td>'+
+        '<td>'+propPill(x.status)+'</td><td>'+sevPill(x.riskClass)+'</td>'+
+        '<td><div class="u-time" title="'+esc(x.rationale||'')+'" style="max-width:340px;white-space:normal">'+esc(x.rationale||'-')+'</div>'+res+'</td>'+
+        '<td class="u-time">'+ago(x.createdAt)+'</td>'+
+        '<td style="white-space:nowrap;text-align:right">'+acts+'</td></tr>';
+    });
+    html+='</tbody></table></div></section>';
+  }
+  p.innerHTML=html;
+}
+
+var _sbox=document.getElementById('clusters');
+if(_sbox)_sbox.addEventListener('click',async function(e){
+  var t=e.target;if(!t.closest)return;
+  var b;
+  if(b=t.closest('#inc-seg .seg-btn')){sreState.incFilter=b.dataset.f;renderIncidents();return;}
+  if(t.closest('.sre-refresh')){sreState.diag={};loadSRE();return;}
+  if(b=t.closest('.sre-diag')){
+    var iid=b.dataset.id;sreState.diag[iid]={loading:true};renderIncidents();
+    var r=await _post('/api/app/incidents/'+encodeURIComponent(iid)+'/diagnose',{});
+    sreState.diag[iid]=r.ok?r.data:{error:(r.data&&r.data.error)||'Diagnosis failed.'};
+    renderIncidents();return;
+  }
+  if(b=t.closest('.sre-propose')){
+    b.disabled=true;
+    var pr=await _post('/api/app/incidents/'+encodeURIComponent(b.dataset.id)+'/propose',{});
+    if(!pr.ok){b.disabled=false;await chModal({title:'No fix proposed',body:esc((pr.data&&pr.data.error)||'Could not create a proposal.'),confirm:'OK',single:true});return;}
+    await chModal({title:'Proposal created',body:'Status: <b>'+esc(pr.data.status||'')+'</b>. Review it in the Remediation tab.',confirm:'OK',single:true});
+    await loadSRE();return;
+  }
+  if(b=t.closest('.sre-approve')){
+    if(!await chModal({title:'Approve this fix?',body:'The remediation controller in your cluster will apply it (subject to policy).',confirm:'Approve'}))return;
+    var ar=await _post('/api/app/proposals/'+encodeURIComponent(b.dataset.id)+'/approve',{});
+    if(!ar.ok){await chModal({title:'Failed',body:esc((ar.data&&ar.data.error)||'Could not approve.'),confirm:'OK',single:true});}
+    await loadSRE();return;
+  }
+  if(b=t.closest('.sre-reject')){
+    var reason=await chModal({title:'Reject this fix?',input:'',placeholder:'Reason (optional)',confirm:'Reject',danger:true});
+    if(reason==null)return;
+    var rr=await _post('/api/app/proposals/'+encodeURIComponent(b.dataset.id)+'/reject',{reason:reason});
+    if(!rr.ok){await chModal({title:'Failed',body:esc((rr.data&&rr.data.error)||'Could not reject.'),confirm:'OK',single:true});}
+    await loadSRE();return;
+  }
+  if(b=t.closest('.sre-auto')){
+    var act=b.dataset.action;
+    if(act==='pause'&&!await chModal({title:'Pause automation?',body:'No remediation will run on this cluster until you resume.',confirm:'Pause',danger:true}))return;
+    var pr2=await _post('/api/app/clusters/'+encodeURIComponent(sreState.cluster)+'/automation/'+act,{});
+    if(!pr2.ok){await chModal({title:'Failed',body:esc((pr2.data&&pr2.data.error)||'Could not update automation.'),confirm:'OK',single:true});}
+    await loadSRE();return;
+  }
+});
+document.addEventListener('change',function(e){if(e.target&&e.target.id==='prop-status'){sreState.propFilter=e.target.value;renderRemediation();}});
 
 async function doRename(id,cur){
   var nn=await chModal({title:'Rename cluster',input:cur,confirm:'Save'});
