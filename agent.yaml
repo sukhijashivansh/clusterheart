@@ -2,8 +2,8 @@
 #
 # No container registry needed: a tiny public alpine base fetches the prebuilt
 # agent binary (published to public Vercel Blob) and runs it. Read-only access
-# only — matches what the collector reads. No mutating verbs, no exec, no
-# portforward, no Secret values.
+# only — matches what the collector reads, including recent logs of failing
+# pods. No mutating verbs, no exec, no portforward, no Secret values.
 #
 # Deploy (CLUSTER_ID + AGENT_TOKEN come from control-plane registration):
 #   kubectl create namespace clusterheart-sre
@@ -32,6 +32,12 @@ rules:
   - apiGroups: [""]
     resources: [nodes, pods, events]
     verbs: [get, list, watch]
+  # Recent logs of failing pods (crash-looping, OOMKilled, failed), so incidents,
+  # the Health tab and AI diagnosis can show what went wrong. Read-only; lines
+  # are scrubbed of secret-looking values before they leave the cluster.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
   - apiGroups: ["apps"]
     resources: [deployments, statefulsets, daemonsets]
     verbs: [get, list, watch]

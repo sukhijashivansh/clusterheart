@@ -50,6 +50,7 @@ type Collector struct {
 	metrics   metricsv.Interface // nil if metrics-server is not installed
 	k8sVer    string
 	peaks     *peakTracker
+	logs      *logCache
 }
 
 // NewCollector builds a collector. If kubeconfigPath is non-empty it is used;
@@ -69,7 +70,7 @@ func NewCollector(kubeconfigPath string) (*Collector, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Collector{clientset: cs, peaks: newPeakTracker()}
+	c := &Collector{clientset: cs, peaks: newPeakTracker(), logs: newLogCache()}
 	// Metrics are best-effort: if metrics-server isn't installed, CPU/mem are
 	// simply omitted - the agent must never fail because metrics are missing.
 	if mc, err := metricsv.NewForConfig(cfg); err == nil {
@@ -151,6 +152,7 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 	snap.JobList, snap.JobListTruncated = c.jobList(ctx)
 	c.mergePodMetrics(ctx, snap.PodList)
 	c.mergeNodeMetrics(ctx, snap.NodeList)
+	snap.PodLogs = c.podLogs(ctx, logTargets(snap.PodProblems, pods.Items), time.Now())
 	return snap, nil
 }
 

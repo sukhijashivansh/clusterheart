@@ -123,6 +123,11 @@ func (r *Runner) collectOnce(ctx context.Context) {
 		r.Log.Error("snapshot collection failed", "err", err)
 		return
 	}
+	// Only the newest buffered snapshot keeps its log tails, so a backlog after an
+	// outage can't grow the telemetry batch past the control plane's body limit.
+	for i := range r.buffer {
+		r.buffer[i].PodLogs = nil
+	}
 	r.buffer = append(r.buffer, snap)
 	if len(r.buffer) > maxBuffer {
 		r.buffer = r.buffer[len(r.buffer)-maxBuffer:] // drop oldest
