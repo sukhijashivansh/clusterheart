@@ -19,6 +19,7 @@ on:
       - 'sre/internal/redact/**'
       - 'sre/go.mod'
       - 'sre/go.sum'
+      - '.github/workflows/deploy-controlplane.yml'
   workflow_dispatch:
 
 concurrency:
@@ -30,11 +31,18 @@ jobs:
     runs-on: ubuntu-latest
     # A throwaway MongoDB so the Mongo store tests (history aggregation,
     # remediation queries) run against a real server before deploying.
+    # 7.0: MongoDB 8.0 does not start on the runners' 6.19+ kernels
+    # (SERVER-121912). The health check fails the job fast if it can't start.
     services:
       mongo:
-        image: mongo:8.0
+        image: mongo:7.0
         ports:
           - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping: 1}).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 24
     steps:
       - uses: actions/checkout@v4
 
