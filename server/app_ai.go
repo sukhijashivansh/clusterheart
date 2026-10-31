@@ -151,10 +151,15 @@ func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 	aiJobs[id] = job
 	aiJobsMu.Unlock()
 
+	question := strings.TrimSpace(body.History[len(body.History)-1].Text)
+	clusterID := r.PathValue("id")
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
 		text, err := askModels(ctx, key, models, msgs)
+		if err == nil && question != "" {
+			a.saveChatTurn(u.Email, clusterID, question, text)
+		}
 		aiJobsMu.Lock()
 		defer aiJobsMu.Unlock()
 		job.done, job.text = true, text

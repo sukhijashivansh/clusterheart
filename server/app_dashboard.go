@@ -708,7 +708,8 @@ function aiFormat(text){
 function aiRender(){
   var log=document.getElementById('ai-log');if(!log)return;
   log.style.marginBottom=aiState.history.length||aiState.busy?'12px':'0';
-  log.innerHTML=aiState.history.map(function(t){
+  var clear=aiState.history.length&&!aiState.busy?'<div class="ai-clear-row"><button type="button" class="ai-clear">Clear</button></div>':'';
+  log.innerHTML=clear+aiState.history.map(function(t){
     if(t.role==='user')return '<div class="ai-q">'+esc(t.text)+'</div>';
     if(t.role==='error')return '<div class="ai-a"><div class="ai-line ai-bad">'+esc(t.text)+'</div></div>';
     return '<div class="ai-a">'+aiFormat(t.text)+'</div>';
@@ -734,9 +735,24 @@ async function aiAsk(id,hist){
   return {error:'The AI took too long to answer. Please try again.'};
 }
 function aiWire(id){
-  if(aiState.cluster!==id){aiState={cluster:id,history:[],busy:false};}
-  var f=document.getElementById('ai-form');
+  if(aiState.cluster!==id){aiState={cluster:id,history:[],busy:false,loaded:false};}
+  var f=document.getElementById('ai-form'),log=document.getElementById('ai-log');
   if(!f)return;
+  // Restore the last saved turns (kept server-side, newest 5 per cluster).
+  if(!aiState.loaded){
+    aiState.loaded=true;
+    fetch('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!d||!d.turns||!d.turns.length||aiState.cluster!==id||aiState.history.length)return;
+      d.turns.forEach(function(t){aiState.history.push({role:'user',text:t.q},{role:'assistant',text:t.a});});
+      aiRender();
+    }).catch(function(){});
+  }
+  log.addEventListener('click',async function(e){
+    if(!e.target.closest('.ai-clear')||aiState.busy)return;
+    if(!await chModal({title:'Clear this chat?',body:'Removes the saved questions and answers for this cluster.',confirm:'Clear',danger:true}))return;
+    await fetch('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{method:'DELETE'});
+    aiState.history=[];aiRender();
+  });
   f.addEventListener('submit',async function(e){
     e.preventDefault();
     var inp=document.getElementById('ai-input'),q=inp.value.trim();

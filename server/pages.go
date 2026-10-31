@@ -310,6 +310,9 @@ table.users tbody tr:hover{background:var(--hover)}
 .ai-log{max-height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
 .ai-q{align-self:flex-end;max-width:80%;padding:9px 13px;font-size:13.5px;background:var(--active-bg);border:1px solid var(--border)}
 .ai-a{padding:4px 0}
+.ai-clear-row{display:flex;justify-content:flex-end}
+.ai-clear{background:none;border:none;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:0}
+.ai-clear:hover{color:var(--text)}
 .ai-line{font-size:13.5px;line-height:1.6;padding-left:16px;position:relative}
 .ai-line:before{content:"";position:absolute;left:3px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--muted)}
 .ai-ok:before{background:var(--green)}

@@ -593,6 +593,8 @@ func main() {
 	mux.HandleFunc("POST /api/app/clusters/{id}/remediation", a.handleAppEnableRemediation)
 	mux.HandleFunc("POST /api/app/clusters/{id}/rightsize", a.handleAppRightsize)
 	mux.HandleFunc("POST /api/app/clusters/{id}/chat", a.handleAppClusterChat)
+	mux.HandleFunc("GET /api/app/clusters/{id}/chat", a.handleAppChatHistory)
+	mux.HandleFunc("DELETE /api/app/clusters/{id}/chat", a.handleAppChatHistory)
 	mux.HandleFunc("GET /api/app/chat/{job}", a.handleAppChatResult)
 	mux.HandleFunc("POST /api/app/clusters/{id}/automation/{action}", a.handleAppClusterAutomation)
 	mux.HandleFunc("POST /api/app/incidents/{id}/{action}", a.handleAppIncidentAction)

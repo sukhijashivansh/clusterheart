@@ -22,6 +22,7 @@ type store struct {
 	users  *mongo.Collection
 	meta   *mongo.Collection
 	usage  *mongo.Collection
+	chats  *mongo.Collection // AI chat history: one doc per user+cluster, last aiChatKeep turns
 }
 
 var errUserExists = errors.New("user already exists")
@@ -53,6 +54,7 @@ func openStore(ctx context.Context) (*store, error) {
 		users:  db.Collection("users"),
 		meta:   db.Collection("settings"),
 		usage:  db.Collection("usage_samples"),
+		chats:  db.Collection("ai_chats"),
 	}
 	if _, err := s.users.Indexes().CreateOne(pctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
