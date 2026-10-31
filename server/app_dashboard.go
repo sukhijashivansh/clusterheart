@@ -395,7 +395,11 @@ func (a *app) clusterActivity(tenant, id string, incs, props []map[string]any) [
 		name, _ := ev["event"].(string)
 		det, _ := ev["details"].(string)
 		policy := strings.HasPrefix(name, "policy.") && (det == "cluster:"+id || det == "tenant" || name == "policy.updated")
-		if ids[pid] || ids[iid] || policy {
+		reveal := name == "secret.revealed" && strings.HasPrefix(det, "cluster:"+id+" ")
+		if reveal {
+			ev["details"] = strings.TrimPrefix(det, "cluster:"+id+" ")
+		}
+		if ids[pid] || ids[iid] || policy || reveal {
 			out = append(out, ev)
 		}
 	}
@@ -783,6 +787,7 @@ function agentAtLeast(v,want){
   return true;
 }
 function secretsSection(list,c){
+  sreRevealOK=agentAtLeast(c.agentVersion,'0.2.2');
   if(!agentAtLeast(c.agentVersion,'0.2.0')){
     return '<section class="card2"><div class="card2-head"><p class="card2-title">Leaked secrets</p><p class="card2-desc">Update the agent to turn this on.</p></div>'+
       '<div class="card2-body"><textarea class="nb" rows="2" readonly onclick="this.select()">kubectl apply -f https://clusterheart.com/agent.yaml\nkubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
@@ -809,6 +814,12 @@ function secretsSection(list,c){
   return html+'</tbody></table></div></section>';
 }
 
+// secretRef must match contract.SecretFinding.Ref on the agent.
+function secretRef(f){return [f.source,f.namespace,f.owner,f.container,f.field||'',f.type,f.key||''].join('|');}
+function secretMaskedHtml(f){return '<span class="mono-chip sec-masked">'+esc(f.masked||'hidden')+'</span>';}
+// sreRevealOK is set per cluster: reveal needs agent 0.2.2+.
+var sreRevealOK=false;
+
 // secretHighlight escapes text and marks every redaction.
 function secretHighlight(t){return esc(t).replace(/\[REDACTED\]/g,'<mark class="sec-mark">[REDACTED]</mark>');}
 
@@ -817,8 +828,9 @@ function secretHighlight(t){return esc(t).replace(/\[REDACTED\]/g,'<mark class="
 function secretDetail(f,label,src){
   var parts=(f.owner||'').split('/'),kind=parts[0],name=parts.slice(1).join('/');
   var secret=(f.key?'<span class="mono-chip">'+esc(f.key)+'</span> = ':'')+
-    (f.masked?'<span class="mono-chip sec-masked">'+esc(f.masked)+'</span>':'<span class="mono-chip sec-masked">hidden</span>')+
-    (f.length?' <span class="u-email">'+f.length+' characters</span>':'');
+    '<span class="sec-val">'+secretMaskedHtml(f)+'</span>'+
+    (f.length?' <span class="u-email">'+f.length+' characters</span>':'')+
+    (sreRevealOK?' <button class="act revoke sec-reveal sec-small" data-ref="'+esc(secretRef(f))+'" data-desc="'+esc((f.key||label)+' · '+kind+' '+name+' · '+(f.container||''))+'">Reveal</button>':'');
   var line=f.context||'';
   try{var parsed=JSON.parse(line);line=JSON.stringify(parsed,null,2);}catch(e){}
   var steps;
@@ -839,7 +851,7 @@ function secretDetail(f,label,src){
     '</div>'+
     (line?'<div class="sec-k" style="margin-top:14px">'+(f.source==='log'?'Log line':(f.source==='env'?'Setting':'Command'))+'</div><pre class="log-pre sec-pre">'+secretHighlight(line)+'</pre>':'')+
     '<div class="sec-k" style="margin-top:14px">What to do</div><ol class="sec-steps">'+steps.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ol>'+
-    '<p class="u-email" style="margin:10px 0 0">The full value never leaves your cluster; the hint above is enough to tell which credential it is.</p></div>';
+    '<p class="u-email" style="margin:10px 0 0">'+(sreRevealOK?'Reveal fetches the value from your cluster\'s agent on request. It isn\'t stored, and each reveal is recorded in Activity.':'Update the agent to reveal full values.')+'</p></div>';
 }
 
 // ---------- Rightsizing ----------
@@ -1133,6 +1145,24 @@ function sevPill(s){var c=s==='high'||s==='critical'?'bad':(s==='medium'?'off':'
 function propPill(s){var c=s==='executed'?'on':(s==='failed'||s==='blocked'||s==='rejected'?'bad':'off');return '<span class="pill '+c+'">'+esc(s||'-')+'</span>';}
 function count(list,f){return list.filter(f).length;}
 
+// revealSecret asks the agent for a value and polls until it answers (the agent
+// checks every few seconds).
+async function revealSecret(ref,desc){
+  var r=await _post('/api/app/clusters/'+encodeURIComponent(sreState.cluster||rsState.cluster)+'/secrets/reveal',{ref:ref,description:desc});
+  if(!r.ok||!r.data.id)return {error:(r.data&&r.data.error)||'Could not request the value.'};
+  var deadline=Date.now()+45000;
+  while(Date.now()<deadline){
+    await new Promise(function(ok){setTimeout(ok,1500);});
+    try{
+      var pr=await fetch('/api/app/reveals/'+encodeURIComponent(r.data.id),{headers:{'Accept':'application/json'},cache:'no-store'});
+      var d=await pr.json().catch(function(){return null;});
+      if(!pr.ok)return {error:(d&&d.error)||'The request expired. Try again.'};
+      if(d&&d.done)return d.error?{error:d.error}:{value:d.value};
+    }catch(e){}
+  }
+  return {error:'The agent didn\'t answer in time. Check that it is running the latest version.'};
+}
+
 async function loadSRE(){
   var id=sreState.cluster;
   SRE_TABS.forEach(function(t){var p=srePanel(t);if(p)p.innerHTML='<div class="spin-wrap"><div class="spinner"></div></div>';});
@@ -1148,9 +1178,9 @@ async function loadSRE(){
 function renderSRE(){renderSREOverview();renderIncidents();renderRemediation();renderActivity();}
 
 // Activity: the control plane's audit trail for this cluster, newest first.
-var EVENT_LABELS={'proposal.created':'Fix proposed','proposal.blocked':'Blocked by policy','proposal.approved':'Fix approved','proposal.rejected':'Fix rejected','remediation.executed':'Fix applied','remediation.failed':'Fix failed','policy.updated':'Policy changed','policy.paused':'Automation paused','policy.resumed':'Automation resumed'};
+var EVENT_LABELS={'proposal.created':'Fix proposed','proposal.blocked':'Blocked by policy','proposal.approved':'Fix approved','proposal.rejected':'Fix rejected','remediation.executed':'Fix applied','remediation.failed':'Fix failed','policy.updated':'Policy changed','secret.revealed':'Secret revealed','policy.paused':'Automation paused','policy.resumed':'Automation resumed'};
 function eventPill(ev){
-  var c=/blocked|rejected|failed|paused/.test(ev)?'bad':(/executed|approved|resumed/.test(ev)?'on':'off');
+  var c=/blocked|rejected|failed|paused|revealed/.test(ev)?'bad':(/executed|approved|resumed/.test(ev)?'on':'off');
   return '<span class="pill '+c+'">'+esc(EVENT_LABELS[ev]||ev)+'</span>';
 }
 function renderActivity(){
@@ -1281,6 +1311,21 @@ var _sbox=document.getElementById('clusters');
 if(_sbox)_sbox.addEventListener('click',async function(e){
   var t=e.target;if(!t.closest)return;
   var b;
+  if(b=t.closest('.sec-reveal')){
+    if(!await chModal({title:'Reveal this secret?',body:'The full value is fetched from your cluster\'s agent and shown here for 60 seconds. It isn\'t stored, and the reveal is recorded in Activity with your name.',confirm:'Reveal'}))return;
+    var holder=b.parentNode.querySelector('.sec-val');
+    b.disabled=true;b.textContent='Revealing…';
+    var rv=await revealSecret(b.dataset.ref,b.dataset.desc);
+    b.disabled=false;b.textContent='Reveal';
+    if(rv.error){await chModal({title:'Could not reveal',body:esc(rv.error),confirm:'OK',single:true});return;}
+    var masked=holder.innerHTML;
+    holder.innerHTML='<span class="mono-chip sec-revealed">'+esc(rv.value)+'</span> <button class="act revoke copy-cmd sec-small" data-cmd="'+esc(rv.value)+'">Copy</button><button class="act revoke sec-hide sec-small">Hide</button>';
+    b.style.display='none';
+    var hide=function(){holder.innerHTML=masked;b.style.display='';};
+    holder.querySelector('.sec-hide').addEventListener('click',function(e){e.stopPropagation();hide();});
+    setTimeout(hide,60000);
+    return;
+  }
   if(b=t.closest('tr.sec-row')){
     var d=b.nextElementSibling;
     if(d&&d.classList.contains('sec-detail')){d.hidden=!d.hidden;b.classList.toggle('open',!d.hidden);}

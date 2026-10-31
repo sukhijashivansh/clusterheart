@@ -379,6 +379,8 @@ table.users tbody tr:hover{background:var(--hover)}
 .sec-v{font-size:13px;line-height:1.6}
 .sec-mark{background:rgba(248,113,113,.18);color:var(--red);padding:0 2px}
 .sec-masked{color:var(--red);border-color:rgba(248,113,113,.4)}
+.sec-revealed{color:var(--text);border-color:var(--red);user-select:all;word-break:break-all;white-space:normal}
+.sec-small{padding:3px 10px !important;font-size:12px !important;margin-left:6px}
 .sec-pre{margin-top:6px;border:1px solid var(--border);max-height:280px}
 .sec-steps{margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.7}
 @media(max-width:640px){

@@ -592,6 +592,8 @@ func main() {
 	mux.HandleFunc("GET /api/app/clusters/{id}/usage", a.handleAppClusterUsage)
 	mux.HandleFunc("POST /api/app/clusters/{id}/remediation", a.handleAppEnableRemediation)
 	mux.HandleFunc("POST /api/app/clusters/{id}/rightsize", a.handleAppRightsize)
+	mux.HandleFunc("POST /api/app/clusters/{id}/secrets/reveal", a.handleAppRevealSecret)
+	mux.HandleFunc("GET /api/app/reveals/{id}", a.handleAppRevealResult)
 	mux.HandleFunc("POST /api/app/clusters/{id}/chat", a.handleAppClusterChat)
 	mux.HandleFunc("GET /api/app/clusters/{id}/chat", a.handleAppChatHistory)
 	mux.HandleFunc("DELETE /api/app/clusters/{id}/chat", a.handleAppChatHistory)
