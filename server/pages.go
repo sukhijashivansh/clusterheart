@@ -354,6 +354,11 @@ table.users tbody tr:hover{background:var(--hover)}
 .rs-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
 .rs-sub.rs-bad{color:var(--red)}
 .rs-sub.rs-low{color:var(--amber)}
+.log-box{border:1px solid var(--border);margin-bottom:10px}
+.log-box summary{cursor:pointer;padding:10px 14px;list-style:none}
+.log-box summary::-webkit-details-marker{display:none}
+.log-box[open] summary{border-bottom:1px solid var(--border)}
+.log-pre{margin:0;padding:12px 14px;max-height:320px;overflow:auto;font-size:12px;line-height:1.55;background:var(--input-bg);white-space:pre-wrap;word-break:break-word}
 .rs-queued{font-size:12px;font-weight:600;color:var(--green)}
 @media(max-width:640px){.rs-table .pod-name{max-width:150px}}
 .pill .dot{display:none}

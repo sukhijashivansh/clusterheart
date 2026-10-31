@@ -969,6 +969,16 @@ async function loadDetail(id){
       healthHtml+='</tbody></table></section>';
     }
     if(!probs.length&&!w.length){healthHtml+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No problems or warnings in the latest snapshot. Looks healthy.</p></div></section>';}
+    // Log tails the agent read from failing pods (newest crash first in agent order).
+    var pl=L.podLogs||[];
+    if(pl.length){
+      healthHtml+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Logs from failing pods ('+pl.length+')</p><p class="card2-desc">Last lines the agent read, secrets scrubbed.</p></div><div class="card2-body">'+
+        pl.map(function(l,i){
+          var when=l.previous?'before the last restart':'current';
+          return '<details class="log-box"'+(i===0?' open':'')+'><summary><span class="u-name" style="font-size:13.5px">'+esc(l.namespace)+'/'+esc(l.pod)+'</span> <span class="u-email">'+esc(l.container)+' · '+esc(l.reason||'')+' · '+when+' · '+ago(l.collectedAt)+'</span></summary>'+
+            '<pre class="log-pre">'+esc((l.lines||[]).join('\n'))+'</pre></details>';
+        }).join('')+'</div></section>';
+    }
     // Pods / Nodes / SRE tabs. The Nodes tab only appears when the agent reports
     // node data. The SRE panels load lazily from the control plane on first open.
     html+='<div class="tabs" role="tablist">'+
