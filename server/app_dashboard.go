@@ -1188,7 +1188,7 @@ function renderActivity(){
   var props={};(d.proposals||[]).forEach(function(x){props[x.id]=x;});
   var incs={};(d.incidents||[]).forEach(function(x){incs[x.id]=x;});
   var list=(d.activity||[]).slice().sort(function(a,b){return new Date(b.at||0)-new Date(a.at||0);});
-  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><div><p class="card2-title">Activity</p><p class="card2-desc">Who proposed, approved, rejected or paused what on this cluster.</p></div><button class="act revoke sre-refresh" style="margin-left:auto">Refresh</button></div></div>';
+  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><div><p class="card2-title">Activity</p></div><button class="act revoke sre-refresh" style="margin-left:auto">Refresh</button></div></div>';
   if(!list.length){p.innerHTML=html+'<div class="card2-body"><p class="sub" style="margin:0">No activity yet.</p></div></section>';return;}
   html+='<div class="tscroll"><table class="users ptable"><thead><tr><th>When</th><th>Event</th><th>About</th><th>By</th><th>Details</th></tr></thead><tbody>';
   list.forEach(function(e){
