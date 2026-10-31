@@ -15,7 +15,7 @@ import (
 )
 
 // Version is the agent build version, reported in heartbeats for compatibility.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 // maxBuffer bounds how many snapshots the agent holds during a control-plane
 // outage. Oldest snapshots are dropped first (bounded telemetry, no unbounded
@@ -123,10 +123,11 @@ func (r *Runner) collectOnce(ctx context.Context) {
 		r.Log.Error("snapshot collection failed", "err", err)
 		return
 	}
-	// Only the newest buffered snapshot keeps its log tails, so a backlog after an
+	// Only the newest buffered snapshot keeps its log tails and secret findings, so a backlog after an
 	// outage can't grow the telemetry batch past the control plane's body limit.
 	for i := range r.buffer {
 		r.buffer[i].PodLogs = nil
+		r.buffer[i].SecretFindings = nil // cumulative: the newest snapshot has them all
 	}
 	r.buffer = append(r.buffer, snap)
 	if len(r.buffer) > maxBuffer {

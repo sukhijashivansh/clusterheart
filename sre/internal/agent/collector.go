@@ -51,6 +51,7 @@ type Collector struct {
 	k8sVer    string
 	peaks     *peakTracker
 	logs      *logCache
+	secrets   *secretScanner
 }
 
 // NewCollector builds a collector. If kubeconfigPath is non-empty it is used;
@@ -70,7 +71,7 @@ func NewCollector(kubeconfigPath string) (*Collector, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Collector{clientset: cs, peaks: newPeakTracker(), logs: newLogCache()}
+	c := &Collector{clientset: cs, peaks: newPeakTracker(), logs: newLogCache(), secrets: newSecretScanner()}
 	// Metrics are best-effort: if metrics-server isn't installed, CPU/mem are
 	// simply omitted - the agent must never fail because metrics are missing.
 	if mc, err := metricsv.NewForConfig(cfg); err == nil {
@@ -153,6 +154,9 @@ func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, err
 	c.mergePodMetrics(ctx, snap.PodList)
 	c.mergeNodeMetrics(ctx, snap.NodeList)
 	snap.PodLogs = c.podLogs(ctx, logTargets(snap.PodProblems, pods.Items), time.Now())
+	if c.secrets != nil {
+		snap.SecretFindings = c.secrets.scan(ctx, c.clientset, pods.Items, time.Now())
+	}
 	return snap, nil
 }
 
