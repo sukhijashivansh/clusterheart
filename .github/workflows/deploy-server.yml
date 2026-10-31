@@ -6,7 +6,8 @@
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   DEPLOY_SSH_HOST     - server hostname or IP
 #   DEPLOY_SSH_USER     - ssh user (e.g. ubuntu or root)
-#   DEPLOY_SSH_PASSWORD - the user's ssh password
+#   DEPLOY_SSH_KEY      - private key (.pem contents) for the ssh user, or
+#   DEPLOY_SSH_PASSWORD - the user's ssh password (set one of the two)
 #   DEPLOY_SSH_PORT     - (optional) ssh port; defaults to 22
 # Optional repo variable:
 #   DEPLOY_ARCH         - target CPU arch: amd64 (default) or arm64 (Graviton)
@@ -50,6 +51,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
           password: ${{ secrets.DEPLOY_SSH_PASSWORD }}
           port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
           source: server/clusterheart-server
@@ -61,6 +63,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
           password: ${{ secrets.DEPLOY_SSH_PASSWORD }}
           port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
           script: |
