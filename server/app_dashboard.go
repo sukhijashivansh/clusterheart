@@ -267,6 +267,18 @@ func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// handleAppClusterUsage returns per-workload peak usage over the last 6h from
+// the control plane's stored snapshots (for Rightsizing):
+// GET /api/app/clusters/{id}/usage.
+func (a *app) handleAppClusterUsage(w http.ResponseWriter, r *http.Request) {
+	_, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	code, data, err := a.cpDo("GET", "/api/v1/clusters/"+url.PathEscape(r.PathValue("id"))+"/usage?windowMins=360&tenantId="+url.QueryEscape(tenant), nil)
+	cpRelay(w, code, data, err)
+}
+
 // appSREUser gates the SRE endpoints the same way as the cluster ones and
 // returns the caller's tenant.
 func (a *app) appSREUser(w http.ResponseWriter, r *http.Request) (*User, string, bool) {
@@ -740,46 +752,65 @@ function aiWire(id){
 }
 
 // ---------- Rightsizing ----------
-// Per workload: requested vs peak usage (rolling peak the agent keeps over up
-// to 6h) and a suggested request. Mirrors the desktop rules: wait for most of a
-// full window, upsize when the peak reaches the request, downsize when the peak
-// stays under 40% (suggest peak + 20%), never touch kube-* namespaces.
+// Per workload (namespace + owner, so history survives pod restarts and
+// rollouts): current requests from the latest snapshot vs the 6h peak from the
+// control plane's stored snapshots. Rules mirror the desktop app.
 var RS_WINDOW_MINS=360;
+var rsState={cluster:null,pods:[],usage:null};
+// Platform add-ons the user doesn't size themselves: shown as Managed.
+var RS_MANAGED_NS=/^(kube-system|kube-public|kube-node-lease|amazon-[\w-]+|aws-[\w-]+|clusterheart-sre)$/;
+var RS_MANAGED_NAME=/^(coredns|kube-proxy|aws-node|ebs-csi-(controller|node)|efs-csi-(controller|node)|metrics-server|aws-load-balancer-controller|cluster-autoscaler|karpenter|eks-pod-identity-agent|snapshot-controller|adot-collector|cloudwatch-agent|fluent-bit)(-.*)?$/;
+function rsManaged(ns,name){return RS_MANAGED_NS.test(ns)||RS_MANAGED_NAME.test(name);}
 function rsVerdict(r){
+  if(r.managed)return {v:'Managed',c:'mgd'};
   if(!r.cpuReq&&!r.memReq)return {v:'No requests',c:'off'};
   if(r.window<RS_WINDOW_MINS*0.9)return {v:'Learning ('+Math.floor(r.window/60)+'h/6h)',c:'off'};
   if(r.cpuReq&&r.cpuPeak>=r.cpuReq*0.9)return {v:'Upsize CPU',c:'bad'};
   if(r.memReq&&r.memPeak>=r.memReq*0.9)return {v:'Upsize memory',c:'bad'};
-  if(r.ns.indexOf('kube-')===0)return {v:'OK',c:'on'};
-  function hr(peak,req){var v=Math.ceil(peak*1.2);return (req&&peak<req*0.4&&v<req)?v:0;}
-  r.sugCpu=r.cpuReq?Math.max(hr(r.cpuPeak,r.cpuReq),r.cpuPeak<r.cpuReq*0.4?10:0):0;
-  r.sugMem=r.memReq?Math.max(hr(r.memPeak,r.memReq),r.memPeak<r.memReq*0.4?16:0):0;
+  function hr(peak,req,floor){return (req&&peak<req*0.4)?Math.min(Math.max(Math.ceil(peak*1.2),floor),req-1):0;}
+  r.sugCpu=hr(r.cpuPeak,r.cpuReq,10);r.sugMem=hr(r.memPeak,r.memReq,16);
   if(r.sugCpu&&r.sugMem)return {v:'Downsize',c:'off'};
   if(r.sugCpu)return {v:'Downsize CPU',c:'off'};
   if(r.sugMem)return {v:'Downsize memory',c:'off'};
   return {v:'OK',c:'on'};
 }
-function rightsizingSection(pods,L){
-  var have=pods.some(function(x){return x.cpuReqMilli||x.memReqMi||x.peakWindowMins;});
-  if(!have){
-    return '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent to enable rightsizing</p><p class="card2-desc">Rightsizing needs the newer agent, which also reports each pod\'s requests and peak usage. Restart it once so it downloads the latest version; suggestions appear after about 6 hours of data.</p></div>'+
-      '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">kubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
-      '<div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
-  }
+function rightsizingSection(pods){
+  rsState.pods=pods;rsState.usage=null;
+  return '<div class="spin-wrap"><div class="spinner"></div></div>';
+}
+async function loadRightsizing(){
+  var id=rsState.cluster,p=document.querySelector('.tabpanel[data-panel="rightsizing"]');
+  try{
+    var r=await fetch('/api/app/clusters/'+encodeURIComponent(id)+'/usage',{headers:{'Accept':'application/json'}});
+    var d=await r.json().catch(function(){return {};});
+    if(id!==rsState.cluster)return;
+    rsState.usage=r.ok?(d.workloads||[]):[];
+    if(!r.ok&&p){p.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Could not load usage history'+(d.error?': '+esc(d.error):'')+'.</p></div></section>';return;}
+  }catch(e){if(p)p.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Could not load usage history.</p></div></section>';return;}
+  if(p)p.innerHTML=renderRightsizing();
+}
+function renderRightsizing(){
+  var pods=rsState.pods,hist={};
+  (rsState.usage||[]).forEach(function(u){hist[u.namespace+'|'+u.owner]=u;});
   var g={};
   pods.forEach(function(x){
     if(x.phase!=='Running')return;
     var owner=x.owner||'Pod/'+x.name;
     if(owner.indexOf('Job/')===0)return;
     var k=x.namespace+'|'+owner,r=g[k];
-    if(!r)r=g[k]={ns:x.namespace,owner:owner,replicas:0,cpuReq:0,memReq:0,cpuPeak:0,memPeak:0,window:1e9};
+    if(!r){
+      var name=owner.split('/').slice(1).join('/'),h=hist[k];
+      r=g[k]={ns:x.namespace,owner:owner,replicas:0,cpuReq:0,memReq:0,
+        cpuPeak:h?h.cpuPeakMilli:0,memPeak:h?h.memPeakMi:0,
+        window:h?Math.round((new Date(h.last)-new Date(h.first))/60000):0,
+        managed:rsManaged(x.namespace,name)};
+    }
     r.replicas++;
     r.cpuReq=Math.max(r.cpuReq,x.cpuReqMilli||0);r.memReq=Math.max(r.memReq,x.memReqMi||0);
-    r.cpuPeak=Math.max(r.cpuPeak,x.cpuPeakMilli||x.cpuMilli||0);r.memPeak=Math.max(r.memPeak,x.memPeakMi||x.memMi||0);
-    r.window=Math.min(r.window,x.peakWindowMins||0);
+    r.cpuPeak=Math.max(r.cpuPeak,x.cpuMilli||0);r.memPeak=Math.max(r.memPeak,x.memMi||0);
   });
   var rows=Object.keys(g).map(function(k){var r=g[k];r.verdict=rsVerdict(r);return r;});
-  var rank={bad:0,off:1,on:2};
+  var rank={bad:0,off:1,on:2,mgd:3};
   rows.sort(function(a,b){return (rank[a.verdict.c]-rank[b.verdict.c])||((b.sugCpu||b.sugMem?1:0)-(a.sugCpu||a.sugMem?1:0))||a.owner.localeCompare(b.owner);});
   function pct(u,req){return req?' <span class="u-email">'+Math.round(u/req*100)+'%</span>':'';}
   var html='<section class="card2"><div class="card2-head"><p class="card2-title">Rightsizing</p><p class="card2-desc">Requests vs 6h peak. Suggested = peak + 20%.</p></div>'+
@@ -802,7 +833,7 @@ function rightsizingSection(pods,L){
       '<td class="u-time" style="white-space:nowrap">'+sug+'</td></tr>';
   });
   if(!rows.length)html+='<tr><td colspan="7" class="u-time">No running workloads in the latest snapshot.</td></tr>';
-  return html+'</tbody></table></div>'+(L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">Based on the first pods only; '+L.podListTruncated+' more were capped.</p></div>':'')+'</section>';
+  return html+'</tbody></table></div></section>';
 }
 
 async function loadDetail(id){
@@ -924,7 +955,7 @@ async function loadDetail(id){
     '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
     (nodesHtml?'<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>':'')+
     '<div class="tabpanel" data-panel="health">'+healthHtml+'</div>'+
-    '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all,L)+'</div>'+
+    '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all)+'</div>'+
     '<div class="tabpanel" data-panel="sre-overview"></div>'+
     '<div class="tabpanel" data-panel="incidents"></div>'+
     '<div class="tabpanel" data-panel="remediation"></div>'+
@@ -946,7 +977,7 @@ async function loadDetail(id){
     if(pn)pn.addEventListener('change',applyPodFilter);
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
     applyPodFilter();
-    sreState.cluster=id;sreState.data=null;
+    sreState.cluster=id;sreState.data=null;rsState.cluster=id;
     aiWire(id);
     document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
       var name=t.dataset.tab;
@@ -954,11 +985,11 @@ async function loadDetail(id){
       document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===t);});
       document.querySelectorAll('.tabpanel').forEach(function(pnl){pnl.classList.toggle('active',pnl.dataset.panel===name);});
       if(SRE_TABS.indexOf(name)>=0&&!sreState.data)loadSRE();
+      if(name==='rightsizing'&&!rsState.usage)loadRightsizing();
     });});
     // Keep the open tab across re-renders (rename, environment change).
     var _keep=document.querySelector('.tab[data-tab="'+_activeTab+'"]');
     if(_keep&&_activeTab!=='pods')_keep.click();
-    document.querySelectorAll('.copy-cmd').forEach(function(btn){btn.addEventListener('click',function(){navigator.clipboard.writeText(btn.dataset.cmd);btn.textContent='Copied';});});
     document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
@@ -1123,6 +1154,7 @@ var _sbox=document.getElementById('clusters');
 if(_sbox)_sbox.addEventListener('click',async function(e){
   var t=e.target;if(!t.closest)return;
   var b;
+  if(b=t.closest('.copy-cmd')){navigator.clipboard.writeText(b.dataset.cmd);b.textContent='Copied';return;}
   if(b=t.closest('#inc-seg .seg-btn')){sreState.incFilter=b.dataset.f;renderIncidents();return;}
   if(t.closest('.sre-refresh')){sreState.diag={};loadSRE();return;}
   if(b=t.closest('.sre-diag')){

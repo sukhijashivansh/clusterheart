@@ -341,6 +341,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .pill.on{color:var(--green)}
 .pill.off{color:var(--amber)}
 .pill.bad{color:var(--red)}
+.pill.mgd{color:var(--muted)}
 .pill .dot{display:none}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .empty{padding:48px 18px;text-align:center;color:var(--muted)}

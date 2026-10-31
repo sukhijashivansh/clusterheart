@@ -75,6 +75,7 @@ func (s *Server) Routes() http.Handler {
 	// Operator / admin.
 	mux.HandleFunc("POST /api/v1/clusters", s.requireAdmin(s.handleRegister))
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
+	mux.HandleFunc("GET /api/v1/clusters/{id}/usage", s.requireAdmin(s.handleWorkloadUsage))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/agent-token", s.requireAdmin(s.handleRotateAgentToken))
 	mux.HandleFunc("DELETE /api/v1/clusters/{id}", s.requireAdmin(s.handleDeleteCluster))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/rename", s.requireAdmin(s.handleRenameCluster))

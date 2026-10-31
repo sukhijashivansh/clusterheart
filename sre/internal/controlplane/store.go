@@ -54,6 +54,8 @@ type Store interface {
 	RecordHeartbeat(ctx context.Context, clusterID string, hb contract.Heartbeat, at time.Time) error
 	SaveSnapshots(ctx context.Context, clusterID string, snaps []contract.ClusterSnapshot) error
 	LatestSnapshot(ctx context.Context, clusterID string) (*contract.ClusterSnapshot, error)
+	// WorkloadUsage aggregates per-workload peak usage from snapshots since a time.
+	WorkloadUsage(ctx context.Context, clusterID string, since time.Time) ([]WorkloadUsage, error)
 }
 
 // --- in-memory implementation (tests, local dev) -------------------------
