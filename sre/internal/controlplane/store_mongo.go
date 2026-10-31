@@ -35,6 +35,7 @@ type clusterDoc struct {
 	LastHeartbeat        *time.Time `bson:"lastHeartbeat,omitempty"`
 	AgentVersion         string     `bson:"agentVersion,omitempty"`
 	K8sVersion           string     `bson:"k8sVersion,omitempty"`
+	Kind                 string     `bson:"kind,omitempty"`
 }
 
 type snapshotDoc struct {
@@ -91,7 +92,7 @@ func NewMongoStore(ctx context.Context, db *mongo.Database) (Store, error) {
 func (s *mongoStore) CreateCluster(ctx context.Context, c Cluster) error {
 	_, err := s.clusters.InsertOne(ctx, clusterDoc{
 		ID: c.ID, TenantID: c.TenantID, Name: c.Name, Environment: c.Environment,
-		Region: c.Region, AgentTokenHash: c.AgentTokenHash, CreatedAt: c.CreatedAt,
+		Region: c.Region, AgentTokenHash: c.AgentTokenHash, CreatedAt: c.CreatedAt, Kind: c.Kind,
 	})
 	if mongo.IsDuplicateKeyError(err) {
 		return errors.New("cluster already exists")
@@ -188,6 +189,7 @@ func docToCluster(d clusterDoc) Cluster {
 		ID: d.ID, TenantID: d.TenantID, Name: d.Name, Environment: d.Environment,
 		Region: d.Region, AgentTokenHash: d.AgentTokenHash, RemediationTokenHash: d.RemediationTokenHash,
 		CreatedAt: d.CreatedAt, LastHeartbeat: d.LastHeartbeat, AgentVersion: d.AgentVersion, K8sVersion: d.K8sVersion,
+		Kind: d.Kind,
 	}
 }
 

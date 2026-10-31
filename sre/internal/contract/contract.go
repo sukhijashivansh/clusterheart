@@ -18,7 +18,16 @@ type RegisterRequest struct {
 	ClusterName string `json:"clusterName"`
 	Environment string `json:"environment"` // e.g. production, staging, dev
 	Region      string `json:"region,omitempty"`
+	// Kind is what's being watched: "kubernetes" (default) or "server" (a
+	// single Linux host running the host agent).
+	Kind string `json:"kind,omitempty"`
 }
+
+// Kinds of monitored targets.
+const (
+	KindKubernetes = "kubernetes"
+	KindServer     = "server"
+)
 
 // RegisterResponse returns the cluster identity and the one-time agent token.
 // The token is shown exactly once; the control plane stores only its hash.
@@ -78,6 +87,9 @@ type ClusterSnapshot struct {
 	// failed), redacted by the agent. Bounded in count and size; only the newest
 	// snapshot in a batch carries them.
 	PodLogs []PodLog `json:"podLogs,omitempty"`
+	// Host is set by the host agent (Kind "server") instead of the Kubernetes
+	// inventory above.
+	Host *HostSnapshot `json:"host,omitempty"`
 	// SecretFindings are places where a credential appears to be exposed: in a
 	// container's log output or hard-coded in a pod spec (env/args). They never
 	// contain the secret itself, only where it is, what kind, and a redacted
@@ -280,6 +292,7 @@ type ClusterStatus struct {
 	AgentVersion  string           `json:"agentVersion,omitempty"`
 	K8sVersion    string           `json:"k8sVersion,omitempty"`
 	Latest        *ClusterSnapshot `json:"latest,omitempty"`
+	Kind          string           `json:"kind,omitempty"` // "kubernetes" or "server"
 	// RemediationEnabled reports that a remediation token has been issued, i.e.
 	// the in-cluster remediation controller can apply approved actions.
 	RemediationEnabled bool `json:"remediationEnabled,omitempty"`
@@ -339,4 +352,65 @@ type ActionResult struct {
 	Error              string    `json:"error,omitempty"`
 	StartedAt          time.Time `json:"startedAt"`
 	FinishedAt         time.Time `json:"finishedAt"`
+}
+
+// HostSnapshot is one Linux server's health, collected by the host agent.
+// Sizes are MiB, CPU and memory percentages are 0-100.
+type HostSnapshot struct {
+	Hostname    string        `json:"hostname"`
+	OS          string        `json:"os,omitempty"`     // e.g. "Ubuntu 24.04 LTS"
+	Kernel      string        `json:"kernel,omitempty"` // e.g. "6.8.0-45-generic"
+	Arch        string        `json:"arch,omitempty"`
+	CPUCores    int           `json:"cpuCores"`
+	CPUPercent  float64       `json:"cpuPercent"`
+	Load1       float64       `json:"load1"`
+	Load5       float64       `json:"load5"`
+	Load15      float64       `json:"load15"`
+	MemTotalMi  int64         `json:"memTotalMi"`
+	MemUsedMi   int64         `json:"memUsedMi"`
+	SwapTotalMi int64         `json:"swapTotalMi,omitempty"`
+	SwapUsedMi  int64         `json:"swapUsedMi,omitempty"`
+	UptimeSec   int64         `json:"uptimeSec"`
+	Disks       []HostDisk    `json:"disks,omitempty"`
+	Processes   []HostProcess `json:"processes,omitempty"`   // top by CPU, then memory
+	FailedUnits []HostUnit    `json:"failedUnits,omitempty"` // systemd units in failed state
+	ErrorLogs   []HostLogLine `json:"errorLogs,omitempty"`   // recent error-level journal lines, redacted
+	Problems    []HostProblem `json:"problems,omitempty"`
+}
+
+// HostDisk is one mounted filesystem.
+type HostDisk struct {
+	Mount   string `json:"mount"`
+	FS      string `json:"fs"`
+	TotalMi int64  `json:"totalMi"`
+	UsedMi  int64  `json:"usedMi"`
+}
+
+// HostProcess is one process with its CPU (of one core) and resident memory.
+type HostProcess struct {
+	PID        int     `json:"pid"`
+	Name       string  `json:"name"`
+	User       string  `json:"user,omitempty"`
+	CPUPercent float64 `json:"cpuPercent"`
+	MemMi      int64   `json:"memMi"`
+}
+
+// HostUnit is a systemd unit.
+type HostUnit struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// HostLogLine is one journal entry.
+type HostLogLine struct {
+	Time    time.Time `json:"time"`
+	Unit    string    `json:"unit,omitempty"`
+	Message string    `json:"message"`
+}
+
+// HostProblem is a measured issue on a host. Severity is "high" or "medium".
+type HostProblem struct {
+	Type     string `json:"type"` // DiskFull, MemoryPressure, HighLoad, FailedService, RecentReboot, SwapPressure
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
 }

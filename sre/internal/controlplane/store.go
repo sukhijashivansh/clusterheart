@@ -34,6 +34,7 @@ type Cluster struct {
 	LastHeartbeat        *time.Time
 	AgentVersion         string
 	K8sVersion           string
+	Kind                 string // contract.KindKubernetes (default) or contract.KindServer
 }
 
 // Store is the persistence boundary. It is an interface so the control plane can

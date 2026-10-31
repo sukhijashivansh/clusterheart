@@ -133,6 +133,14 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "tenantId and clusterName are required")
 		return
 	}
+	switch req.Kind {
+	case "", contract.KindKubernetes:
+		req.Kind = contract.KindKubernetes
+	case contract.KindServer:
+	default:
+		writeErr(w, http.StatusBadRequest, "kind must be kubernetes or server")
+		return
+	}
 	token, hash, err := mintAgentToken()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not mint agent token")
@@ -147,6 +155,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Region:         req.Region,
 		AgentTokenHash: hash,
 		CreatedAt:      s.now(),
+		Kind:           req.Kind,
 	}
 	if err := s.store.CreateCluster(r.Context(), c); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not register cluster")
@@ -297,6 +306,7 @@ func (s *Server) handleListClusters(w http.ResponseWriter, r *http.Request) {
 			K8sVersion:         c.K8sVersion,
 			Connected:          c.LastHeartbeat != nil && s.now().Sub(*c.LastHeartbeat) < staleAfter,
 			RemediationEnabled: c.RemediationTokenHash != "",
+			Kind:               kindOf(c),
 		}
 		if snap, err := s.store.LatestSnapshot(r.Context(), c.ID); err == nil {
 			st.Latest = snap
@@ -675,6 +685,22 @@ func sanitizeSnapshot(s *contract.ClusterSnapshot) {
 	for i := range s.SecretFindings {
 		s.SecretFindings[i].Context = redact.String(s.SecretFindings[i].Context)
 	}
+	if s.Host != nil {
+		for i := range s.Host.ErrorLogs {
+			s.Host.ErrorLogs[i].Message = redact.String(s.Host.ErrorLogs[i].Message)
+		}
+		for i := range s.Host.Problems {
+			s.Host.Problems[i].Message = redact.String(s.Host.Problems[i].Message)
+		}
+	}
+}
+
+// kindOf defaults clusters registered before kinds existed to Kubernetes.
+func kindOf(c Cluster) string {
+	if c.Kind == "" {
+		return contract.KindKubernetes
+	}
+	return c.Kind
 }
 
 // --- helpers -------------------------------------------------------------
