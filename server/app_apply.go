@@ -23,6 +23,17 @@ import (
 //go:embed remediation.yaml
 var remediationManifest string
 
+// hostInstallScript is install-host.sh, served for the one-line server install.
+//
+//go:embed install-host.sh
+var hostInstallScript string
+
+func handleHostInstallScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = io.WriteString(w, hostInstallScript)
+}
+
 func handleRemediationManifest(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	_, _ = io.WriteString(w, remediationManifest)

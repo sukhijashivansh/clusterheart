@@ -85,11 +85,19 @@ func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Name        string `json:"name"`
 			Environment string `json:"environment"`
+			Kind        string `json:"kind"`
 		}
 		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in)
+		kind := "kubernetes"
+		if in.Kind == "server" {
+			kind = "server"
+		}
 		name := strings.TrimSpace(in.Name)
 		if name == "" {
 			name = "my-cluster"
+			if kind == "server" {
+				name = "my-server"
+			}
 		}
 		env := strings.TrimSpace(in.Environment)
 		if env == "" {
@@ -99,6 +107,7 @@ func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
 			"tenantId":    tenant,
 			"clusterName": name,
 			"environment": env,
+			"kind":        kind,
 		})
 		if err != nil {
 			writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
@@ -119,7 +128,8 @@ func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{
 			"clusterId":  reg.ClusterID,
 			"agentToken": reg.AgentToken,
-			"install":    agentInstallSnippet(reg.ClusterID, reg.AgentToken),
+			"kind":       kind,
+			"install":    installSnippet(kind, reg.ClusterID, reg.AgentToken),
 		})
 
 	default:
@@ -142,6 +152,10 @@ func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenant := tenantFor(u.Email)
+	var in struct {
+		Kind string `json:"kind"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
 	code, data, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(id)+"/agent-token?tenantId="+url.QueryEscape(tenant), nil)
 	if err != nil {
 		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
@@ -166,7 +180,7 @@ func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"clusterId":  reg.ClusterID,
 		"agentToken": reg.AgentToken,
-		"install":    agentInstallSnippet(reg.ClusterID, reg.AgentToken),
+		"install":    installSnippet(in.Kind, reg.ClusterID, reg.AgentToken),
 	})
 }
 
@@ -466,6 +480,25 @@ func (a *app) handleAppClusterAutomation(w http.ResponseWriter, r *http.Request)
 // agentInstallSnippet builds the copy-paste kubectl commands that enroll the
 // read-only agent in the user's cluster. The per-cluster secrets go into a k8s
 // Secret; the manifest itself is generic and hosted publicly.
+// installSnippet returns the setup commands for a cluster or a server.
+func installSnippet(kind, id, token string) string {
+	if kind == "server" {
+		return hostInstallSnippet(id, token)
+	}
+	return agentInstallSnippet(id, token)
+}
+
+// hostInstallSnippet is the one-line install of the host agent on a Linux
+// server (see install-host.sh).
+func hostInstallSnippet(id, token string) string {
+	script := envOr("HOST_INSTALL_URL", "https://clusterheart-server.clusterheart.com/install-host.sh")
+	extra := ""
+	if cp := os.Getenv("AGENT_CONTROLPLANE_URL"); cp != "" && cp != "https://clusterheart-server.clusterheart.com/cp" {
+		extra = " --url " + cp
+	}
+	return "curl -fsSL " + script + " | sudo sh -s -- --id " + id + " --token " + token + extra
+}
+
 func agentInstallSnippet(clusterID, token string) string {
 	cpURL := envOr("AGENT_CONTROLPLANE_URL", "https://clusterheart-server.clusterheart.com/cp")
 	manifest := envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml")
@@ -504,6 +537,7 @@ const appBody = `{{define "body"}}<div class="app2">
       <div class="menu-pop" role="menu">
         <div class="menu-email">{{.Email}}</div>
         <button class="menu-item accent" role="menuitem" id="add-cluster">+ Add cluster</button>
+        <button class="menu-item accent" role="menuitem" id="add-server">+ Add server</button>
         <a class="menu-item" role="menuitem" href="/account">Account</a>
         <a class="menu-item" role="menuitem" href="/docs/connect-a-cluster.md" target="_blank" rel="noopener">Help</a>
         <div class="menu-sep"></div>
@@ -561,7 +595,7 @@ function kebab(c){
   h+='<button class="kebab-item info-btn" data-id="'+id+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
   h+='<button class="kebab-item rename-btn" data-id="'+id+'" data-name="'+esc(c.name||'')+'">Rename</button>';
   h+='<button class="kebab-item env-btn" data-id="'+id+'" data-env="'+esc(c.environment||'')+'">Environment</button>';
-  if(!connected){h+='<button class="kebab-item connect-btn" data-id="'+id+'">Install</button>';}
+  if(!connected){h+='<button class="kebab-item connect-btn" data-id="'+id+'" data-kind="'+esc(c.kind||'kubernetes')+'">Install</button>';}
   h+='<div class="kebab-sep"></div>';
   h+='<button class="kebab-item danger del-btn" data-id="'+id+'" data-name="'+esc(c.name||c.clusterId||'')+'">Delete</button>';
   return h+'</div></div>';
@@ -617,10 +651,17 @@ async function load(){
       var pods=havePL?(podRun+' / '+svc.length):(p.running!=null?(p.running+' / '+p.total):'—');
       var jobsN=haveJL?(jobDone+' / '+jl.length):(wl.jobs!=null?(''+wl.jobs):'—');
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
+      var metrics='<div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div>';
+      if(c.kind==='server'){
+        var hs=L.host,dk=hs?fullestDisk(hs):null;
+        metrics='<div class="cl-metric"><b>'+(hs?Math.round(hs.cpuPercent)+'%':'—')+'</b><span>CPU</span></div>'+
+          '<div class="cl-metric"><b>'+(hs?pctOf(hs.memUsedMi,hs.memTotalMi)+'%':'—')+'</b><span>Memory</span></div>'+
+          '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk'+fbadge(hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0)+'</span></div>';
+      }
       html+='<div class="cl-card">'+
-        '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a>'+(c.environment?'<div class="cl-env">'+esc(c.environment)+'</div>':'')+'</div>'+
+        '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a><div class="cl-env">'+(c.kind==='server'?'Server':'Kubernetes')+(c.environment?' · '+esc(c.environment):'')+'</div></div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
-        '<div class="cl-metrics"><div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div></div>'+
+        '<div class="cl-metrics">'+metrics+'</div>'+
         '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span>'+kebab(c)+'</div>'+
       '</div>';
     });
@@ -630,10 +671,12 @@ async function load(){
 }
 
 function showInstall(d){
-  var box=document.getElementById('clusters');
-  var pre='<section class="card2"><div class="card2-head"><p class="card2-title">Install the agent</p><p class="card2-desc">Run this against the cluster you want to watch. The agent is read-only. <b>Save the AGENT_TOKEN now. It is shown only once.</b> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent)">Full guide &rarr;</a></p></div><div class="card2-body">'+
-    '<textarea class="nb" rows="6" readonly onclick="this.select()">'+esc(d.install)+'</textarea>'+
-    '<div class="nb-actions"><button class="act approve" id="copy-install">Copy</button><span class="nb-msg">Cluster ID: '+esc(d.clusterId)+'</span></div>'+
+  var box=document.getElementById('clusters'),srv=d.kind==='server';
+  var desc=srv?'Run this on the server (Linux with systemd). The agent is read-only, runs as its own user and only makes outbound HTTPS calls. <b>The token is shown only once.</b> To remove it later, run the same script with <b>--uninstall</b>.'
+              :'Run this against the cluster you want to watch. The agent is read-only. <b>Save the AGENT_TOKEN now. It is shown only once.</b> <a href="/docs/connect-a-cluster.md" target="_blank" rel="noopener" style="color:var(--accent)">Full guide &rarr;</a>';
+  var pre='<section class="card2"><div class="card2-head"><p class="card2-title">Install the agent</p><p class="card2-desc">'+desc+'</p></div><div class="card2-body">'+
+    '<textarea class="nb" rows="'+(srv?3:6)+'" readonly onclick="this.select()">'+esc(d.install)+'</textarea>'+
+    '<div class="nb-actions"><button class="act approve" id="copy-install">Copy</button><span class="nb-msg">'+(srv?'Server':'Cluster')+' ID: '+esc(d.clusterId)+'</span></div>'+
     '</div></section>';
   box.insertAdjacentHTML('afterbegin',pre);
   var cp=document.getElementById('copy-install');
@@ -648,8 +691,22 @@ document.getElementById('add-cluster').addEventListener('click',async function()
   var r=await _post('/api/app/clusters',{name:name});
   btn.disabled=false;btn.textContent='+ Add cluster';
   if(!r.ok){alert((r.data&&r.data.error)||'Failed to create cluster');return;}
-  showInstall(r.data);load();
+  await load();showInstall(r.data);
 });
+
+document.getElementById('add-server').addEventListener('click',async function(){
+  if(_menu){_menu.classList.remove('open');if(_mb)_mb.setAttribute('aria-expanded','false');}
+  var name=prompt('Name this server (e.g. web-01):','my-server');
+  if(name===null)return;
+  var r=await _post('/api/app/clusters',{name:name,kind:'server'});
+  if(!r.ok){alert((r.data&&r.data.error)||'Failed to add server');return;}
+  r.data.kind='server';
+  if(new URLSearchParams(location.search).get('cluster')){location.href='/app';return;}
+  await load();showInstall(r.data);
+});
+
+function pctOf(used,total){return total>0?Math.round(used/total*100):0;}
+function fullestDisk(h){var best=null;(h.disks||[]).forEach(function(d){if(!best||d.usedMi/d.totalMi>best.usedMi/best.totalMi)best=d;});return best;}
 
 function stat(label,val,sub){return '<div class="statcard"><div class="stat-label">'+label+'</div><div class="stat-val">'+val+'</div>'+(sub?'<div class="stat-sub">'+sub+'</div>':'')+'</div>';}
 
@@ -787,8 +844,9 @@ function agentAtLeast(v,want){
   return true;
 }
 function secretsSection(list,c){
-  sreRevealOK=agentAtLeast(c.agentVersion,'0.2.2');
-  if(!agentAtLeast(c.agentVersion,'0.2.0')){
+  var hostAgent=c.kind==='server';
+  sreRevealOK=hostAgent||agentAtLeast(c.agentVersion,'0.2.2');
+  if(!hostAgent&&!agentAtLeast(c.agentVersion,'0.2.0')){
     return '<section class="card2"><div class="card2-head"><p class="card2-title">Leaked secrets</p><p class="card2-desc">Update the agent to turn this on.</p></div>'+
       '<div class="card2-body"><textarea class="nb" rows="2" readonly onclick="this.select()">kubectl apply -f https://clusterheart.com/agent.yaml\nkubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
       '<div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
@@ -852,6 +910,79 @@ function secretDetail(f,label,src){
     (line?'<div class="sec-k" style="margin-top:14px">'+(f.source==='log'?'Log line':(f.source==='env'?'Setting':'Command'))+'</div><pre class="log-pre sec-pre">'+secretHighlight(line)+'</pre>':'')+
     '<div class="sec-k" style="margin-top:14px">What to do</div><ol class="sec-steps">'+steps.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ol>'+
     '<p class="u-email" style="margin:10px 0 0">'+(sreRevealOK?'Reveal fetches the value from your cluster\'s agent on request. It isn\'t stored, and each reveal is recorded in Activity.':'Update the agent to reveal full values.')+'</p></div>';
+}
+
+// ---------- Server detail ----------
+// A plain Linux server watched by the host agent: Overview, Health, Secrets, AI.
+function sevClass(p,warn,bad){return p>=bad?'bad':(p>=warn?'off':'on');}
+function fmtUptime(sec){sec=sec||0;var d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?d+'d '+h+'h':(h?h+'h '+m+'m':m+'m');}
+function renderServerDetail(c,html,box){
+  var id=c.clusterId,L=c.latest,h=L&&L.host;
+  if(!h){
+    box.innerHTML=html+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), this server shows up here. On the server, check it with <span class="mono-chip">systemctl status clusterheart-host-agent</span>.</p></div></section>';
+    return;
+  }
+  var memP=pctOf(h.memUsedMi,h.memTotalMi),dk=fullestDisk(h),dkP=dk?pctOf(dk.usedMi,dk.totalMi):0,perCore=h.cpuCores?h.load5/h.cpuCores:0;
+  html+='<div class="statgrid">'+
+    stat('CPU','<span class="pill '+sevClass(h.cpuPercent,80,90)+'" style="font-size:inherit">'+Math.round(h.cpuPercent)+'%</span>',h.cpuCores+' cores')+
+    stat('Memory','<span class="pill '+sevClass(memP,80,90)+'" style="font-size:inherit">'+memP+'%</span>',fmtMem(h.memUsedMi)+' of '+fmtMem(h.memTotalMi))+
+    stat('Disk',dk?'<span class="pill '+sevClass(dkP,80,90)+'" style="font-size:inherit">'+dkP+'%</span>':'—',dk?esc(dk.mount)+' (fullest)':'no disks reported')+
+    stat('Load',(h.load5||0).toFixed(2),perCore.toFixed(2)+' per core (5 min)')+
+  '</div>';
+  var probs=h.problems||[],secrets=L.secretFindings||[];
+  html+='<div class="tabs" role="tablist">'+
+    '<button class="tab active" data-tab="overview">Overview</button>'+
+    '<button class="tab" data-tab="health">Health'+(probs.length?' <span class="tab-badge">'+probs.length+'</span>':'')+'</button>'+
+    '<button class="tab" data-tab="secrets">Secrets'+(secrets.length?' <span class="tab-badge">'+secrets.length+'</span>':'')+'</button>'+
+    '<button class="tab" data-tab="ai">AI</button>'+
+  '</div>';
+  // Overview
+  var row=function(k,v){return '<div class="sec-k">'+k+'</div><div class="sec-v">'+v+'</div>';};
+  var ov='<section class="card2"><div class="card2-head"><p class="card2-title">System</p></div><div class="card2-body"><div class="sec-grid">'+
+    row('Hostname','<span class="mono-chip">'+esc(h.hostname)+'</span>')+row('OS',esc(h.os||'-'))+row('Kernel',esc(h.kernel||'-'))+
+    row('Architecture',esc(h.arch||'-'))+row('Uptime',fmtUptime(h.uptimeSec))+
+    (h.swapTotalMi?row('Swap',fmtMem(h.swapUsedMi)+' of '+fmtMem(h.swapTotalMi)):'')+
+  '</div></div></section>';
+  if((h.disks||[]).length){
+    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Disks</p></div><div class="tscroll"><table class="users ptable"><thead><tr><th>Mount</th><th>Type</th><th>Used</th><th>Size</th><th>Full</th></tr></thead><tbody>'+
+      h.disks.map(function(d){var p=pctOf(d.usedMi,d.totalMi);return '<tr><td><span class="u-name" style="font-size:13.5px">'+esc(d.mount)+'</span></td><td class="u-email">'+esc(d.fs)+'</td><td class="u-time">'+fmtMem(d.usedMi)+'</td><td class="u-time">'+fmtMem(d.totalMi)+'</td><td><span class="pill '+sevClass(p,80,90)+'">'+p+'%</span></td></tr>';}).join('')+
+      '</tbody></table></div></section>';
+  }
+  if((h.processes||[]).length){
+    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Top processes</p></div><div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Process</th><th>User</th><th>CPU</th><th>Memory</th></tr></thead><tbody>'+
+      h.processes.map(function(x){return '<tr><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">pid '+x.pid+'</div></td><td class="u-email">'+esc(x.user||'')+'</td><td class="u-time">'+(x.cpuPercent||0).toFixed(1)+'%</td><td class="u-time">'+fmtMem(x.memMi)+'</td></tr>';}).join('')+
+      '</tbody></table></div></section>';
+  }
+  // Health
+  var he='';
+  if(probs.length){
+    var sevRank={high:0,medium:1};
+    he+='<section class="card2"><div class="card2-head"><p class="card2-title">Problems ('+probs.length+')</p></div><div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Problem</th><th>Severity</th><th>Detail</th></tr></thead><tbody>'+
+      probs.slice().sort(function(a,b){return (sevRank[a.severity]||2)-(sevRank[b.severity]||2);}).map(function(x){return '<tr><td class="u-name" style="font-size:13.5px">'+esc(x.type)+'</td><td>'+sevPill(x.severity)+'</td><td class="u-time" style="white-space:normal">'+esc(x.message)+'</td></tr>';}).join('')+
+      '</tbody></table></div></section>';
+  }
+  var logs=(h.errorLogs||[]).slice().reverse();
+  if(logs.length){
+    he+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Recent errors ('+logs.length+')</p></div><div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Service</th><th>Message</th><th>When</th></tr></thead><tbody>'+
+      logs.map(function(l){return '<tr><td class="u-email">'+esc(l.unit||'system')+'</td><td class="u-time" style="white-space:normal;font-family:\'Geist Mono\',ui-monospace,monospace;font-size:12px">'+esc(l.message)+'</td><td class="u-time" style="white-space:nowrap" title="'+esc(l.time?new Date(l.time).toLocaleString():'')+'">'+ago(l.time)+'</td></tr>';}).join('')+
+      '</tbody></table></div></section>';
+  }
+  if(!he)he='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">Healthy.</span> No problems or errors reported.</p></div></section>';
+  html+='<div class="tabpanel active" data-panel="overview">'+ov+'</div>'+
+    '<div class="tabpanel" data-panel="health">'+he+'</div>'+
+    '<div class="tabpanel" data-panel="secrets">'+secretsSection(secrets,c)+'</div>'+
+    '<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>';
+  box.innerHTML=html;
+  sreState.cluster=id;sreState.data=null;rsState.cluster=id;
+  aiWire(id);
+  document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
+    _activeTab=t.dataset.tab;
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===t);});
+    document.querySelectorAll('.tabpanel').forEach(function(pnl){pnl.classList.toggle('active',pnl.dataset.panel===t.dataset.tab);});
+  });});
+  var keep=document.querySelector('.tab[data-tab="'+_activeTab+'"]');
+  if(keep&&_activeTab!=='overview')keep.click();
+  document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
 }
 
 // ---------- Rightsizing ----------
@@ -967,6 +1098,7 @@ async function loadDetail(id){
     var statusHtml='<span class="pill '+(connected?'on':'off')+'" style="font-size:13px;margin-left:10px;vertical-align:middle">'+(connected?'Connected':'Offline')+'</span>';
     var html='<div class="detail-head"><h1 style="margin:0"><span class="rename-name" data-id="'+esc(c.clusterId)+'" data-name="'+esc(c.name||'')+'" title="Double-click to rename">'+esc(c.name||c.clusterId)+'</span>'+statusHtml+'</h1><div class="actbar">'+kebab(c)+'</div></div>';
     var L=c.latest;
+    if(c.kind==='server'){renderServerDetail(c,html,box);return;}
     if(!L){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), health shows up here. Make sure the agent pod is Running in <b>clusterheart-sre</b>.</p></div></section>';box.innerHTML=html;return;}
     var n=L.nodes||{},p=L.pods||{},wl=L.workloads||{};
     var all=L.podList||[];
@@ -1452,8 +1584,9 @@ if(_cbox)_cbox.addEventListener('click',async function(e){
   var cb=e.target.closest&&e.target.closest('.connect-btn');
   if(!cb)return;
   if(!await chModal({title:'Issue a new token?',body:'This creates a NEW agent token and invalidates any previous one for this cluster.',confirm:'Continue'}))return;
-  var rr=await _post('/api/app/clusters/'+encodeURIComponent(cb.dataset.id)+'/connect',{});
+  var rr=await _post('/api/app/clusters/'+encodeURIComponent(cb.dataset.id)+'/connect',{kind:cb.dataset.kind||'kubernetes'});
   if(!rr.ok){await chModal({title:'Failed',body:(rr.data&&rr.data.error)||'Failed to issue token',confirm:'OK'});return;}
+  rr.data.kind=cb.dataset.kind;
   showInstall(rr.data);window.scrollTo(0,0);
 });
 

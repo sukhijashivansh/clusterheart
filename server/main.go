@@ -613,6 +613,7 @@ func main() {
 		http.FileServer(http.Dir(downloadsDir))))
 
 	mux.HandleFunc("GET /remediation.yaml", handleRemediationManifest)
+	mux.HandleFunc("GET /install-host.sh", handleHostInstallScript)
 	mux.HandleFunc("/install.sh", func(w http.ResponseWriter, r *http.Request) {
 		scheme := "https"
 		if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
