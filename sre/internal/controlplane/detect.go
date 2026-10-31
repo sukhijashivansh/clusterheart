@@ -61,6 +61,10 @@ func fingerprint(clusterID, namespace, subject, container string, t contract.Pro
 // observe builds the set of observations for one snapshot.
 func observe(clusterID string, snap contract.ClusterSnapshot) []observation {
 	var obs []observation
+	logs := map[string][]string{}
+	for _, l := range snap.PodLogs {
+		logs[l.Namespace+"/"+l.Pod+"/"+l.Container] = l.Lines
+	}
 	for _, p := range snap.PodProblems {
 		subj := podSubject(p)
 		ref := p.Namespace + "/" + p.Pod
@@ -78,6 +82,7 @@ func observe(clusterID string, snap contract.ClusterSnapshot) []observation {
 			evidence: EvidenceItem{
 				ObservedAt: snap.CollectedAt, Ref: ref, Reason: string(p.Type),
 				Message: p.Message, RestartCount: p.RestartCount,
+				Logs: lastLines(logs[p.Namespace+"/"+p.Pod+"/"+p.Container], evidenceLogLines),
 			},
 		})
 	}
@@ -143,4 +148,14 @@ func (e *Engine) reconcileLatest(ctx context.Context, tenantID, clusterID string
 		}
 	}
 	return e.Reconcile(ctx, tenantID, clusterID, latest)
+}
+
+// evidenceLogLines is how much of a container's log each evidence item keeps.
+const evidenceLogLines = 15
+
+func lastLines(lines []string, n int) []string {
+	if len(lines) > n {
+		return lines[len(lines)-n:]
+	}
+	return lines
 }

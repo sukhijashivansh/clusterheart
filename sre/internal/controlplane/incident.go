@@ -41,6 +41,9 @@ type EvidenceItem struct {
 	Reason       string    `json:"reason"` // problem type
 	Message      string    `json:"message"`
 	RestartCount int32     `json:"restartCount,omitempty"`
+	// Logs is the tail of the container's log at observation time (redacted),
+	// when the agent collected one.
+	Logs []string `json:"logs,omitempty"`
 }
 
 // observation is a single detector output for one snapshot cycle.

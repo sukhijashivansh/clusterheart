@@ -74,6 +74,22 @@ type ClusterSnapshot struct {
 	// dashboard shows failed/complete runs even after their pods are GC'd.
 	JobList          []JobInfo `json:"jobList,omitempty"`
 	JobListTruncated int       `json:"jobListTruncated,omitempty"`
+	// PodLogs are recent log tails from failing pods (crash-looping, OOMKilled or
+	// failed), redacted by the agent. Bounded in count and size; only the newest
+	// snapshot in a batch carries them.
+	PodLogs []PodLog `json:"podLogs,omitempty"`
+}
+
+// PodLog is the tail of one container's log. Previous is true when the lines
+// come from the last terminated instance (what a crash looked like).
+type PodLog struct {
+	Namespace   string    `json:"namespace"`
+	Pod         string    `json:"pod"`
+	Container   string    `json:"container"`
+	Previous    bool      `json:"previous,omitempty"`
+	Reason      string    `json:"reason,omitempty"` // why it was collected, e.g. CrashLoopBackOff
+	Lines       []string  `json:"lines"`
+	CollectedAt time.Time `json:"collectedAt"`
 }
 
 // JobInfo is one batch Job's status, read from the Job object (not its pods, which

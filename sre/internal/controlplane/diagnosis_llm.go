@@ -112,8 +112,19 @@ func buildRCAPrompt(inc Incident) (system, user string) {
 		inc.Type, inc.Severity, inc.Status, inc.Workload, inc.Namespace, inc.Occurrences,
 		inc.FirstSeen.UTC().Format(time.RFC3339), inc.LastSeen.UTC().Format(time.RFC3339))
 	b.WriteString("evidence:\n")
+	var lastLogs []string
 	for _, e := range inc.Evidence {
 		fmt.Fprintf(&b, "  - %s | %s | %s\n", redact.String(e.Ref), redact.String(e.Reason), redact.String(e.Message))
+		if len(e.Logs) > 0 {
+			lastLogs = e.Logs
+		}
+	}
+	// The most recent container log tail, if the agent collected one.
+	if len(lastLogs) > 0 {
+		b.WriteString("recentLogs:\n")
+		for _, l := range lastLogs {
+			fmt.Fprintf(&b, "  | %s\n", redact.String(l))
+		}
 	}
 	user = "<telemetry>\n" + b.String() + "</telemetry>\nDiagnose this incident and return the JSON object."
 	return system, user
