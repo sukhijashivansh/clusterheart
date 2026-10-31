@@ -1,0 +1,84 @@
+# Auto-deploy the SRE control plane (sre/cmd/controlplane) to the EC2 box on
+# every push to main that touches it or the agent<->control plane contract.
+# Same box and secrets as deploy-server.yml; restarts the clusterheart-sre unit.
+#
+# Deploy order matters for contract changes: the control plane rejects
+# telemetry with unknown fields, so it must run a new contract before agents
+# send it. Agents only pick up a new build when restarted, so deploying both
+# from the same push is safe as long as agents are restarted afterwards.
+
+name: Deploy SRE control plane
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sre/cmd/controlplane/**'
+      - 'sre/internal/controlplane/**'
+      - 'sre/internal/contract/**'
+      - 'sre/internal/redact/**'
+      - 'sre/go.mod'
+      - 'sre/go.sum'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-controlplane
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sre/go.mod
+
+      - name: Test control plane
+        working-directory: sre
+        run: go test ./internal/controlplane/... ./internal/contract/...
+
+      - name: Build static Linux binary
+        working-directory: sre
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ vars.DEPLOY_ARCH || 'amd64' }}
+        run: go build -trimpath -ldflags="-s -w" -o clusterheart-controlplane ./cmd/controlplane
+
+      - name: Copy binary to server (staging dir)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          password: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          source: sre/clusterheart-controlplane
+          target: clusterheart-cp-deploy
+          strip_components: 1
+
+      - name: Install binary and restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          password: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            SUDO=""
+            [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+            UNIT=clusterheart-sre
+            BIN=$($SUDO systemctl show -p ExecStart --value "$UNIT" 2>/dev/null | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)
+            [ -z "$BIN" ] && BIN=/opt/clusterheart-sre/clusterheart-controlplane
+            echo "Deploying to unit=$UNIT bin=$BIN"
+            # Keep the previous binary so a bad deploy can be rolled back by hand.
+            $SUDO cp -f "$BIN" "$BIN.prev" 2>/dev/null || true
+            $SUDO install -m 0755 "$HOME/clusterheart-cp-deploy/clusterheart-controlplane" "$BIN"
+            rm -rf "$HOME/clusterheart-cp-deploy"
+            $SUDO systemctl restart "$UNIT"
+            sleep 3
+            $SUDO systemctl is-active "$UNIT"
