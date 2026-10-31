@@ -361,6 +361,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .log-pre{margin:0;padding:12px 14px;max-height:320px;overflow:auto;font-size:12px;line-height:1.55;background:var(--input-bg);white-space:pre-wrap;word-break:break-word}
 .sec-table td{vertical-align:top}
 .sec-scroll{max-height:none}
+.health-scroll{max-height:360px}
 .sec-detail[hidden]{display:none !important}
 #clusters table.users.sec-table{min-width:0}
 .sec-box .u-email{white-space:normal}
