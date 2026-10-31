@@ -19,30 +19,41 @@ type Detector struct {
 	// Secret is false for PII (emails): scrubbed, but not reported as a leak.
 	Secret bool
 	re     *regexp.Regexp
+	// repl is the replacement; empty means the whole match becomes the
+	// placeholder. key=value rules keep the key so a scrubbed line still says
+	// what was there.
+	repl string
 }
 
 // Detectors run in order; specific credential formats come before the generic
 // key=value rule so a finding is named by what it really is.
 var detectors = []Detector{
-	{"private-key", true, regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)},
-	{"aws-access-key", true, regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`)},
-	{"github-token", true, regexp.MustCompile(`\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}`)},
-	{"slack-token", true, regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9-]{10,}`)},
-	{"google-api-key", true, regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{35}\b`)},
-	{"stripe-key", true, regexp.MustCompile(`\b(sk|rk)_live_[0-9A-Za-z]{16,}`)},
-	{"jwt", true, regexp.MustCompile(`eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}|eyJ[A-Za-z0-9._\-]{10,}`)},
-	{"bearer-token", true, regexp.MustCompile(`(?i)bearer\s+([A-Za-z0-9._\-]+)`)},
-	{"url-credentials", true, regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.\-]*://([^:/\s]+):([^@/\s]+)@`)},
-	{"password-or-token", true, regexp.MustCompile(`(?i)(password|passwd|pwd|token|secret|api[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?([^\s"';,&\[]{4,})`)},
-	{"email", false, regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)},
+	{"private-key", true, regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`), ""},
+	{"aws-access-key", true, regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`), ""},
+	{"github-token", true, regexp.MustCompile(`\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}`), ""},
+	{"slack-token", true, regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9-]{10,}`), ""},
+	{"google-api-key", true, regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{35}\b`), ""},
+	{"stripe-key", true, regexp.MustCompile(`\b(sk|rk)_live_[0-9A-Za-z]{16,}`), ""},
+	{"jwt", true, regexp.MustCompile(`eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}|eyJ[A-Za-z0-9._\-]{10,}`), ""},
+	{"bearer-token", true, regexp.MustCompile(`(?i)bearer\s+([A-Za-z0-9._\-]+)`), ""},
+	{"url-credentials", true, regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.\-]*://([^:/\s]+):([^@/\s]+)@`), ""},
+	{"password-or-token", true, regexp.MustCompile(`(?i)(password|passwd|pwd|token|secret|api[_-]?key|access[_-]?key)(["']?\s*[:=]\s*["']?)([^\s"';,&\[]{4,})`), "${1}${2}" + placeholder},
+	{"email", false, regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`), ""},
 }
 
 const placeholder = "[REDACTED]"
 
+func (d Detector) scrub(s string) string {
+	if d.repl != "" {
+		return d.re.ReplaceAllString(s, d.repl)
+	}
+	return d.re.ReplaceAllLiteralString(s, placeholder)
+}
+
 // String replaces secret/PII-shaped substrings with a placeholder.
 func String(s string) string {
 	for _, d := range detectors {
-		s = d.re.ReplaceAllString(s, placeholder)
+		s = d.scrub(s)
 	}
 	return s
 }
@@ -53,6 +64,10 @@ type Match struct {
 	Key    string // the field it was under, e.g. "accessToken" or "DB_PASSWORD"; empty if none
 	Masked string // a hint to recognise it, e.g. "eyJh…x9Qz"; never more than 8 characters of it
 	Length int    // length of the secret value
+	// Value is the raw secret. The agent keeps it in memory, inside the cluster,
+	// and only hands it over for an explicit, audited reveal. Never put it in a
+	// finding, a log line or telemetry.
+	Value string
 }
 
 // Find returns the names of the secret detectors that match s, in detector
@@ -79,7 +94,7 @@ func Matches(s string) []Match {
 		if d.Secret {
 			out = append(out, describe(d.Name, s, loc))
 		}
-		s = d.re.ReplaceAllString(s, placeholder)
+		s = d.scrub(s)
 	}
 	return out
 }
@@ -104,7 +119,7 @@ func describe(name, s string, loc []int) Match {
 		for end < len(s) && isKeyByte(s[end]) {
 			end++
 		}
-		m.Key, value = s[start:end], group(2)
+		m.Key, value = s[start:end], group(3)
 	case "bearer-token":
 		m.Key, value = "Authorization: Bearer", group(1)
 	case "url-credentials":
@@ -113,7 +128,7 @@ func describe(name, s string, loc []int) Match {
 	if m.Key == "" {
 		m.Key = keyBefore(s[:loc[0]])
 	}
-	m.Masked, m.Length = Mask(value), utf8.RuneCountInString(value)
+	m.Masked, m.Length, m.Value = Mask(value), utf8.RuneCountInString(value), value
 	return m
 }
 

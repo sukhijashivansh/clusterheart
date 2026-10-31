@@ -33,6 +33,7 @@ type Server struct {
 	diagnosis   *diagnosisService
 	runbooks    RunbookStore
 	notifier    Notifier
+	reveals     *revealStore
 	adminToken  string
 	log         *slog.Logger
 	now         func() time.Time
@@ -63,6 +64,7 @@ func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol P
 		diagnosis:   diagSvc,
 		runbooks:    runbooks,
 		notifier:    notifier,
+		reveals:     newRevealStore(),
 		adminToken:  adminToken,
 		log:         log,
 		now:         time.Now,
@@ -107,6 +109,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/remediation/pending", s.requireRemediator(s.handlePendingRemediation))
 	mux.HandleFunc("POST /api/v1/remediation/{id}/result", s.requireRemediator(s.handleReportResult))
 	// Agent.
+	mux.HandleFunc("POST /api/v1/clusters/{id}/reveals", s.requireAdmin(s.handleCreateReveal))
+	mux.HandleFunc("GET /api/v1/reveals/{id}", s.requireAdmin(s.handleGetReveal))
+	mux.HandleFunc("GET /api/v1/agents/reveals", s.requireAgent(s.handleAgentReveals))
+	mux.HandleFunc("POST /api/v1/agents/reveals/{id}", s.requireAgent(s.handleAgentRevealResult))
 	mux.HandleFunc("POST /api/v1/agents/heartbeat", s.requireAgent(s.handleHeartbeat))
 	mux.HandleFunc("POST /api/v1/telemetry", s.requireAgent(s.handleTelemetry))
 	// Health.

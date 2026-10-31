@@ -9,13 +9,14 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"time"
 
 	"clusterheart/sre/internal/contract"
 )
 
 // Version is the agent build version, reported in heartbeats for compatibility.
-const Version = "0.2.1"
+const Version = "0.2.2"
 
 // maxBuffer bounds how many snapshots the agent holds during a control-plane
 // outage. Oldest snapshots are dropped first (bounded telemetry, no unbounded
@@ -64,6 +65,39 @@ func (c *Client) post(ctx context.Context, path string, body any) error {
 	return nil
 }
 
+func (c *Client) get(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("X-Cluster-ID", c.clusterID)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("control plane %s -> %d: %s", path, resp.StatusCode, string(b))
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
+}
+
+// RevealRequests returns pending reveal requests for this cluster.
+func (c *Client) RevealRequests(ctx context.Context) ([]contract.RevealRequest, error) {
+	var out contract.RevealRequestsResponse
+	if err := c.get(ctx, "/api/v1/agents/reveals", &out); err != nil {
+		return nil, err
+	}
+	return out.Requests, nil
+}
+
+// SendReveal answers one reveal request.
+func (c *Client) SendReveal(ctx context.Context, id string, res contract.RevealResult) error {
+	return c.post(ctx, "/api/v1/agents/reveals/"+url.PathEscape(id), res)
+}
+
 // Heartbeat reports agent liveness and health.
 func (c *Client) Heartbeat(ctx context.Context, hb contract.Heartbeat) error {
 	return c.post(ctx, "/api/v1/agents/heartbeat", hb)
@@ -98,6 +132,7 @@ func (r *Runner) Run(ctx context.Context) {
 	if r.Log == nil {
 		r.Log = slog.Default()
 	}
+	go r.revealLoop(ctx)
 	for {
 		if ctx.Err() != nil {
 			return
@@ -180,5 +215,35 @@ func sleep(ctx context.Context, d time.Duration) {
 	select {
 	case <-ctx.Done():
 	case <-t.C:
+	}
+}
+
+// revealInterval is how often the agent checks for reveal requests, so a
+// person clicking Reveal waits seconds, not a whole collection cycle.
+const revealInterval = 5 * time.Second
+
+// revealLoop answers reveal requests with values from the agent's memory. A
+// value is sent only in reply to a request a person made in the dashboard.
+func (r *Runner) revealLoop(ctx context.Context) {
+	for {
+		sleep(ctx, revealInterval)
+		if ctx.Err() != nil {
+			return
+		}
+		reqs, err := r.Client.RevealRequests(ctx)
+		if err != nil {
+			continue // control plane down or older: try again later
+		}
+		for _, q := range reqs {
+			res := contract.RevealResult{}
+			if v, ok := r.Collector.SecretValue(q.Ref); ok {
+				res.Value = v
+			} else {
+				res.Error = "This secret is no longer visible to the agent (fixed, or not seen since the agent restarted)."
+			}
+			if err := r.Client.SendReveal(ctx, q.ID, res); err != nil {
+				r.Log.Warn("could not answer reveal request", "id", q.ID, "err", err) // never log the value
+			}
+		}
 	}
 }

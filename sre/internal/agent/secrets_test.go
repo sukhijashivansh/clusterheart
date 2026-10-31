@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -145,5 +146,27 @@ func TestCronJobRunsShareOneFinding(t *testing.T) {
 	plain := mk("one-off-migration")
 	if podOwner(&plain) != "Job/one-off-migration" {
 		t.Fatalf("standalone job owner = %q", podOwner(&plain))
+	}
+}
+
+// Raw values stay in agent memory for reveals, never in findings, and are
+// forgotten with their finding.
+func TestSecretValuesKeptForRevealOnly(t *testing.T) {
+	s := newSecretScanner()
+	p := podWithEnv("api-5d8f-a", corev1.EnvVar{Name: "DB_PASSWORD", Value: "hunter22hunter"})
+	got := s.scan(context.Background(), nil, []corev1.Pod{p}, time.Now())
+	if len(got) != 1 {
+		t.Fatalf("findings = %+v", got)
+	}
+	raw, _ := json.Marshal(got)
+	if strings.Contains(string(raw), "hunter22hunter") {
+		t.Fatalf("finding carries the raw value: %s", raw)
+	}
+	if v, ok := s.Value(got[0].Ref()); !ok || v != "hunter22hunter" {
+		t.Fatalf("value for reveal = %q, %v", v, ok)
+	}
+	s.scan(context.Background(), nil, []corev1.Pod{podWithEnv("api-5d8f-a")}, time.Now()) // fixed
+	if _, ok := s.Value(got[0].Ref()); ok {
+		t.Fatal("value kept after the finding went away")
 	}
 }

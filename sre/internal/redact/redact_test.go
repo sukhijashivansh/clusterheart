@@ -68,3 +68,10 @@ func TestMatchesDescribeWithoutLeaking(t *testing.T) {
 		t.Errorf("aws: %+v", got)
 	}
 }
+
+func TestKeyValueScrubKeepsTheKey(t *testing.T) {
+	got := String(`{"msg":"fetched","secret":"s3cr3t","password=hunter22"}`)
+	if !strings.Contains(got, `"secret":"[REDACTED]"`) || !strings.Contains(got, `password=[REDACTED]`) || strings.Contains(got, "s3cr3t") {
+		t.Fatalf("scrubbed = %q", got)
+	}
+}
