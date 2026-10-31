@@ -68,6 +68,36 @@ func (s *Server) handleCreateProposal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, p)
 }
 
+// handleCreateClusterProposal records a proposal not tied to an incident:
+// POST /api/v1/clusters/{id}/proposals?tenantId=... (used by Rightsizing).
+func (s *Server) handleCreateClusterProposal(w http.ResponseWriter, r *http.Request) {
+	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, "tenantId query parameter is required")
+		return
+	}
+	var req createProposalRequest
+	if err := decode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	createdBy := strings.TrimSpace(req.CreatedBy)
+	if createdBy == "" {
+		createdBy = "operator:api"
+	}
+	p, err := s.remediation.CreateClusterProposal(r.Context(), tenantID, r.PathValue("id"),
+		req.Action, req.Target, req.Params, req.Rationale, createdBy)
+	if errors.Is(err, ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, p)
+}
+
 func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
 	if tenantID == "" {
@@ -233,7 +263,10 @@ func (s *Server) setPause(w http.ResponseWriter, r *http.Request, paused bool) {
 // executor is authorized for the cluster.
 func (s *Server) handleMintRemediationToken(w http.ResponseWriter, r *http.Request) {
 	clusterID := r.PathValue("id")
-	if _, err := s.store.GetCluster(r.Context(), clusterID); err != nil {
+	c, err := s.store.GetCluster(r.Context(), clusterID)
+	// Optional ?tenantId guards against enabling a cluster outside the caller's
+	// tenant (the browser dashboard always sends it).
+	if err != nil || (strings.TrimSpace(r.URL.Query().Get("tenantId")) != "" && strings.TrimSpace(r.URL.Query().Get("tenantId")) != c.TenantID) {
 		writeErr(w, http.StatusNotFound, "cluster not found")
 		return
 	}

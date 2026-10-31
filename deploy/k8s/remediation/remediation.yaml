@@ -10,11 +10,14 @@
 # executes exactly the typed actions it supports, and reports the outcome.
 # It cannot run arbitrary commands or apply arbitrary manifests.
 #
-# Least privilege: the only supported action today is RolloutRestart, which
-# reads a workload and writes back the same object with a restart annotation.
-# That needs precisely `get` + `update` on Deployments/StatefulSets/DaemonSets
-# in the apps group — nothing else. No create, no delete, no patch, no pods,
-# no exec, no secrets, no cluster-admin.
+# Least privilege: the supported actions (RolloutRestart, Scale, SetResources)
+# read a workload and write back the same object with one field changed. That
+# needs precisely `get` + `update` on Deployments/StatefulSets/DaemonSets in the
+# apps group — nothing else. No create, no delete, no patch, no pods, no exec,
+# no secrets, no cluster-admin.
+#
+# The easiest install is from the web dashboard: Rightsizing -> Enable Apply,
+# which issues the token and shows these commands filled in.
 #
 # Enable remediation for a cluster from the control plane (operator/admin),
 # which returns the one-time remediation token:
@@ -43,9 +46,8 @@ metadata:
   namespace: clusterheart-sre
 ---
 # Narrow ClusterRole. Exactly the resources/verbs the executor uses — and no
-# more. RolloutRestart does Get (read + before-state + verify) and Update
-# (write back with the restart annotation, carrying resourceVersion for
-# optimistic concurrency).
+# more. Every action does Get (read + before-state + verify) and Update (write
+# back the changed object, carrying resourceVersion for optimistic concurrency).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -87,15 +89,27 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: remediation
-          image: ghcr.io/decodx09/clusterheart-sre-remediation:latest # build + push before use
-          args: ["/remediation"]
+          image: alpine:3.20
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "fetching remediation controller binary..."
+              wget -qO /work/remediation "$REMEDIATION_BINARY_URL"
+              chmod +x /work/remediation
+              exec /work/remediation
           envFrom:
             - secretRef: { name: clusterheart-remediation }
           env:
+            - name: REMEDIATION_BINARY_URL
+              value: "https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/sre/clusterheart-remediation-linux-amd64"
             - { name: POLL_INTERVAL, value: "15s" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
           resources:
             requests: { cpu: "25m", memory: "64Mi" }
             limits: { cpu: "200m", memory: "192Mi" }
@@ -103,3 +117,6 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: work
+          emptyDir: {}

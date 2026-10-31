@@ -351,6 +351,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .rs-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
 .rs-sub.rs-bad{color:var(--red)}
 .rs-sub.rs-low{color:var(--amber)}
+.rs-queued{font-size:12px;font-weight:600;color:var(--green)}
 @media(max-width:640px){.rs-table .pod-name{max-width:150px}}
 .pill .dot{display:none}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}

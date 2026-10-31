@@ -1,0 +1,62 @@
+# Build the SRE remediation controller for linux/amd64 and publish it to the
+# Vercel Blob store under a STABLE path, so the manifest's AGENT_BINARY_URL
+# (https://<store>.public.blob.vercel-storage.com/sre/clusterheart-remediation-linux-amd64)
+# always serves the latest build. Runs on controller/contract changes, or manually.
+#
+# Required repo secret: BLOB_READ_WRITE_TOKEN (same store as the installers).
+
+name: Publish SRE remediation controller
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sre/cmd/remediation/**'
+      - 'sre/internal/remediation/**'
+      - 'sre/internal/contract/**'
+      - '.github/workflows/publish-remediation.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-remediation
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sre/go.mod
+
+      - name: Build remediation controller (linux/amd64)
+        working-directory: sre
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -trimpath -ldflags="-s -w" -o clusterheart-remediation-linux-amd64 ./cmd/remediation
+
+      - name: Publish to Vercel Blob
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
+            echo "::error::Missing repo secret BLOB_READ_WRITE_TOKEN"; exit 1
+          fi
+          npm install --no-save @vercel/blob
+          node --input-type=module <<'JS'
+          import { put } from '@vercel/blob'
+          import { readFileSync } from 'node:fs'
+          const buf = readFileSync('sre/clusterheart-remediation-linux-amd64')
+          const res = await put('sre/clusterheart-remediation-linux-amd64', buf, {
+            access: 'public',
+            addRandomSuffix: false,
+            allowOverwrite: true,
+            contentType: 'application/octet-stream',
+            token: process.env.BLOB_READ_WRITE_TOKEN,
+          })
+          console.log('published:', res.url, buf.length, 'bytes')
+          JS

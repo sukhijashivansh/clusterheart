@@ -590,6 +590,8 @@ func main() {
 	mux.HandleFunc("POST /api/app/clusters/{id}/environment", a.handleAppClusterSetEnv)
 	mux.HandleFunc("GET /api/app/clusters/{id}/sre", a.handleAppClusterSRE)
 	mux.HandleFunc("GET /api/app/clusters/{id}/usage", a.handleAppClusterUsage)
+	mux.HandleFunc("POST /api/app/clusters/{id}/remediation", a.handleAppEnableRemediation)
+	mux.HandleFunc("POST /api/app/clusters/{id}/rightsize", a.handleAppRightsize)
 	mux.HandleFunc("POST /api/app/clusters/{id}/chat", a.handleAppClusterChat)
 	mux.HandleFunc("GET /api/app/chat/{job}", a.handleAppChatResult)
 	mux.HandleFunc("POST /api/app/clusters/{id}/automation/{action}", a.handleAppClusterAutomation)
@@ -606,6 +608,7 @@ func main() {
 	mux.Handle("/downloads/", http.StripPrefix("/downloads/",
 		http.FileServer(http.Dir(downloadsDir))))
 
+	mux.HandleFunc("GET /remediation.yaml", handleRemediationManifest)
 	mux.HandleFunc("/install.sh", func(w http.ResponseWriter, r *http.Request) {
 		scheme := "https"
 		if p := r.Header.Get("X-Forwarded-Proto"); p != "" {

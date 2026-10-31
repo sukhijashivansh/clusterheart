@@ -51,7 +51,7 @@ func (s *remediationService) appendAudit(ctx context.Context, tenantID, actor, e
 }
 
 // evaluate gathers live state and runs the deterministic policy engine.
-func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID string, action ActionType, target TargetRef, params map[string]string) PolicyDecision {
+func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID string, action ActionType, target TargetRef, params map[string]string, createdBy string) PolicyDecision {
 	pol, _ := s.pol.Get(ctx, tenantID)
 	env := ""
 	if c, err := s.clusters.GetCluster(ctx, clusterID); err == nil {
@@ -68,6 +68,7 @@ func (s *remediationService) evaluate(ctx context.Context, tenantID, clusterID s
 	return s.engine.Evaluate(pol, action, target, policyInput{
 		environment: env, clusterID: clusterID, activeCount: active, lastForTarget: last,
 		recentFailures: failures, requestedReplicas: replicas, hasReplicas: hasReplicas,
+		humanApplied: strings.HasPrefix(createdBy, "user:"),
 	}, now)
 }
 
@@ -86,10 +87,32 @@ func (s *remediationService) CreateProposal(ctx context.Context, tenantID, incid
 	if err != nil {
 		return nil, fmt.Errorf("incident: %w", err)
 	}
+	return s.record(ctx, tenantID, inc.ClusterID, incidentID, spec, action, target, params, rationale, createdBy)
+}
 
-	dec := s.evaluate(ctx, tenantID, inc.ClusterID, action, target, params)
+// CreateClusterProposal records a proposal that isn't tied to an incident (e.g.
+// Rightsizing), after checking the cluster belongs to the tenant.
+func (s *remediationService) CreateClusterProposal(ctx context.Context, tenantID, clusterID string, action ActionType, target TargetRef, params map[string]string, rationale, createdBy string) (*RemediationProposal, error) {
+	spec, err := lookupAction(action)
+	if err != nil {
+		return nil, err
+	}
+	if err := spec.validate(target, params); err != nil {
+		return nil, fmt.Errorf("invalid action: %w", err)
+	}
+	c, err := s.clusters.GetCluster(ctx, clusterID)
+	if err != nil || c.TenantID != tenantID {
+		return nil, ErrNotFound
+	}
+	return s.record(ctx, tenantID, clusterID, "", spec, action, target, params, rationale, createdBy)
+}
+
+// record evaluates policy and stores the proposal as blocked, awaiting approval
+// or (dry-run/auto) approved.
+func (s *remediationService) record(ctx context.Context, tenantID, clusterID, incidentID string, spec actionSpec, action ActionType, target TargetRef, params map[string]string, rationale, createdBy string) (*RemediationProposal, error) {
+	dec := s.evaluate(ctx, tenantID, clusterID, action, target, params, createdBy)
 	p := &RemediationProposal{
-		ID: newID("rem"), IncidentID: incidentID, TenantID: tenantID, ClusterID: inc.ClusterID,
+		ID: newID("rem"), IncidentID: incidentID, TenantID: tenantID, ClusterID: clusterID,
 		Action: action, Target: target, Params: params, Rationale: rationale,
 		RiskClass: spec.risk, Reversible: spec.reversible, Decision: &dec,
 		CreatedAt: s.now(), CreatedBy: createdBy,
@@ -126,7 +149,7 @@ func (s *remediationService) Approve(ctx context.Context, tenantID, id, approver
 	}
 	// Preconditions can change between proposal and approval (pause, cooldown,
 	// concurrency) - re-evaluate deterministically.
-	dec := s.evaluate(ctx, tenantID, p.ClusterID, p.Action, p.Target, p.Params)
+	dec := s.evaluate(ctx, tenantID, p.ClusterID, p.Action, p.Target, p.Params, p.CreatedBy)
 	now := s.now()
 	p.DecidedBy = approver
 	p.DecidedAt = &now

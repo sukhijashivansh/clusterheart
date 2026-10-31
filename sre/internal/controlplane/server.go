@@ -90,6 +90,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/incidents/{id}/propose", s.requireAdmin(s.handleProposeFromDiagnosis))
 	// Remediation (deterministic policy, approvals, dry-run execution, audit).
 	mux.HandleFunc("POST /api/v1/incidents/{id}/proposals", s.requireAdmin(s.handleCreateProposal))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/proposals", s.requireAdmin(s.handleCreateClusterProposal))
 	mux.HandleFunc("GET /api/v1/proposals", s.requireAdmin(s.handleListProposals))
 	mux.HandleFunc("GET /api/v1/proposals/{id}", s.requireAdmin(s.handleGetProposal))
 	mux.HandleFunc("POST /api/v1/proposals/{id}/approve", s.requireAdmin(s.handleApproveProposal))
@@ -280,15 +281,16 @@ func (s *Server) handleListClusters(w http.ResponseWriter, r *http.Request) {
 	out := make([]contract.ClusterStatus, 0, len(clusters))
 	for _, c := range clusters {
 		st := contract.ClusterStatus{
-			ClusterID:     c.ID,
-			TenantID:      c.TenantID,
-			Name:          c.Name,
-			Environment:   c.Environment,
-			Region:        c.Region,
-			LastHeartbeat: c.LastHeartbeat,
-			AgentVersion:  c.AgentVersion,
-			K8sVersion:    c.K8sVersion,
-			Connected:     c.LastHeartbeat != nil && s.now().Sub(*c.LastHeartbeat) < staleAfter,
+			ClusterID:          c.ID,
+			TenantID:           c.TenantID,
+			Name:               c.Name,
+			Environment:        c.Environment,
+			Region:             c.Region,
+			LastHeartbeat:      c.LastHeartbeat,
+			AgentVersion:       c.AgentVersion,
+			K8sVersion:         c.K8sVersion,
+			Connected:          c.LastHeartbeat != nil && s.now().Sub(*c.LastHeartbeat) < staleAfter,
+			RemediationEnabled: c.RemediationTokenHash != "",
 		}
 		if snap, err := s.store.LatestSnapshot(r.Context(), c.ID); err == nil {
 			st.Latest = snap

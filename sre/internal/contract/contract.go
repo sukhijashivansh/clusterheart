@@ -214,6 +214,9 @@ type ClusterStatus struct {
 	AgentVersion  string           `json:"agentVersion,omitempty"`
 	K8sVersion    string           `json:"k8sVersion,omitempty"`
 	Latest        *ClusterSnapshot `json:"latest,omitempty"`
+	// RemediationEnabled reports that a remediation token has been issued, i.e.
+	// the in-cluster remediation controller can apply approved actions.
+	RemediationEnabled bool `json:"remediationEnabled,omitempty"`
 }
 
 // ErrorResponse is the uniform error envelope.

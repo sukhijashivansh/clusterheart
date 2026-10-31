@@ -3,6 +3,7 @@ package controlplane
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"time"
 )
@@ -23,7 +24,24 @@ const (
 	// ActionScale sets the replica count of a Deployment/StatefulSet within
 	// policy-bounded limits. Reversible (the before-count is captured).
 	ActionScale ActionType = "Scale"
+	// ActionSetResources sets the CPU and/or memory request of a single-container
+	// workload (Rightsizing). Only a person may apply it, never AI or runbooks.
+	// Reversible: the previous requests are captured as before-state.
+	ActionSetResources ActionType = "SetResources"
 )
+
+// Bounds for SetResources params: cpu in millicores, memory in MiB.
+const (
+	maxCPUMilli = 256000
+	maxMemMi    = 1 << 20
+	minMemMi    = 4
+)
+
+// managedNamespaceRe matches platform namespaces (Kubernetes, EKS add-ons and
+// Clusterheart's own) whose workloads are never rightsized through remediation.
+var managedNamespaceRe = regexp.MustCompile(`^(kube-system|kube-public|kube-node-lease|amazon-[\w-]+|aws-[\w-]+|clusterheart-sre)$`)
+
+func isManagedNamespace(ns string) bool { return managedNamespaceRe.MatchString(ns) }
 
 // hardMaxReplicas is a defensive structural ceiling enforced at validation time,
 // independent of (and in addition to) the per-tenant policy's MaxReplicas.
@@ -178,6 +196,44 @@ var actionRegistry = map[ActionType]actionSpec{
 			return fmt.Sprintf("set spec.replicas on %s/%s in %s to the requested count", t.Kind, t.Name, t.Namespace)
 		},
 	},
+}
+
+func init() {
+	actionRegistry[ActionSetResources] = actionSpec{
+		risk:       RiskMedium,
+		reversible: true, // previous requests are captured as before-state
+		validate: func(t TargetRef, params map[string]string) error {
+			switch t.Kind {
+			case "Deployment", "StatefulSet", "DaemonSet":
+			default:
+				return fmt.Errorf("SetResources supports Deployment/StatefulSet/DaemonSet, not %q", t.Kind)
+			}
+			if t.Namespace == "" || t.Name == "" {
+				return errors.New("target namespace and name are required")
+			}
+			if isManagedNamespace(t.Namespace) {
+				return fmt.Errorf("namespace %q is platform-managed", t.Namespace)
+			}
+			if len(params) == 0 {
+				return errors.New("SetResources requires 'cpu' (millicores) and/or 'memory' (MiB)")
+			}
+			for k, v := range params {
+				n, err := strconv.Atoi(v)
+				switch {
+				case k == "cpu" && (err != nil || n < 1 || n > maxCPUMilli):
+					return fmt.Errorf("cpu must be an integer number of millicores in [1,%d]", maxCPUMilli)
+				case k == "memory" && (err != nil || n < minMemMi || n > maxMemMi):
+					return fmt.Errorf("memory must be an integer number of MiB in [%d,%d]", minMemMi, maxMemMi)
+				case k != "cpu" && k != "memory":
+					return fmt.Errorf("unknown parameter %q", k)
+				}
+			}
+			return nil
+		},
+		plan: func(t TargetRef) string {
+			return fmt.Sprintf("set the container's CPU/memory requests on %s/%s in %s (single-container workloads only)", t.Kind, t.Name, t.Namespace)
+		},
+	}
 }
 
 // parseReplicas returns the replicas param as an int, or (0,false) if absent/invalid.

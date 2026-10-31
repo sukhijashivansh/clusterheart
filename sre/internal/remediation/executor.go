@@ -69,6 +69,8 @@ func (e *Executor) Execute(ctx context.Context, a contract.PendingAction) contra
 		return e.rolloutRestart(ctx, a, start)
 	case "Scale":
 		return e.scale(ctx, a, start)
+	case "SetResources":
+		return e.setResources(ctx, a, start)
 	default:
 		// Defensive: the control plane only ever sends registered actions.
 		return contract.ActionResult{

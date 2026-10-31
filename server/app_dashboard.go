@@ -756,7 +756,7 @@ function aiWire(id){
 // rollouts): current requests from the latest snapshot vs the 6h peak from the
 // control plane's stored snapshots. Rules mirror the desktop app.
 var RS_WINDOW_MINS=360;
-var rsState={cluster:null,pods:[],usage:null};
+var rsState={cluster:null,pods:[],usage:null,canApply:false,applied:{}};
 // Platform add-ons the user doesn't size themselves: shown as Managed.
 var RS_MANAGED_NS=/^(kube-system|kube-public|kube-node-lease|amazon-[\w-]+|aws-[\w-]+|clusterheart-sre)$/;
 var RS_MANAGED_NAME=/^(coredns|kube-proxy|aws-node|ebs-csi-(controller|node)|efs-csi-(controller|node)|metrics-server|aws-load-balancer-controller|cluster-autoscaler|karpenter|eks-pod-identity-agent|snapshot-controller|adot-collector|cloudwatch-agent|fluent-bit)(-.*)?$/;
@@ -776,8 +776,8 @@ function rsVerdict(r){
   if(dc||dm){r.sugCpu=dc;r.sugMem=dm;return {v:dc&&dm?'Downsize':dc?'Downsize CPU':'Downsize memory',c:'off'};}
   return {v:'OK',c:'on'};
 }
-function rightsizingSection(pods){
-  rsState.pods=pods;rsState.usage=null;
+function rightsizingSection(pods,canApply){
+  rsState.pods=pods;rsState.usage=null;rsState.canApply=!!canApply;rsState.applied={};
   return '<div class="spin-wrap"><div class="spinner"></div></div>';
 }
 async function loadRightsizing(){
@@ -821,7 +821,9 @@ function renderRightsizing(){
     var cls=p==null?'':(p>=90?' rs-bad':(p<40?' rs-low':''));
     return '<td class="rs-num"><div>'+top+'</div><div class="rs-sub'+cls+'">'+(p==null?'no request':p+'%')+'</div></td>';
   }
-  var html='<section class="card2"><div class="card2-head"><p class="card2-title">Rightsizing</p><p class="card2-desc">Requests vs 6h peak. Suggested = peak + 20%.</p></div>'+
+  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><div><p class="card2-title">Rightsizing</p><p class="card2-desc">Requests vs 6h peak. Suggested = peak + 20%.</p></div>'+
+    (rsState.canApply?'':'<button class="act revoke rs-enable" style="margin-left:auto">Enable Apply</button>')+'</div></div>'+
+    '<div id="rs-install"></div>'+
     '<div class="tscroll"><table class="users ptable rs-table"><thead><tr><th>Workload</th><th>Verdict</th><th class="rs-num">CPU <span class="rs-dim">peak / req</span></th><th class="rs-num">Memory <span class="rs-dim">peak / req</span></th><th class="rs-num">Suggested request</th><th></th></tr></thead><tbody>';
   rows.forEach(function(r){
     var parts=r.owner.split('/'),kind=parts[0],name=parts.slice(1).join('/');
@@ -834,6 +836,9 @@ function renderRightsizing(){
       if(/^(Deployment|StatefulSet|DaemonSet)$/.test(kind)){
         var cmd='kubectl -n '+r.ns+' set resources '+kind.toLowerCase()+'/'+name+' --requests='+req.join(',');
         copy='<button class="act revoke copy-cmd" data-cmd="'+esc(cmd)+'" title="'+esc(cmd)+'">Copy</button>';
+        var key=r.ns+'|'+r.owner;
+        if(rsState.applied[key])copy='<span class="rs-queued">'+esc(rsState.applied[key])+'</span>';
+        else if(rsState.canApply)copy+=' <button class="act approve rs-apply" data-kind="'+esc(kind)+'" data-ns="'+esc(r.ns)+'" data-name="'+esc(name)+'" data-cpu="'+(r.sugCpu||0)+'" data-mem="'+(r.sugMem||0)+'" data-cpureq="'+r.cpuReq+'" data-memreq="'+r.memReq+'">Apply</button>';
       }
     }
     html+='<tr><td><div class="u-name pod-name" title="'+esc(r.owner)+'">'+esc(name)+'</div><div class="u-email">'+esc(r.ns)+' · '+esc(kind)+' · '+r.replicas+' pod'+(r.replicas===1?'':'s')+'</div></td>'+
@@ -964,7 +969,7 @@ async function loadDetail(id){
     '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
     (nodesHtml?'<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>':'')+
     '<div class="tabpanel" data-panel="health">'+healthHtml+'</div>'+
-    '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all)+'</div>'+
+    '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all,c.remediationEnabled===true)+'</div>'+
     '<div class="tabpanel" data-panel="sre-overview"></div>'+
     '<div class="tabpanel" data-panel="incidents"></div>'+
     '<div class="tabpanel" data-panel="remediation"></div>'+
@@ -1164,6 +1169,40 @@ if(_sbox)_sbox.addEventListener('click',async function(e){
   var t=e.target;if(!t.closest)return;
   var b;
   if(b=t.closest('.copy-cmd')){navigator.clipboard.writeText(b.dataset.cmd);b.textContent='Copied';return;}
+  if(b=t.closest('.rs-apply')){
+    var d=b.dataset,cpu=+d.cpu,mem=+d.mem,lines=[];
+    if(cpu)lines.push('CPU request <b>'+fmtCpu(+d.cpureq)+'</b> → <b>'+fmtCpu(cpu)+'</b>');
+    if(mem)lines.push('Memory request <b>'+fmtMem(+d.memreq)+'</b> → <b>'+fmtMem(mem)+'</b>');
+    var ok=await chModal({title:'Apply to '+esc(d.kind)+' '+esc(d.name)+'?',body:lines.join('<br>')+'<br><br>Namespace <b>'+esc(d.ns)+'</b>. Pods restart one by one with the new requests. The previous values are kept in Remediation for rollback.',confirm:'Apply'});
+    if(!ok)return;
+    b.disabled=true;b.textContent='Applying…';
+    var ar=await _post('/api/app/clusters/'+encodeURIComponent(rsState.cluster)+'/rightsize',{kind:d.kind,namespace:d.ns,name:d.name,cpuMilli:cpu,memMi:mem});
+    var key=d.ns+'|'+d.kind+'/'+d.name;
+    if(ar.ok&&ar.data.status==='approved'){
+      rsState.applied[key]='Queued';
+      var p0=document.querySelector('.tabpanel[data-panel="rightsizing"]');if(p0)p0.innerHTML=renderRightsizing();
+      sreState.data=null;
+      await chModal({title:'Queued',body:'The remediation controller in your cluster applies it within about 15 seconds. Track the result in the <b>Remediation</b> and <b>Activity</b> tabs.',confirm:'OK',single:true});
+      return;
+    }
+    b.disabled=false;b.textContent='Apply';
+    var why=(ar.data&&ar.data.decision&&ar.data.decision.reasons&&ar.data.decision.reasons.length)?ar.data.decision.reasons.join('; '):((ar.data&&ar.data.error)||'Could not apply.');
+    await chModal({title:ar.data&&ar.data.status==='blocked'?'Blocked by policy':'Failed',body:esc(why),confirm:'OK',single:true});
+    return;
+  }
+  if(b=t.closest('.rs-enable')){
+    var go=await chModal({title:'Enable Apply for this cluster?',body:'Apply needs the Clusterheart remediation controller running in your cluster. It can only change CPU/memory requests, restart or scale workloads, and only after you approve. This issues a new controller token (any previous one stops working).',confirm:'Continue'});
+    if(!go)return;
+    b.disabled=true;
+    var er=await _post('/api/app/clusters/'+encodeURIComponent(rsState.cluster)+'/remediation',{});
+    b.disabled=false;
+    if(!er.ok){await chModal({title:'Failed',body:esc((er.data&&er.data.error)||'Could not enable Apply.'),confirm:'OK',single:true});return;}
+    var box=document.getElementById('rs-install');
+    if(box)box.innerHTML='<div class="card2-body" style="border-bottom:1px solid var(--border)"><p class="sub" style="margin:0 0 10px">Run this once against the cluster, then reload this page. <b>The token is shown only once.</b></p>'+
+      '<textarea class="nb" rows="7" readonly onclick="this.select()">'+esc(er.data.install)+'</textarea>'+
+      '<div class="nb-actions"><button class="act approve copy-cmd" data-cmd="'+esc(er.data.install)+'">Copy</button></div></div>';
+    return;
+  }
   if(b=t.closest('#inc-seg .seg-btn')){sreState.incFilter=b.dataset.f;renderIncidents();return;}
   if(t.closest('.sre-refresh')){sreState.diag={};loadSRE();return;}
   if(b=t.closest('.sre-diag')){

@@ -89,6 +89,7 @@ type policyInput struct {
 	recentFailures    int  // failed remediations for this target within the breaker window
 	requestedReplicas int  // for Scale: the desired replica count
 	hasReplicas       bool // whether requestedReplicas is meaningful
+	humanApplied      bool // proposed by a person (createdBy "user:...") rather than AI/runbook/operator automation
 }
 
 // policyEngine evaluates proposals deterministically. It never calls an LLM.
@@ -112,10 +113,19 @@ func (policyEngine) Evaluate(pol Policy, action ActionType, target TargetRef, in
 	if _, err := lookupAction(action); err != nil {
 		deny(err.Error())
 	}
-	if !pol.AllowedActions[action] {
+	// Rightsizing applied by a person is allowed on any non-managed namespace
+	// (the person is the approval); everything else needs the allowlists.
+	humanRightsize := action == ActionSetResources && in.humanApplied
+	if action == ActionSetResources && !in.humanApplied {
+		deny("SetResources can only be applied by a person")
+	}
+	if action == ActionSetResources && isManagedNamespace(target.Namespace) {
+		deny("namespace is platform-managed")
+	}
+	if !pol.AllowedActions[action] && !humanRightsize {
 		deny("action is not allowlisted by policy")
 	}
-	if !pol.nsAllowed(target.Namespace) {
+	if !pol.nsAllowed(target.Namespace) && !humanRightsize {
 		deny("namespace is not in the policy allowlist")
 	}
 	if pol.MaxConcurrent > 0 && in.activeCount >= pol.MaxConcurrent {
