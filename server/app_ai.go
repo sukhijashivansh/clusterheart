@@ -47,7 +47,7 @@ FORMAT
 - Quote the metric behind every status, e.g. "CPU 92% (1780m of 1930m)".
 
 SCOPE
-- Only pods, nodes and cluster health (problems, warning events, open incidents).
+- Only pods, nodes and cluster health (problems, warning events, open incidents, exposed secrets).
 - Anything else (AWS, costs, code, general questions): reply with exactly
   [!] I can only answer about this cluster's pods, nodes and health.
 
@@ -57,6 +57,7 @@ STATUS RULES
 - Pod vs request (when requests are known): [+] < 80%; [~] 80-100%; [!] over 100%.
 - Health: [+] no problems or warnings; [~] warning events only; [!] any problem or open high-severity incident.
 - Job: [+] Complete; [~] Running or Pending; [!] Failed.
+- Secrets: [!] any secret found in logs, args or a known key format in env (rotate it); [~] a hard-coded env value with a sensitive name.
 
 GUARDRAILS
 - Use only the snapshot below. If a metric is missing, say "not in snapshot"; never guess or invent numbers.
@@ -370,6 +371,10 @@ func writeSnapshotText(b *strings.Builder, raw json.RawMessage) {
 			Reason, Namespace, Object, Message string
 			Count                              int
 		} `json:"warnings"`
+		SecretFindings []struct {
+			Source, Type, Namespace, Owner, Container, Field string
+			Count                                            int
+		} `json:"secretFindings"`
 		PodLogs []struct {
 			Namespace, Pod, Container, Reason string
 			Previous                          bool
@@ -423,6 +428,15 @@ func writeSnapshotText(b *strings.Builder, raw json.RawMessage) {
 			for _, ln := range lines {
 				fmt.Fprintf(b, "    | %s\n", ln)
 			}
+		}
+	}
+	if len(s.SecretFindings) > 0 {
+		b.WriteString("\nExposed secrets (agent findings; values never included):\n")
+		for i, f := range s.SecretFindings {
+			if i >= 30 {
+				break
+			}
+			fmt.Fprintf(b, "- %s in %s of %s/%s [%s] %s (seen %dx)\n", f.Type, f.Source, f.Namespace, f.Owner, f.Container, f.Field, f.Count)
 		}
 	}
 	if len(s.Warnings) > 0 {

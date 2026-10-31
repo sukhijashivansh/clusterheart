@@ -294,6 +294,7 @@
                     <div class="flex gap-2.5"><span class="t-ok">✓</span><span class="text-muted">Read nodes, pods, events, workloads and jobs</span></div>
                     <div class="flex gap-2.5"><span class="t-ok">✓</span><span class="text-muted">Read live CPU and memory from metrics-server</span></div>
                     <div class="flex gap-2.5"><span class="t-ok">✓</span><span class="text-muted">Read the logs of failing pods</span></div>
+                    <div class="flex gap-2.5"><span class="t-ok">✓</span><span class="text-muted">Spot secrets leaked into logs or pod specs</span></div>
                     <div class="font-semibold pt-2 mb-1">What it can't</div>
                     <div class="flex gap-2.5"><span class="t-bad">✕</span><span class="text-muted">Change, delete or restart anything</span></div>
                     <div class="flex gap-2.5"><span class="t-bad">✕</span><span class="text-muted">Read Secrets or ConfigMaps, exec into pods, port-forward</span></div>
@@ -328,11 +329,16 @@ INFO  connecting to postgres at db.web.svc:5432
                 </li>
                 <li class="relative pl-12 reveal">
                     <span class="absolute left-0 top-0 w-8 h-8 flex items-center justify-center rounded-full border border-line2 bg-canvas mono text-xs text-accent">5</span>
+                    <h3 class="font-semibold mb-1">Looks for leaked secrets</h3>
+                    <p class="text-sm text-muted leading-relaxed">Checks every pod spec for passwords and keys typed straight into env vars or command args, and scans the new log output of every running container, a few containers each cycle. It reports where a secret is and what kind (an AWS key, a private key, a password in a URL), never the secret itself.</p>
+                </li>
+                <li class="relative pl-12 reveal">
+                    <span class="absolute left-0 top-0 w-8 h-8 flex items-center justify-center rounded-full border border-line2 bg-canvas mono text-xs text-accent">6</span>
                     <h3 class="font-semibold mb-1">Scrubs secrets</h3>
                     <p class="text-sm text-muted leading-relaxed">Before anything leaves the cluster, bearer tokens, JWTs, cloud keys, passwords in <span class="mono text-xs">key=value</span> form, credentials in URLs and email addresses are replaced with <span class="mono text-xs">[REDACTED]</span>. The server scrubs again on arrival.</p>
                 </li>
                 <li class="relative pl-12 reveal">
-                    <span class="absolute left-0 top-0 w-8 h-8 flex items-center justify-center rounded-full border border-line2 bg-canvas mono text-xs text-accent">6</span>
+                    <span class="absolute left-0 top-0 w-8 h-8 flex items-center justify-center rounded-full border border-line2 bg-canvas mono text-xs text-accent">7</span>
                     <h3 class="font-semibold mb-1">Sends one snapshot</h3>
                     <p class="text-sm text-muted leading-relaxed">Posts the snapshot over HTTPS with its own token. If the connection drops, it buffers and catches up when it's back.</p>
                 </li>
@@ -373,6 +379,18 @@ INFO  connecting to postgres at db.web.svc:5432
                 <div class="bg-canvas p-7 reveal">
                     <h3 class="font-semibold mb-2">Fixes you approve</h3>
                     <p class="text-sm text-muted leading-relaxed">Restart, scale or resize a workload through an opt-in controller, only after you approve. Policy checks, cooldowns, an emergency pause and the previous values for rollback are built in.</p>
+                </div>
+                <div class="bg-canvas p-7 reveal">
+                    <h3 class="font-semibold mb-2">Leaked secret detection</h3>
+                    <p class="text-sm text-muted leading-relaxed">Finds AWS keys, private keys, tokens and passwords printed in logs or hard-coded into env vars and args, with severity and the exact fix: rotate it, or move it into a Secret.</p>
+                </div>
+                <div class="bg-canvas p-7 reveal">
+                    <h3 class="font-semibold mb-2">A history of every change</h3>
+                    <p class="text-sm text-muted leading-relaxed">Every proposal, approval, rejection, applied fix and pause is logged with who did it and when, per cluster.</p>
+                </div>
+                <div class="bg-canvas p-7 reveal">
+                    <h3 class="font-semibold mb-2">All your clusters in one place</h3>
+                    <p class="text-sm text-muted leading-relaxed">Production, staging and every other cluster side by side, each with its own agent and token. Remove one from the dashboard with a click.</p>
                 </div>
                 <div class="bg-canvas p-7 reveal">
                     <h3 class="font-semibold mb-2">An assistant that knows your cluster</h3>
@@ -416,7 +434,7 @@ INFO  connecting to postgres at db.web.svc:5432
                         <span class="text-[1rem] sm:text-lg font-medium text-ink">Does the agent read my logs?</span>
                         <svg class="faq-icon w-4 h-4 text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
-                    <div class="faq-a hidden pb-6 -mt-1"><p class="text-muted leading-relaxed">Yes, for pods that are failing: crash-looping, OOMKilled or failed. It reads the last 50 lines of up to 8 containers, scrubs secret-looking values and sends them with the snapshot. Healthy pods' logs aren't collected.</p></div>
+                    <div class="faq-a hidden pb-6 -mt-1"><p class="text-muted leading-relaxed">Yes. For failing pods (crash-looping, OOMKilled or failed) it sends the last 50 lines of up to 8 containers, with secret-looking values scrubbed, so you can see why they broke. It also scans the new log output of every running container for leaked secrets; from those it sends only the finding (where, what kind, a scrubbed line), not the logs.</p></div>
                 </div>
                 <div class="faq-item border-b border-line">
                     <button class="faq-q w-full flex items-center justify-between text-left py-5 gap-6" aria-expanded="false">

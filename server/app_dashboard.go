@@ -767,6 +767,52 @@ function aiWire(id){
   aiRender();
 }
 
+// ---------- Secrets ----------
+// Exposed-credential findings from the agent: secrets printed in container logs
+// or written literally into pod specs. Only where/what is shown, never the value.
+var SECRET_LABELS={'private-key':'Private key','aws-access-key':'AWS access key','github-token':'GitHub token','slack-token':'Slack token','google-api-key':'Google API key','stripe-key':'Stripe live key','jwt':'JWT','bearer-token':'Bearer token','url-credentials':'Password in a URL','password-or-token':'Password or token','hardcoded-env':'Hard-coded secret'};
+function secretSeverity(f){
+  // In logs or args it has already been exposed; a known key format in env is
+  // a real credential; a sensitive-looking env name is a likely one.
+  if(f.source==='log'||f.source==='args')return {c:'bad',v:'High'};
+  return f.type==='hardcoded-env'?{c:'off',v:'Medium'}:{c:'bad',v:'High'};
+}
+function secretFix(f){
+  if(f.source==='log')return 'Stop logging it, then rotate the credential.';
+  if(f.source==='args')return 'Pass it through a Secret, not command args, then rotate it.';
+  return 'Move it to a Secret and use valueFrom.secretKeyRef.';
+}
+function agentAtLeast(v,want){
+  var a=String(v||'0').replace(/^v/,'').split('.').map(Number),b=want.split('.').map(Number);
+  for(var i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return (a[i]||0)>(b[i]||0);}
+  return true;
+}
+function secretsSection(list,c){
+  if(!agentAtLeast(c.agentVersion,'0.2.0')){
+    return '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent to scan for leaked secrets</p><p class="card2-desc">Secret scanning needs agent 0.2.0 or newer'+(c.agentVersion?' (this cluster runs '+esc(c.agentVersion)+')':'')+'. Re-apply the manifest and restart the agent once.</p></div>'+
+      '<div class="card2-body"><textarea class="nb" rows="2" readonly onclick="this.select()">kubectl apply -f https://clusterheart.com/agent.yaml\nkubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
+      '<div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
+  }
+  var head='<section class="card2"><div class="card2-head"><p class="card2-title">Secrets</p><p class="card2-desc">Credentials found in container logs or written into pod specs. Values are never sent, only where they are.</p></div>';
+  if(!list.length){
+    return head+'<div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">No exposed secrets found.</span> The agent checks every pod spec each cycle and scans the new log output of every running container every few minutes.</p></div></section>';
+  }
+  var rank={bad:0,off:1};
+  var rows=list.slice().sort(function(a,b){var sa=secretSeverity(a),sb=secretSeverity(b);return (rank[sa.c]-rank[sb.c])||(new Date(b.lastSeen)-new Date(a.lastSeen));});
+  var html=head+'<div class="tscroll"><table class="users ptable sec-table"><thead><tr><th>Workload</th><th>Severity</th><th>What</th><th>Where and fix</th><th>Seen</th></tr></thead><tbody>';
+  rows.forEach(function(f){
+    var sev=secretSeverity(f),parts=(f.owner||'').split('/'),kind=parts[0],name=parts.slice(1).join('/');
+    var src=f.source==='log'?'in logs':(f.source==='args'?'in command args':'in env');
+    var where=f.source==='env'?'<span class="mono-chip">'+esc(f.field||'')+'</span>':'<div class="sec-ctx" title="'+esc(f.context||'')+'">'+esc(f.context||'')+'</div>';
+    var seen=f.source==='log'?(f.count||1)+'× · '+ago(f.lastSeen):'since '+ago(f.firstSeen);
+    html+='<tr><td><div class="u-name pod-name" title="'+esc(f.owner)+'">'+esc(name||f.owner)+'</div><div class="u-email">'+esc(f.namespace)+' · '+esc(kind)+' · '+esc(f.container||'')+'</div></td>'+
+      '<td><span class="pill '+sev.c+'">'+sev.v+'</span></td>'+
+      '<td style="white-space:nowrap"><div class="u-name" style="font-size:13px">'+esc(SECRET_LABELS[f.type]||f.type)+'</div><div class="u-email">'+src+'</div></td>'+
+      '<td>'+where+'<div class="sec-fix">'+secretFix(f)+'</div></td><td class="u-time" style="white-space:nowrap">'+seen+'</td></tr>';
+  });
+  return html+'</tbody></table></div></section>';
+}
+
 // ---------- Rightsizing ----------
 // Per workload (namespace + owner, so history survives pod restarts and
 // rollouts): current requests from the latest snapshot vs the 6h peak from the
@@ -979,12 +1025,14 @@ async function loadDetail(id){
             '<pre class="log-pre">'+esc((l.lines||[]).join('\n'))+'</pre></details>';
         }).join('')+'</div></section>';
     }
+    var secrets=L.secretFindings||[];
     // Pods / Nodes / SRE tabs. The Nodes tab only appears when the agent reports
     // node data. The SRE panels load lazily from the control plane on first open.
     html+='<div class="tabs" role="tablist">'+
       '<button class="tab active" data-tab="pods">Pods</button>'+
       (nodesHtml?'<button class="tab" data-tab="nodes">Nodes</button>':'')+
       '<button class="tab" data-tab="health">Health'+(probs.length+w.length?' <span class="tab-badge">'+(probs.length+w.length)+'</span>':'')+'</button>'+
+      '<button class="tab" data-tab="secrets">Secrets'+(secrets.length?' <span class="tab-badge">'+secrets.length+'</span>':'')+'</button>'+
       '<button class="tab" data-tab="rightsizing">Rightsizing</button>'+
       '<button class="tab" data-tab="sre-overview">SRE overview</button>'+
       '<button class="tab" data-tab="incidents">Incidents</button>'+
@@ -995,6 +1043,7 @@ async function loadDetail(id){
     '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
     (nodesHtml?'<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>':'')+
     '<div class="tabpanel" data-panel="health">'+healthHtml+'</div>'+
+    '<div class="tabpanel" data-panel="secrets">'+secretsSection(secrets,c)+'</div>'+
     '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all,c.remediationEnabled===true)+'</div>'+
     '<div class="tabpanel" data-panel="sre-overview"></div>'+
     '<div class="tabpanel" data-panel="incidents"></div>'+

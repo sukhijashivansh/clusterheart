@@ -359,6 +359,10 @@ table.users tbody tr:hover{background:var(--hover)}
 .log-box summary::-webkit-details-marker{display:none}
 .log-box[open] summary{border-bottom:1px solid var(--border)}
 .log-pre{margin:0;padding:12px 14px;max-height:320px;overflow:auto;font-size:12px;line-height:1.55;background:var(--input-bg);white-space:pre-wrap;word-break:break-word}
+.sec-table td{vertical-align:top}
+.sec-ctx{font-family:'Geist Mono',ui-monospace,Menlo,monospace;font-size:12px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.sec-fix{font-size:12px;color:var(--muted);margin-top:6px}
+.mono-chip{font-family:'Geist Mono',ui-monospace,Menlo,monospace;font-size:12px;padding:2px 6px;border:1px solid var(--border);background:var(--input-bg)}
 .rs-queued{font-size:12px;font-weight:600;color:var(--green)}
 @media(max-width:640px){.rs-table .pod-name{max-width:150px}}
 .pill .dot{display:none}
