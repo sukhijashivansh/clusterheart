@@ -680,8 +680,7 @@ function nodesSection(nl){
 }
 
 // ---------- AI chat ----------
-// Answers come back as "[+] / [!] / [-]" bullet lines (same as the desktop AI
-// tab).
+// Answers come back as bullet lines: [+] green, [~] yellow, [!] red, [-] neutral.
 var aiState={cluster:null,history:[],busy:false};
 function aiPanelHtml(){
   return '<section class="card2"><div class="card2-body"><div id="ai-log" class="ai-log"></div>'+
@@ -690,8 +689,8 @@ function aiPanelHtml(){
 }
 function aiFormat(text){
   return (text||'').split('\n').map(function(l){return l.trim();}).filter(Boolean).map(function(l){
-    var m=l.match(/^\[([+!\-])\]\s*(.*)$/),sig=m?m[1]:'-',body=esc(m?m[2]:l).replace(/\x60([^\x60]+)\x60/g,'<code>$1</code>');
-    return '<div class="ai-line ai-'+(sig==='+'?'ok':sig==='!'?'bad':'neutral')+'">'+body+'</div>';
+    var m=l.match(/^\[([+~!\-])\]\s*(.*)$/),sig=m?m[1]:'-',body=esc(m?m[2]:l).replace(/\x60([^\x60]+)\x60/g,'<code>$1</code>');
+    return '<div class="ai-line ai-'+(sig==='+'?'ok':sig==='~'?'warn':sig==='!'?'bad':'neutral')+'">'+body+'</div>';
   }).join('');
 }
 function aiRender(){
@@ -783,7 +782,7 @@ function rightsizingSection(pods,L){
   var rank={bad:0,off:1,on:2};
   rows.sort(function(a,b){return (rank[a.verdict.c]-rank[b.verdict.c])||((b.sugCpu||b.sugMem?1:0)-(a.sugCpu||a.sugMem?1:0))||a.owner.localeCompare(b.owner);});
   function pct(u,req){return req?' <span class="u-email">'+Math.round(u/req*100)+'%</span>':'';}
-  var html='<section class="card2"><div class="card2-head"><p class="card2-title">Rightsizing</p><p class="card2-desc">Per-pod requests vs the peak usage seen over the last 6 hours. Downsize suggestions use peak + 20% headroom. Apply one by running its command.</p></div>'+
+  var html='<section class="card2"><div class="card2-head"><p class="card2-title">Rightsizing</p><p class="card2-desc">Requests vs 6h peak. Suggested = peak + 20%.</p></div>'+
     '<div class="tscroll"><table class="users ptable"><thead><tr><th>Workload</th><th>Verdict</th><th>CPU req</th><th>CPU peak</th><th>Mem req</th><th>Mem peak</th><th>Suggested</th></tr></thead><tbody>';
   rows.forEach(function(r){
     var parts=r.owner.split('/'),kind=parts[0],name=parts.slice(1).join('/');

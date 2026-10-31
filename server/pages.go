@@ -314,6 +314,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .ai-line:before{content:"";position:absolute;left:3px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--muted)}
 .ai-ok:before{background:var(--green)}
 .ai-bad{color:var(--red)}.ai-bad:before{background:var(--red)}
+.ai-warn{color:var(--amber)}.ai-warn:before{background:var(--amber)}
 .ai-line code{font-size:12.5px;padding:1px 5px;background:var(--active-bg);border:1px solid var(--border)}
 .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;border-radius:9px;background:rgba(248,113,113,.16);color:var(--red)}
 .tab{flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
