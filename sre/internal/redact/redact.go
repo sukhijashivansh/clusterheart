@@ -10,6 +10,7 @@ package redact
 
 import (
 	"regexp"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -43,6 +44,71 @@ var detectors = []Detector{
 
 const placeholder = "[REDACTED]"
 
+// hints lists, per detector, substrings at least one of which every match
+// contains, so text without any of them skips that regex (most log lines skip
+// all of them). Case-insensitive detectors are checked against lowercased
+// text; text with non-ASCII bytes runs every regex, because Unicode case
+// folding (e.g. the Kelvin sign) can match where lowercasing does not.
+var hints = map[string]struct {
+	any  []string
+	fold bool
+}{
+	"private-key":       {any: []string{"PRIVATE KEY"}},
+	"aws-access-key":    {any: []string{"AKIA", "ASIA"}},
+	"github-token":      {any: []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"}},
+	"slack-token":       {any: []string{"xox"}},
+	"google-api-key":    {any: []string{"AIza"}},
+	"stripe-key":        {any: []string{"_live_"}},
+	"jwt":               {any: []string{"eyJ"}},
+	"bearer-token":      {any: []string{"bearer"}, fold: true},
+	"url-credentials":   {any: []string{"://"}},
+	"password-or-token": {any: []string{"pass", "pwd", "token", "secret", "key"}, fold: true},
+	"email":             {any: []string{"@"}},
+}
+
+// prefilter decides, from the original text, which detectors can match.
+// Scrubbing only replaces matched text with the placeholder, which contains
+// no hint and cannot join neighbours into one, so the answer stays valid
+// after earlier detectors scrubbed s.
+type prefilter struct {
+	s, lower string
+	ascii    bool
+}
+
+func newPrefilter(s string) prefilter {
+	p := prefilter{s: s, ascii: true}
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			p.ascii = false
+			break
+		}
+	}
+	return p
+}
+
+func (p *prefilter) may(d Detector) bool {
+	h, ok := hints[d.Name]
+	if !ok {
+		return true
+	}
+	text := p.s
+	if h.fold {
+		if !p.ascii {
+			return true
+		}
+		if p.lower == "" {
+			p.lower = strings.ToLower(p.s)
+		}
+		text = p.lower
+	}
+	for _, k := range h.any {
+		if strings.Contains(text, k) {
+			return true
+		}
+	}
+	return false
+}
+
 func (d Detector) scrub(s string) string {
 	if d.repl != "" {
 		return d.re.ReplaceAllString(s, d.repl)
@@ -52,8 +118,11 @@ func (d Detector) scrub(s string) string {
 
 // String replaces secret/PII-shaped substrings with a placeholder.
 func String(s string) string {
+	pf := newPrefilter(s)
 	for _, d := range detectors {
-		s = d.scrub(s)
+		if pf.may(d) {
+			s = d.scrub(s)
+		}
 	}
 	return s
 }
@@ -86,7 +155,11 @@ func Find(s string) []string {
 // and a masked hint of the value.
 func Matches(s string) []Match {
 	var out []Match
+	pf := newPrefilter(s)
 	for _, d := range detectors {
+		if !pf.may(d) {
+			continue
+		}
 		loc := d.re.FindStringSubmatchIndex(s)
 		if loc == nil {
 			continue

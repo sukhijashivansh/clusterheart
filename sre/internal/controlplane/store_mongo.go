@@ -3,6 +3,7 @@ package controlplane
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"clusterheart/sre/internal/contract"
@@ -19,8 +20,10 @@ import (
 const snapshotRetention = 24 * time.Hour
 
 type mongoStore struct {
-	clusters  *mongo.Collection
-	snapshots *mongo.Collection
+	clusters      *mongo.Collection
+	snapshots     *mongo.Collection
+	serverMetrics *mongo.Collection // time-series, see metrics_mongo.go
+	gpuMetrics    *mongo.Collection
 }
 
 type clusterDoc struct {
@@ -72,8 +75,10 @@ func NewMongoStore(ctx context.Context, db *mongo.Database) (Store, error) {
 	pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	s := &mongoStore{
-		clusters:  db.Collection("sre_clusters"),
-		snapshots: db.Collection("sre_snapshots"),
+		clusters:      db.Collection("sre_clusters"),
+		snapshots:     db.Collection("sre_snapshots"),
+		serverMetrics: db.Collection(serverMetricsColl),
+		gpuMetrics:    db.Collection(gpuMetricsColl),
 	}
 	if _, err := s.clusters.Indexes().CreateOne(pctx, mongo.IndexModel{
 		Keys: bson.D{{Key: "tenantId", Value: 1}},
@@ -85,6 +90,14 @@ func NewMongoStore(ctx context.Context, db *mongo.Database) (Store, error) {
 		{Keys: bson.D{{Key: "collectedAt", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(int32(snapshotRetention.Seconds()))},
 	}); err != nil {
 		return nil, err
+	}
+	// The week-long server history is optional: without it the control plane
+	// still runs, only the server timeline is empty.
+	for _, name := range []string{serverMetricsColl, gpuMetricsColl} {
+		if err := ensureMetricCollection(pctx, db, name); err != nil {
+			slog.Default().Error("server metric history disabled", "collection", name, "err", err)
+			return storeWithoutHistory{s}, nil
+		}
 	}
 	return s, nil
 }

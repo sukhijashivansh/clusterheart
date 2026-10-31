@@ -65,6 +65,8 @@ type memStore struct {
 	mu        sync.RWMutex
 	clusters  map[string]Cluster
 	snapshots map[string][]contract.ClusterSnapshot // clusterID -> bounded ring
+	hostPts   map[string][]HostPoint                // clusterID -> metric history
+	gpuPts    map[string][]GPUPoint
 }
 
 // NewMemStore returns an in-memory Store. Not durable; for tests and local runs.

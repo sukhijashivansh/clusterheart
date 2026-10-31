@@ -28,6 +28,13 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # A throwaway MongoDB so the Mongo store tests (history aggregation,
+    # remediation queries) run against a real server before deploying.
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +44,8 @@ jobs:
 
       - name: Test control plane
         working-directory: sre
+        env:
+          MONGO_TEST_URI: mongodb://localhost:27017
         run: go test ./internal/controlplane/... ./internal/contract/...
 
       - name: Build static Linux binary

@@ -1,6 +1,7 @@
 package redact
 
 import (
+	"math/rand"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,5 +74,67 @@ func TestKeyValueScrubKeepsTheKey(t *testing.T) {
 	got := String(`{"msg":"fetched","secret":"s3cr3t","password=hunter22"}`)
 	if !strings.Contains(got, `"secret":"[REDACTED]"`) || !strings.Contains(got, `password=[REDACTED]`) || strings.Contains(got, "s3cr3t") {
 		t.Fatalf("scrubbed = %q", got)
+	}
+}
+
+// slowString and slowMatches are String and Matches without the prefilter.
+func slowString(s string) string {
+	for _, d := range detectors {
+		s = d.scrub(s)
+	}
+	return s
+}
+
+func slowMatches(s string) []Match {
+	var out []Match
+	for _, d := range detectors {
+		loc := d.re.FindStringSubmatchIndex(s)
+		if loc == nil {
+			continue
+		}
+		if d.Secret {
+			out = append(out, describe(d.Name, s, loc))
+		}
+		s = d.scrub(s)
+	}
+	return out
+}
+
+// TestPrefilterChangesNothing checks the keyword prefilter is only a speed-up:
+// random mixes of secret-shaped and ordinary fragments give the same result
+// with and without it.
+func TestPrefilterChangesNothing(t *testing.T) {
+	frags := []string{
+		"GET /api/v1/status 200 3.2ms", "level=info msg=ok", " ", ", ", "\"", "'", "=", ": ",
+		"-----BEGIN RSA PRIVATE KEY-----", "AKIAIOSFODNN7EXAMPLE", "ASIAABCDEFGHIJKLMNOP",
+		"ghp_" + strings.Repeat("a1B2", 9), "github_pat_" + strings.Repeat("x9_", 14), "xoxb-123456789012-abcdef",
+		"AIza" + strings.Repeat("Sy_-", 9)[:35], "sk_live_" + strings.Repeat("Z9", 9),
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+		"Authorization: Bearer abc.def-123", "BEARER   tok123", "postgres://admin:s3cr3tpw@db:5432/app",
+		"password=hunter22", "DB_PASSWORD: \"p@ss w0rd\"", "apiKey=abcd1234", "access-key: AKX1234567",
+		"pwd='zzzzzz'", "TOKEN=t0k3n!!", "client_secret=shh12345", "user@example.com", "ops@clusterheart.io",
+		"Key=abcdefgh", "paſſword=topsecret1", "Ünïcode tëxt token=äöü12345", "naïve",
+		"[REDACTED]", "key", "pass", "secret", "://", "@", "eyJ", "xox", "_live_",
+	}
+	rng := rand.New(rand.NewSource(1))
+	for i := 0; i < 20000; i++ {
+		var b strings.Builder
+		for j := rng.Intn(6) + 1; j > 0; j-- {
+			b.WriteString(frags[rng.Intn(len(frags))])
+		}
+		s := b.String()
+		if got, want := String(s), slowString(s); got != want {
+			t.Fatalf("String(%q) = %q, want %q", s, got, want)
+		}
+		if got, want := Matches(s), slowMatches(s); !reflect.DeepEqual(got, want) {
+			t.Fatalf("Matches(%q) = %+v, want %+v", s, got, want)
+		}
+	}
+}
+
+func BenchmarkMatchesPlainLog(b *testing.B) {
+	line := `{"time":"2026-10-31T20:00:00Z","level":"INFO","msg":"telemetry accepted","clusterId":"clu_9","snapshots":1,"dur":"3.2ms"}`
+	for i := 0; i < b.N; i++ {
+		Matches(line)
 	}
 }

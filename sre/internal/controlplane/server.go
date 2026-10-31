@@ -34,6 +34,7 @@ type Server struct {
 	runbooks    RunbookStore
 	notifier    Notifier
 	reveals     *revealStore
+	metrics     MetricsStore // nil when the store keeps no history
 	adminToken  string
 	log         *slog.Logger
 	now         func() time.Time
@@ -56,8 +57,10 @@ func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol P
 	notifier := newNotifier(log)
 	remSvc := newRemediationService(rem, pol, audit, incidents, store, notifier, log)
 	diagSvc := newDiagnosisService(diag, incidents, newLLMDiagnoser())
+	metrics, _ := store.(MetricsStore)
 	return &Server{
 		store:       store,
+		metrics:     metrics,
 		incidents:   incidents,
 		engine:      newEngine(incidents, notifier, log),
 		remediation: remSvc,
@@ -78,6 +81,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/clusters", s.requireAdmin(s.handleRegister))
 	mux.HandleFunc("GET /api/v1/clusters", s.requireAdmin(s.handleListClusters))
 	mux.HandleFunc("GET /api/v1/clusters/{id}/usage", s.requireAdmin(s.handleWorkloadUsage))
+	mux.HandleFunc("GET /api/v1/clusters/{id}/metrics", s.requireAdmin(s.handleServerMetrics))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/agent-token", s.requireAdmin(s.handleRotateAgentToken))
 	mux.HandleFunc("DELETE /api/v1/clusters/{id}", s.requireAdmin(s.handleDeleteCluster))
 	mux.HandleFunc("POST /api/v1/clusters/{id}/rename", s.requireAdmin(s.handleRenameCluster))
@@ -213,6 +217,9 @@ func (s *Server) handleDeleteCluster(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteCluster(r.Context(), clusterID); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not delete cluster")
 		return
+	}
+	if s.metrics != nil {
+		_ = s.metrics.DeleteMetrics(r.Context(), clusterID) // TTL removes it anyway
 	}
 	s.log.Info("cluster deleted", "clusterId", clusterID)
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": clusterID})
@@ -372,6 +379,15 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveSnapshots(r.Context(), c.ID, batch.Snapshots); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not store telemetry")
 		return
+	}
+	// Servers also feed the week-long metric history. A failure here must not
+	// fail ingestion either.
+	if s.metrics != nil {
+		if hosts, gpus := metricPoints(batch.Snapshots, s.now()); len(hosts) > 0 {
+			if err := s.metrics.AppendHostMetrics(r.Context(), c.ID, hosts, gpus); err != nil {
+				s.log.Error("could not store metric history", "clusterId", c.ID, "err", err)
+			}
+		}
 	}
 	// Run deterministic detection on the latest snapshot. Detection failures must
 	// not fail ingestion - telemetry is already durably stored.

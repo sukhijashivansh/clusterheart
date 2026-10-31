@@ -371,11 +371,29 @@ type HostSnapshot struct {
 	SwapTotalMi int64         `json:"swapTotalMi,omitempty"`
 	SwapUsedMi  int64         `json:"swapUsedMi,omitempty"`
 	UptimeSec   int64         `json:"uptimeSec"`
+	NetRxKBps   float64       `json:"netRxKBps,omitempty"` // all physical interfaces, since the previous sample
+	NetTxKBps   float64       `json:"netTxKBps,omitempty"`
 	Disks       []HostDisk    `json:"disks,omitempty"`
+	GPUs        []HostGPU     `json:"gpus,omitempty"`
 	Processes   []HostProcess `json:"processes,omitempty"`   // top by CPU, then memory
 	FailedUnits []HostUnit    `json:"failedUnits,omitempty"` // systemd units in failed state
 	ErrorLogs   []HostLogLine `json:"errorLogs,omitempty"`   // recent error-level journal lines, redacted
 	Problems    []HostProblem `json:"problems,omitempty"`
+}
+
+// HostGPU is one GPU, read from nvidia-smi (NVIDIA) or the amdgpu driver (AMD).
+// Zero means "not reported" for temperature and power.
+type HostGPU struct {
+	Index       int     `json:"index"`
+	Vendor      string  `json:"vendor"` // nvidia | amd
+	Name        string  `json:"name"`
+	UUID        string  `json:"uuid,omitempty"`
+	UtilPercent float64 `json:"utilPercent"`
+	MemUsedMi   int64   `json:"memUsedMi"`
+	MemTotalMi  int64   `json:"memTotalMi"`
+	TempC       float64 `json:"tempC,omitempty"`
+	PowerW      float64 `json:"powerW,omitempty"`
+	PowerLimitW float64 `json:"powerLimitW,omitempty"`
 }
 
 // HostDisk is one mounted filesystem.
@@ -410,7 +428,7 @@ type HostLogLine struct {
 
 // HostProblem is a measured issue on a host. Severity is "high" or "medium".
 type HostProblem struct {
-	Type     string `json:"type"` // DiskFull, MemoryPressure, HighLoad, FailedService, RecentReboot, SwapPressure
+	Type     string `json:"type"` // DiskFull, MemoryPressure, HighLoad, FailedService, RecentReboot, SwapPressure, GPUHot, GPUUnavailable
 	Severity string `json:"severity"`
 	Message  string `json:"message"`
 }
