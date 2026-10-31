@@ -342,6 +342,16 @@ table.users tbody tr:hover{background:var(--hover)}
 .pill.off{color:var(--amber)}
 .pill.bad{color:var(--red)}
 .pill.mgd{color:var(--muted)}
+.rs-table th,.rs-table td{white-space:nowrap}
+.rs-table td{font-size:13px}
+.rs-table .rs-num{text-align:right;font-variant-numeric:tabular-nums}
+.rs-table .rs-act{text-align:right;width:1%;padding-left:8px}
+.rs-table .rs-act .act{padding:5px 12px;font-size:12px}
+.rs-dim{color:var(--muted);font-weight:400}
+.rs-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.rs-sub.rs-bad{color:var(--red)}
+.rs-sub.rs-low{color:var(--amber)}
+@media(max-width:640px){.rs-table .pod-name{max-width:150px}}
 .pill .dot{display:none}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .empty{padding:48px 18px;text-align:center;color:var(--muted)}

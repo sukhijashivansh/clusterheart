@@ -762,16 +762,18 @@ var RS_MANAGED_NS=/^(kube-system|kube-public|kube-node-lease|amazon-[\w-]+|aws-[
 var RS_MANAGED_NAME=/^(coredns|kube-proxy|aws-node|ebs-csi-(controller|node)|efs-csi-(controller|node)|metrics-server|aws-load-balancer-controller|cluster-autoscaler|karpenter|eks-pod-identity-agent|snapshot-controller|adot-collector|cloudwatch-agent|fluent-bit)(-.*)?$/;
 function rsManaged(ns,name){return RS_MANAGED_NS.test(ns)||RS_MANAGED_NAME.test(name);}
 function rsVerdict(r){
+  r.sugCpu=0;r.sugMem=0;
   if(r.managed)return {v:'Managed',c:'mgd'};
   if(!r.cpuReq&&!r.memReq)return {v:'No requests',c:'off'};
-  if(r.window<RS_WINDOW_MINS*0.9)return {v:'Learning ('+Math.floor(r.window/60)+'h/6h)',c:'off'};
-  if(r.cpuReq&&r.cpuPeak>=r.cpuReq*0.9)return {v:'Upsize CPU',c:'bad'};
-  if(r.memReq&&r.memPeak>=r.memReq*0.9)return {v:'Upsize memory',c:'bad'};
-  function hr(peak,req,floor){return (req&&peak<req*0.4)?Math.min(Math.max(Math.ceil(peak*1.2),floor),req-1):0;}
-  r.sugCpu=hr(r.cpuPeak,r.cpuReq,10);r.sugMem=hr(r.memPeak,r.memReq,16);
-  if(r.sugCpu&&r.sugMem)return {v:'Downsize',c:'off'};
-  if(r.sugCpu)return {v:'Downsize CPU',c:'off'};
-  if(r.sugMem)return {v:'Downsize memory',c:'off'};
+  if(r.window<RS_WINDOW_MINS*0.9)return {v:'Learning '+Math.floor(r.window/60)+'h/6h',c:'off'};
+  // New request = peak + 20%: raises an undersized request, lowers one where
+  // the peak stays under 40% of it.
+  function up(peak,req){return (req&&peak>=req*0.9)?Math.ceil(peak*1.2):0;}
+  function down(peak,req,floor){return (req&&peak<req*0.4)?Math.min(Math.max(Math.ceil(peak*1.2),floor),req-1):0;}
+  var uc=up(r.cpuPeak,r.cpuReq),um=up(r.memPeak,r.memReq);
+  if(uc||um){r.sugCpu=uc;r.sugMem=um;return {v:uc&&um?'Upsize':uc?'Upsize CPU':'Upsize memory',c:'bad'};}
+  var dc=down(r.cpuPeak,r.cpuReq,10),dm=down(r.memPeak,r.memReq,16);
+  if(dc||dm){r.sugCpu=dc;r.sugMem=dm;return {v:dc&&dm?'Downsize':dc?'Downsize CPU':'Downsize memory',c:'off'};}
   return {v:'OK',c:'on'};
 }
 function rightsizingSection(pods){
@@ -812,27 +814,34 @@ function renderRightsizing(){
   var rows=Object.keys(g).map(function(k){var r=g[k];r.verdict=rsVerdict(r);return r;});
   var rank={bad:0,off:1,on:2,mgd:3};
   rows.sort(function(a,b){return (rank[a.verdict.c]-rank[b.verdict.c])||((b.sugCpu||b.sugMem?1:0)-(a.sugCpu||a.sugMem?1:0))||a.owner.localeCompare(b.owner);});
-  function pct(u,req){return req?' <span class="u-email">'+Math.round(u/req*100)+'%</span>':'';}
+  // One cell per resource: "peak / request" with the % of request below.
+  function usage(peak,req,fmt){
+    var top=fmt(peak)+(req?' <span class="rs-dim">/ '+fmt(req)+'</span>':'');
+    var p=req?Math.round(peak/req*100):null;
+    var cls=p==null?'':(p>=90?' rs-bad':(p<40?' rs-low':''));
+    return '<td class="rs-num"><div>'+top+'</div><div class="rs-sub'+cls+'">'+(p==null?'no request':p+'%')+'</div></td>';
+  }
   var html='<section class="card2"><div class="card2-head"><p class="card2-title">Rightsizing</p><p class="card2-desc">Requests vs 6h peak. Suggested = peak + 20%.</p></div>'+
-    '<div class="tscroll"><table class="users ptable"><thead><tr><th>Workload</th><th>Verdict</th><th>CPU req</th><th>CPU peak</th><th>Mem req</th><th>Mem peak</th><th>Suggested</th></tr></thead><tbody>';
+    '<div class="tscroll"><table class="users ptable rs-table"><thead><tr><th>Workload</th><th>Verdict</th><th class="rs-num">CPU <span class="rs-dim">peak / req</span></th><th class="rs-num">Memory <span class="rs-dim">peak / req</span></th><th class="rs-num">Suggested request</th><th></th></tr></thead><tbody>';
   rows.forEach(function(r){
     var parts=r.owner.split('/'),kind=parts[0],name=parts.slice(1).join('/');
-    var sug='-';
+    var sug='<span class="rs-dim">-</span>',copy='';
     if(r.sugCpu||r.sugMem){
-      var req=[];if(r.sugCpu)req.push('cpu='+r.sugCpu+'m');if(r.sugMem)req.push('memory='+r.sugMem+'Mi');
-      sug=(r.sugCpu?fmtCpu(r.sugCpu)+' CPU ':'')+(r.sugMem?fmtMem(r.sugMem)+' mem':'');
+      var req=[],txt=[];
+      if(r.sugCpu){req.push('cpu='+r.sugCpu+'m');txt.push(fmtCpu(r.sugCpu)+' CPU');}
+      if(r.sugMem){req.push('memory='+r.sugMem+'Mi');txt.push(fmtMem(r.sugMem)+' mem');}
+      sug=txt.join('<br>');
       if(/^(Deployment|StatefulSet|DaemonSet)$/.test(kind)){
         var cmd='kubectl -n '+r.ns+' set resources '+kind.toLowerCase()+'/'+name+' --requests='+req.join(',');
-        sug+=' <button class="act revoke copy-cmd" data-cmd="'+esc(cmd)+'" style="margin-left:6px">Copy command</button>';
+        copy='<button class="act revoke copy-cmd" data-cmd="'+esc(cmd)+'" title="'+esc(cmd)+'">Copy</button>';
       }
     }
     html+='<tr><td><div class="u-name pod-name" title="'+esc(r.owner)+'">'+esc(name)+'</div><div class="u-email">'+esc(r.ns)+' · '+esc(kind)+' · '+r.replicas+' pod'+(r.replicas===1?'':'s')+'</div></td>'+
       '<td><span class="pill '+r.verdict.c+'">'+esc(r.verdict.v)+'</span></td>'+
-      '<td class="u-time">'+(r.cpuReq?fmtCpu(r.cpuReq):'-')+'</td><td class="u-time">'+fmtCpu(r.cpuPeak)+pct(r.cpuPeak,r.cpuReq)+'</td>'+
-      '<td class="u-time">'+(r.memReq?fmtMem(r.memReq):'-')+'</td><td class="u-time">'+fmtMem(r.memPeak)+pct(r.memPeak,r.memReq)+'</td>'+
-      '<td class="u-time" style="white-space:nowrap">'+sug+'</td></tr>';
+      usage(r.cpuPeak,r.cpuReq,fmtCpu)+usage(r.memPeak,r.memReq,fmtMem)+
+      '<td class="rs-num">'+sug+'</td><td class="rs-act">'+copy+'</td></tr>';
   });
-  if(!rows.length)html+='<tr><td colspan="7" class="u-time">No running workloads in the latest snapshot.</td></tr>';
+  if(!rows.length)html+='<tr><td colspan="6" class="u-time">No running workloads in the latest snapshot.</td></tr>';
   return html+'</tbody></table></div></section>';
 }
 
