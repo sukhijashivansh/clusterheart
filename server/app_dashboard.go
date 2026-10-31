@@ -681,18 +681,11 @@ function nodesSection(nl){
 
 // ---------- AI chat ----------
 // Answers come back as "[+] / [!] / [-]" bullet lines (same as the desktop AI
-// tab). An optional personal OpenRouter key and model live in this browser only.
+// tab).
 var aiState={cluster:null,history:[],busy:false};
-function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
-function lsSet(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}}
 function aiPanelHtml(){
-  return '<section class="card2"><div class="card2-head"><p class="card2-title">Ask about this cluster</p><p class="card2-desc">Answers use the agent\'s latest snapshot and open incidents. The AI can\'t run commands; it suggests them.</p></div>'+
-    '<div class="card2-body"><div id="ai-log" class="ai-log"></div>'+
-    '<form id="ai-form" class="toolbar-row" style="margin-top:12px;flex-wrap:nowrap"><input id="ai-input" class="toolbar-input" style="flex:1;min-width:0" placeholder="e.g. Why is a pod restarting? Which workloads use the most memory?" autocomplete="off"><button class="act approve" id="ai-send" type="submit">Ask</button></form>'+
-    '<details style="margin-top:14px"><summary class="u-email" style="cursor:pointer">AI settings (optional)</summary><div class="toolbar-row" style="margin-top:10px">'+
-      '<input id="ai-key" class="toolbar-input" type="password" placeholder="Your OpenRouter API key" autocomplete="off" style="flex:1;min-width:200px">'+
-      '<input id="ai-model" class="toolbar-input" placeholder="Model (blank = free models)" autocomplete="off" style="flex:1;min-width:200px">'+
-    '</div><p class="u-email" style="margin:8px 0 0">Stored only in this browser and sent with each question. Leave blank to use the server\'s AI.</p></details>'+
+  return '<section class="card2"><div class="card2-body"><div id="ai-log" class="ai-log"></div>'+
+    '<form id="ai-form" class="toolbar-row" style="flex-wrap:nowrap"><input id="ai-input" class="toolbar-input" style="flex:1;min-width:0" placeholder="Ask about this cluster" autocomplete="off"><button class="act approve" id="ai-send" type="submit">Ask</button></form>'+
     '</div></section>';
 }
 function aiFormat(text){
@@ -703,7 +696,7 @@ function aiFormat(text){
 }
 function aiRender(){
   var log=document.getElementById('ai-log');if(!log)return;
-  if(!aiState.history.length&&!aiState.busy){log.innerHTML='<p class="sub" style="margin:0">Ask anything about this cluster\'s pods, nodes, jobs, incidents or resource usage.</p>';return;}
+  log.style.marginBottom=aiState.history.length||aiState.busy?'12px':'0';
   log.innerHTML=aiState.history.map(function(t){
     if(t.role==='user')return '<div class="ai-q">'+esc(t.text)+'</div>';
     if(t.role==='error')return '<div class="ai-a"><div class="ai-line ai-bad">'+esc(t.text)+'</div></div>';
@@ -713,18 +706,15 @@ function aiRender(){
 }
 function aiWire(id){
   if(aiState.cluster!==id){aiState={cluster:id,history:[],busy:false};}
-  var k=document.getElementById('ai-key'),m=document.getElementById('ai-model'),f=document.getElementById('ai-form');
+  var f=document.getElementById('ai-form');
   if(!f)return;
-  k.value=lsGet('ch-ai-key');m.value=lsGet('ch-ai-model');
-  k.addEventListener('change',function(){lsSet('ch-ai-key',k.value.trim());});
-  m.addEventListener('change',function(){lsSet('ch-ai-model',m.value.trim());});
   f.addEventListener('submit',async function(e){
     e.preventDefault();
     var inp=document.getElementById('ai-input'),q=inp.value.trim();
     if(!q||aiState.busy)return;
     inp.value='';aiState.history.push({role:'user',text:q});aiState.busy=true;aiRender();
     var hist=aiState.history.filter(function(t){return t.role!=='error';});
-    var r=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{history:hist,apiKey:k.value.trim(),model:m.value.trim()});
+    var r=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{history:hist});
     aiState.busy=false;
     aiState.history.push(r.ok?{role:'assistant',text:r.data.text}:{role:'error',text:(r.data&&r.data.error)||'The AI request failed.'});
     aiRender();

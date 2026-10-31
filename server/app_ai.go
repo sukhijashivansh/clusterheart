@@ -74,7 +74,7 @@ func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 		key = os.Getenv("OPENROUTER_API_KEY")
 	}
 	if key == "" {
-		writeJSON(w, 400, map[string]any{"error": "AI isn't set up on this server. Paste your own OpenRouter API key in the settings below."})
+		writeJSON(w, 400, map[string]any{"error": "AI isn't set up on this server yet."})
 		return
 	}
 
