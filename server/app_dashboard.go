@@ -704,6 +704,24 @@ function aiRender(){
   }).join('')+(aiState.busy?'<div class="ai-a"><div class="ai-line ai-neutral">Thinking…</div></div>':'');
   log.scrollTop=log.scrollHeight;
 }
+// aiAsk starts a chat job and polls until the answer is ready (free models can
+// take over a minute, longer than one proxied request may stay open).
+async function aiAsk(id,hist){
+  var r=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{history:hist});
+  if(!r.ok||!r.data.jobId)return {error:(r.data&&r.data.error)||('Could not start the AI request (HTTP '+r.status+').')};
+  var deadline=Date.now()+5*60*1000;
+  while(Date.now()<deadline){
+    await new Promise(function(ok){setTimeout(ok,2000);});
+    try{
+      var pr=await fetch('/api/app/chat/'+encodeURIComponent(r.data.jobId),{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(15000)});
+      var d=await pr.json().catch(function(){return null;});
+      if(!d)continue;
+      if(!pr.ok)return {error:d.error||('AI request failed (HTTP '+pr.status+').')};
+      if(d.done)return d.error?{error:d.error}:{text:d.text};
+    }catch(e){}
+  }
+  return {error:'The AI took too long to answer. Please try again.'};
+}
 function aiWire(id){
   if(aiState.cluster!==id){aiState={cluster:id,history:[],busy:false};}
   var f=document.getElementById('ai-form');
@@ -714,9 +732,9 @@ function aiWire(id){
     if(!q||aiState.busy)return;
     inp.value='';aiState.history.push({role:'user',text:q});aiState.busy=true;aiRender();
     var hist=aiState.history.filter(function(t){return t.role!=='error';});
-    var r=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{history:hist});
+    var res=await aiAsk(id,hist);
     aiState.busy=false;
-    aiState.history.push(r.ok?{role:'assistant',text:r.data.text}:{role:'error',text:(r.data&&r.data.error)||'The AI request failed.'});
+    aiState.history.push(res.text!=null?{role:'assistant',text:res.text}:{role:'error',text:res.error});
     aiRender();
   });
   aiRender();

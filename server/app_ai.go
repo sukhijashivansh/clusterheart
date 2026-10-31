@@ -1,14 +1,19 @@
 package main
 
 // AI chat for the browser dashboard. Answers questions about one cluster,
-// grounded in the agent's latest snapshot and the cluster's open incidents.
-// Calls OpenRouter with the user's own key when they paste one in the AI tab
-// (kept in their browser, sent per request, never stored here), otherwise with
-// the server's OPENROUTER_API_KEY. Same reply format as the desktop AI tab.
+// grounded in the agent's latest snapshot and the cluster's open incidents,
+// using the server's OPENROUTER_API_KEY. Same reply format and free-model
+// fallback as the desktop AI tab.
+//
+// Free models can take well over a minute, longer than the proxies in front of
+// this server allow for one request. So a question starts a background job and
+// the browser polls for the answer.
 
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,17 +21,20 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
-// aiRL caps chat requests per user, since they may spend the server's key.
+// aiRL caps chat requests per user, since they spend the server's key.
 var aiRL = newRateLimiter(20, 10*time.Minute)
 
-// aiFreeModels are tried in order when no model is pinned; individual free
-// models are often rate-limited, so we fall through to the next.
+// aiFreeModels are tried in order when no model is pinned (same list as the
+// desktop app); individual free models are often rate-limited or down.
 var aiFreeModels = []string{
 	"nex-agi/nex-n2.5-pro:free",
 	"nvidia/nemotron-3-super-120b-a12b:free",
+	"nvidia/nemotron-3-ultra-550b-a55b:free",
+	"google/gemma-4-26b-a4b-it:free",
 	"google/gemma-4-31b-it:free",
 }
 
@@ -46,8 +54,26 @@ else with exactly one bullet:
 GROUNDING: base cluster facts only on the snapshot below; say when something is not in
 it. You cannot run commands or see logs; suggest the kubectl command instead.`
 
-// handleAppClusterChat answers one chat turn: POST /api/app/clusters/{id}/chat
-// with {"history":[{"role":"user|assistant","text":"..."}],"apiKey":"","model":""}.
+// aiJob is one in-flight or finished chat answer, owned by one user.
+type aiJob struct {
+	owner   string
+	done    bool
+	text    string
+	err     string
+	created time.Time
+}
+
+var (
+	aiJobsMu sync.Mutex
+	aiJobs   = map[string]*aiJob{}
+)
+
+// aiJobTTL is how long a finished answer waits to be collected.
+const aiJobTTL = 10 * time.Minute
+
+// handleAppClusterChat starts one chat turn: POST /api/app/clusters/{id}/chat
+// with {"history":[{"role":"user|assistant","text":"..."}]}. Returns {"jobId"};
+// the answer is collected from GET /api/app/chat/{jobId}.
 func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 	u, tenant, ok := a.appSREUser(w, r)
 	if !ok {
@@ -62,19 +88,14 @@ func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 			Role string `json:"role"`
 			Text string `json:"text"`
 		} `json:"history"`
-		APIKey string `json:"apiKey"`
-		Model  string `json:"model"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err != nil || len(body.History) == 0 {
 		writeJSON(w, 400, map[string]any{"error": "bad request"})
 		return
 	}
-	key := strings.TrimSpace(body.APIKey)
+	key := os.Getenv("OPENROUTER_API_KEY")
 	if key == "" {
-		key = os.Getenv("OPENROUTER_API_KEY")
-	}
-	if key == "" {
-		writeJSON(w, 400, map[string]any{"error": "AI isn't set up on this server yet."})
+		writeJSON(w, 503, map[string]any{"error": "AI isn't set up on this server yet."})
 		return
 	}
 
@@ -102,24 +123,82 @@ func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	models := aiFreeModels
-	if m := strings.TrimSpace(body.Model); m != "" {
-		models = []string{m}
-	} else if m := os.Getenv("OPENROUTER_MODEL"); m != "" {
+	if m := os.Getenv("OPENROUTER_MODEL"); m != "" {
 		models = []string{m}
 	}
+
+	idb := make([]byte, 12)
+	_, _ = rand.Read(idb)
+	id := hex.EncodeToString(idb)
+	job := &aiJob{owner: u.Email, created: time.Now()}
+	aiJobsMu.Lock()
+	for k, j := range aiJobs {
+		if time.Since(j.created) > aiJobTTL {
+			delete(aiJobs, k)
+		}
+	}
+	aiJobs[id] = job
+	aiJobsMu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+		defer cancel()
+		text, err := askModels(ctx, key, models, msgs)
+		aiJobsMu.Lock()
+		defer aiJobsMu.Unlock()
+		job.done, job.text = true, text
+		if err != nil {
+			job.err = err.Error()
+		}
+	}()
+	writeJSON(w, 202, map[string]any{"jobId": id})
+}
+
+// handleAppChatResult returns a chat job's state: GET /api/app/chat/{job} ->
+// {"done":false} while running, then {"done":true,"text":...} or
+// {"done":true,"error":...}.
+func (a *app) handleAppChatResult(w http.ResponseWriter, r *http.Request) {
+	u, _, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	aiJobsMu.Lock()
+	defer aiJobsMu.Unlock()
+	job := aiJobs[r.PathValue("job")]
+	if job == nil || job.owner != u.Email {
+		writeJSON(w, 404, map[string]any{"error": "That answer expired. Please ask again."})
+		return
+	}
+	if !job.done {
+		writeJSON(w, 200, map[string]any{"done": false})
+		return
+	}
+	if job.err != "" {
+		writeJSON(w, 200, map[string]any{"done": true, "error": job.err})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"done": true, "text": job.text})
+}
+
+// askModels tries each model in turn until one answers. Like the desktop app,
+// it moves on after rate limits or busy providers but stops on key/credit
+// errors, where another model won't help.
+func askModels(ctx context.Context, key string, models []string, msgs []map[string]string) (string, error) {
 	var lastErr error
 	for _, m := range models {
-		text, retry, err := openRouterChat(r.Context(), key, m, msgs)
+		text, retry, err := openRouterChat(ctx, key, m, msgs)
 		if err == nil {
-			writeJSON(w, 200, map[string]any{"text": text, "model": m})
-			return
+			return text, nil
 		}
 		lastErr = err
-		if !retry {
-			break
+		if !retry || ctx.Err() != nil {
+			return "", err
 		}
 	}
-	writeJSON(w, 502, map[string]any{"error": lastErr.Error()})
+	if len(models) > 1 {
+		return "", fmt.Errorf("all free models are busy right now (last: %v). Wait about 30 seconds and try again", lastErr)
+	}
+	return "", lastErr
 }
 
 // openRouterChat runs one chat completion. retry reports whether another model
@@ -145,18 +224,45 @@ func openRouterChat(parent context.Context, key, model string, msgs []map[string
 			} `json:"message"`
 		} `json:"choices"`
 		Error *struct {
-			Message string `json:"message"`
-			Code    any    `json:"code"`
+			Message  string `json:"message"`
+			Code     any    `json:"code"`
+			Metadata struct {
+				ProviderName string `json:"provider_name"`
+				Raw          any    `json:"raw"`
+			} `json:"metadata"`
 		} `json:"error"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
 		return "", true, fmt.Errorf("bad response from the AI provider")
 	}
 	if out.Error != nil {
+		// Free models often return a terse "Provider returned error"; add the
+		// code, provider and upstream reason so it's actionable.
+		msg := strings.TrimSpace(out.Error.Message)
+		if msg == "" {
+			msg = "OpenRouter error"
+		}
 		code := fmt.Sprintf("%v", out.Error.Code)
+		var extra []string
+		if code != "" && code != "<nil>" {
+			extra = append(extra, "code "+code)
+		}
+		if p := out.Error.Metadata.ProviderName; p != "" {
+			extra = append(extra, "provider "+p)
+		}
+		if raw := strings.TrimSpace(fmt.Sprintf("%v", out.Error.Metadata.Raw)); out.Error.Metadata.Raw != nil && raw != "" && raw != "map[]" {
+			if len(raw) > 200 {
+				raw = raw[:200]
+			}
+			extra = append(extra, "detail: "+raw)
+		}
+		if len(extra) > 0 {
+			msg += " (" + strings.Join(extra, "; ") + ")"
+		}
 		low := strings.ToLower(out.Error.Message)
-		fatal := code == "401" || code == "402" || code == "403" || strings.Contains(low, "key") || strings.Contains(low, "credit")
-		return "", !fatal, fmt.Errorf("%s", strings.TrimSpace(out.Error.Message))
+		fatal := code == "401" || code == "402" || code == "403" || strings.Contains(low, "auth") ||
+			strings.Contains(low, "credit") || strings.Contains(low, "api key") || strings.Contains(low, "afford")
+		return "", !fatal, fmt.Errorf("%s", msg)
 	}
 	if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
 		return "", true, fmt.Errorf("the model returned no answer; try again")
