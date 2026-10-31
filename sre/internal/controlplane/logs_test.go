@@ -71,3 +71,29 @@ func TestTelemetryWithPodLogsAccepted(t *testing.T) {
 		t.Fatalf("log line not redacted on ingest: %q", l)
 	}
 }
+
+// Secret findings are accepted, and their context is re-redacted on ingest.
+func TestTelemetryWithSecretFindingsAccepted(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	c := register(t, ts.URL, "acme", "prod")
+	snap := contract.ClusterSnapshot{CollectedAt: time.Now().UTC(), SecretFindings: []contract.SecretFinding{{
+		Source: "log", Type: "aws-access-key", Namespace: "web", Owner: "Deployment/api", Container: "api",
+		Context: "using key AKIAIOSFODNN7EXAMPLE", Count: 3, FirstSeen: time.Now().UTC(), LastSeen: time.Now().UTC(),
+	}}}
+	batch := contract.TelemetryBatch{APIVersion: contract.APIVersion, Snapshots: []contract.ClusterSnapshot{snap}}
+	if code, body := do(t, http.MethodPost, ts.URL+"/api/v1/telemetry", c.AgentToken, c.ClusterID, batch); code != http.StatusAccepted {
+		t.Fatalf("telemetry with findings: %d %s", code, body)
+	}
+	_, body := do(t, http.MethodGet, ts.URL+"/api/v1/clusters?tenantId=acme", adminTok, "", nil)
+	var out struct {
+		Clusters []contract.ClusterStatus `json:"clusters"`
+	}
+	_ = json.Unmarshal(body, &out)
+	if len(out.Clusters) != 1 || out.Clusters[0].Latest == nil || len(out.Clusters[0].Latest.SecretFindings) != 1 {
+		t.Fatalf("findings not stored: %s", body)
+	}
+	if ctx := out.Clusters[0].Latest.SecretFindings[0].Context; strings.Contains(ctx, "AKIAIOSFODNN7EXAMPLE") {
+		t.Fatalf("context not re-redacted: %q", ctx)
+	}
+}

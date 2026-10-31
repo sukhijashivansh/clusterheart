@@ -666,6 +666,9 @@ func sanitizeSnapshot(s *contract.ClusterSnapshot) {
 			s.PodLogs[i].Lines[j] = redact.String(s.PodLogs[i].Lines[j])
 		}
 	}
+	for i := range s.SecretFindings {
+		s.SecretFindings[i].Context = redact.String(s.SecretFindings[i].Context)
+	}
 }
 
 // --- helpers -------------------------------------------------------------

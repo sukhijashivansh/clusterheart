@@ -78,6 +78,27 @@ type ClusterSnapshot struct {
 	// failed), redacted by the agent. Bounded in count and size; only the newest
 	// snapshot in a batch carries them.
 	PodLogs []PodLog `json:"podLogs,omitempty"`
+	// SecretFindings are places where a credential appears to be exposed: in a
+	// container's log output or hard-coded in a pod spec (env/args). They never
+	// contain the secret itself, only where it is, what kind, and a redacted
+	// line for context.
+	SecretFindings []SecretFinding `json:"secretFindings,omitempty"`
+}
+
+// SecretFinding is one exposed-credential signal, keyed by workload (not pod) so
+// replicas and restarts don't duplicate it.
+type SecretFinding struct {
+	Source    string    `json:"source"` // "log" | "env" | "args"
+	Type      string    `json:"type"`   // detector name, e.g. aws-access-key, password-or-token, hardcoded-env
+	Namespace string    `json:"namespace"`
+	Owner     string    `json:"owner"` // e.g. Deployment/api, or Pod/<name>
+	Pod       string    `json:"pod,omitempty"`
+	Container string    `json:"container"`
+	Field     string    `json:"field,omitempty"`   // env var name or "args"
+	Context   string    `json:"context,omitempty"` // redacted log line / snippet
+	Count     int       `json:"count"`             // log lines seen with it (1 for specs)
+	FirstSeen time.Time `json:"firstSeen"`
+	LastSeen  time.Time `json:"lastSeen"`
 }
 
 // PodLog is the tail of one container's log. Previous is true when the lines
