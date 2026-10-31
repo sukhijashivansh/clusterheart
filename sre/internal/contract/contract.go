@@ -95,7 +95,10 @@ type SecretFinding struct {
 	Pod       string    `json:"pod,omitempty"`
 	Container string    `json:"container"`
 	Field     string    `json:"field,omitempty"`   // env var name or "args"
-	Context   string    `json:"context,omitempty"` // redacted log line / snippet
+	Key       string    `json:"key,omitempty"`     // field the secret was under, e.g. accessToken
+	Masked    string    `json:"masked,omitempty"`  // recognisable hint, e.g. "eyJh…x9Qz" (never the value)
+	Length    int       `json:"length,omitempty"`  // length of the secret value
+	Context   string    `json:"context,omitempty"` // redacted log line / snippet, centred on the leak
 	Count     int       `json:"count"`             // log lines seen with it (1 for specs)
 	FirstSeen time.Time `json:"firstSeen"`
 	LastSeen  time.Time `json:"lastSeen"`

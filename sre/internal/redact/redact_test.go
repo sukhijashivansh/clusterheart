@@ -42,3 +42,29 @@ func TestStringScrubsAllDetectors(t *testing.T) {
 		t.Errorf("not idempotent: %q -> %q", out, again)
 	}
 }
+
+func TestMatchesDescribeWithoutLeaking(t *testing.T) {
+	line := `{"level":"info","accessToken":"eyJhbGciOiJIUzI1NiJ9xyzxyzxyzQz9","msg":"ok"}`
+	m := Matches(line)
+	if len(m) != 1 {
+		t.Fatalf("matches = %+v", m)
+	}
+	if m[0].Key != "accessToken" || m[0].Length != 32 {
+		t.Errorf("key/length = %q/%d", m[0].Key, m[0].Length)
+	}
+	if m[0].Masked != "eyJh…zQz9" {
+		t.Errorf("masked = %q", m[0].Masked)
+	}
+	if got := Matches("DB_PASSWORD=hunter22"); len(got) != 1 || got[0].Key != "DB_PASSWORD" || got[0].Masked != "••••" {
+		t.Errorf("short password: %+v", got)
+	}
+	if got := Matches("postgres://app:s3cretpassword1@db/app"); len(got) != 1 || got[0].Key != "password for user app" || strings.Contains(got[0].Masked, "cretpass") {
+		t.Errorf("url creds: %+v", got)
+	}
+	if got := Matches("key AKIAIOSFODNN7EXAMPLE"); len(got) != 1 || got[0].Masked != "AKIA…MPLE" || got[0].Key != "" {
+		t.Errorf("aws: %+v", got)
+	}
+	if got := Matches("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"); len(got) != 1 || got[0].Key != "AWS_ACCESS_KEY_ID" {
+		t.Errorf("aws: %+v", got)
+	}
+}
