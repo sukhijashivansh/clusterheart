@@ -9,6 +9,8 @@
 #   DEPLOY_SSH_KEY      - private key (.pem contents) for the ssh user, or
 #   DEPLOY_SSH_PASSWORD - the user's ssh password (set one of the two)
 #   DEPLOY_SSH_PORT     - (optional) ssh port; defaults to 22
+#   OPENROUTER_API_KEY  - (optional) AI chat key; written into the service's
+#                         .env on each deploy so it never lives in the repo
 # Optional repo variable:
 #   DEPLOY_ARCH         - target CPU arch: amd64 (default) or arm64 (Graviton)
 #
@@ -60,7 +62,10 @@ jobs:
 
       - name: Install binary and restart service
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         with:
+          envs: OPENROUTER_API_KEY
           host: ${{ secrets.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -78,6 +83,19 @@ jobs:
             echo "Deploying to unit=$UNIT bin=$BIN"
             $SUDO install -m 0755 "$HOME/clusterheart-deploy/clusterheart-server" "$BIN"
             rm -rf "$HOME/clusterheart-deploy"
+            # Sync secrets into the .env the service reads: systemd's
+            # EnvironmentFile if set, else the unit's working directory.
+            if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+              ENVF=$($SUDO systemctl show -p EnvironmentFiles --value "$UNIT" 2>/dev/null | awk '{print $1}' | head -1)
+              if [ -z "$ENVF" ]; then
+                WD=$($SUDO systemctl show -p WorkingDirectory --value "$UNIT" 2>/dev/null)
+                ENVF="${WD:-$(dirname "$BIN")}/.env"
+              fi
+              $SUDO touch "$ENVF"
+              $SUDO sed -i '/^OPENROUTER_API_KEY=/d' "$ENVF"
+              echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" | $SUDO tee -a "$ENVF" >/dev/null
+              echo "Updated OPENROUTER_API_KEY in $ENVF"
+            fi
             $SUDO systemctl restart "$UNIT"
             sleep 2
             $SUDO systemctl is-active "$UNIT"
