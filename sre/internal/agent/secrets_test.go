@@ -115,3 +115,35 @@ func TestLogScanRotatesAndReadsIncrementally(t *testing.T) {
 		t.Fatalf("stale containers kept: %d", len(s.lastScan))
 	}
 }
+
+func TestFindingsCarryKeyMaskAndCentredContext(t *testing.T) {
+	s := newSecretScanner()
+	p := podWithEnv("api-5d8f-a")
+	line := `{"level":"info","timestamp":"2026-10-31T18:30:55Z","service":"report-worker","request":"` + strings.Repeat("x", 400) + `","accessToken":"eyJhbGciOiJIUzI1NiJ9abcdefghijkQz9"}`
+	s.recordLogLines(&p, "api", []byte(line+"\n"), time.Now())
+	got := s.scan(context.Background(), nil, nil, time.Now())
+	if len(got) != 1 {
+		t.Fatalf("findings = %+v", got)
+	}
+	f := got[0]
+	if f.Key != "accessToken" || f.Masked != "eyJh…kQz9" || f.Length != 34 {
+		t.Errorf("key/masked/length = %q %q %d", f.Key, f.Masked, f.Length)
+	}
+	if !strings.Contains(f.Context, `"accessToken":"[REDACTED]"`) || strings.Contains(f.Context, "abcdefghijk") {
+		t.Errorf("context not centred on the leak or leaks it: %q", f.Context)
+	}
+}
+
+func TestCronJobRunsShareOneFinding(t *testing.T) {
+	mk := func(job string) corev1.Pod {
+		return corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "jobs", Name: job + "-x", OwnerReferences: ctrl("Job", job)}}
+	}
+	a, b := mk("report-worker-29891190"), mk("report-worker-29891250")
+	if podOwner(&a) != "CronJob/report-worker" || podOwner(&b) != podOwner(&a) {
+		t.Fatalf("owners = %q / %q", podOwner(&a), podOwner(&b))
+	}
+	plain := mk("one-off-migration")
+	if podOwner(&plain) != "Job/one-off-migration" {
+		t.Fatalf("standalone job owner = %q", podOwner(&plain))
+	}
+}

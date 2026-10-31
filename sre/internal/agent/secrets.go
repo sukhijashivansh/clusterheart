@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +29,7 @@ const (
 	secretScanLimitBytes = 256 << 10
 	secretFindingTTL     = 24 * time.Hour
 	maxSecretFindings    = 100
-	maxContextLen        = 200
+	maxContextLen        = 400
 )
 
 // sensitiveEnvName matches env var names that should come from a Secret.
@@ -46,18 +47,47 @@ func newSecretScanner() *secretScanner {
 	return &secretScanner{lastScan: map[string]time.Time{}, logs: map[string]*contract.SecretFinding{}, specs: map[string]*contract.SecretFinding{}}
 }
 
+// cronJobRun matches a Job created by a CronJob: "<cronjob>-<scheduled minute>".
+var cronJobRun = regexp.MustCompile(`^Job/(.+)-\d{8,}$`)
+
+// podOwner is the workload a finding belongs to. Runs of a CronJob collapse to
+// the CronJob, so each run doesn't open a new finding.
 func podOwner(p *corev1.Pod) string {
-	if o := ownerWorkload(p); o != "" {
-		return o
+	o := ownerWorkload(p)
+	if o == "" {
+		return "Pod/" + p.Name
 	}
-	return "Pod/" + p.Name
+	if m := cronJobRun.FindStringSubmatch(o); m != nil {
+		return "CronJob/" + m[1]
+	}
+	return o
 }
 
+// clip keeps up to maxContextLen bytes of a redacted line, centred on the first
+// redaction so the leak is always in view.
 func clip(s string) string {
-	if len(s) > maxContextLen {
-		return s[:maxContextLen] + "…"
+	if len(s) <= maxContextLen {
+		return s
 	}
-	return s
+	start := 0
+	if i := strings.Index(s, "[REDACTED]"); i > maxContextLen/3 {
+		start = i - maxContextLen/3
+	}
+	end := min(start+maxContextLen, len(s))
+	for start > 0 && !utf8.RuneStart(s[start]) {
+		start--
+	}
+	for end < len(s) && !utf8.RuneStart(s[end]) {
+		end++
+	}
+	out := s[start:end]
+	if start > 0 {
+		out = "…" + out
+	}
+	if end < len(s) {
+		out += "…"
+	}
+	return out
 }
 
 // scan updates findings from pod specs and a slice of container logs, and
@@ -98,15 +128,16 @@ func (s *secretScanner) scan(ctx context.Context, cs kubernetes.Interface, pods 
 func (s *secretScanner) scanSpecs(pods []corev1.Pod, now time.Time) {
 	prev := s.specs
 	s.specs = map[string]*contract.SecretFinding{}
-	add := func(p *corev1.Pod, container, source, field, typ, ctx string) {
+	add := func(p *corev1.Pod, container, source, field string, m redact.Match, ctx string) {
 		owner := podOwner(p)
-		key := source + "|" + p.Namespace + "|" + owner + "|" + container + "|" + field + "|" + typ
+		key := source + "|" + p.Namespace + "|" + owner + "|" + container + "|" + field + "|" + m.Type + "|" + m.Key
 		if _, ok := s.specs[key]; ok {
 			return
 		}
 		f := &contract.SecretFinding{
-			Source: source, Type: typ, Namespace: p.Namespace, Owner: owner, Pod: p.Name,
-			Container: container, Field: field, Context: clip(ctx), Count: 1, FirstSeen: now, LastSeen: now,
+			Source: source, Type: m.Type, Namespace: p.Namespace, Owner: owner, Pod: p.Name,
+			Container: container, Field: field, Key: m.Key, Masked: m.Masked, Length: m.Length,
+			Context: clip(ctx), Count: 1, FirstSeen: now, LastSeen: now,
 		}
 		if old, ok := prev[key]; ok {
 			f.FirstSeen = old.FirstSeen
@@ -122,17 +153,20 @@ func (s *secretScanner) scanSpecs(pods []corev1.Pod, now time.Time) {
 				if e.ValueFrom != nil || v == "" || strings.HasPrefix(v, "$(") || strings.HasPrefix(v, "${") {
 					continue
 				}
-				if types := redact.Find(v); len(types) > 0 {
-					add(p, c.Name, "env", e.Name, types[0], e.Name+"="+redact.String(v))
+				if ms := redact.Matches(v); len(ms) > 0 {
+					m := ms[0]
+					m.Key = e.Name
+					add(p, c.Name, "env", e.Name, m, e.Name+"="+redact.String(v))
 					continue
 				}
 				if sensitiveEnvName.MatchString(e.Name) && len(v) >= 6 && !isBoringValue(v) {
-					add(p, c.Name, "env", e.Name, "hardcoded-env", e.Name+"=[REDACTED]")
+					m := redact.Match{Type: "hardcoded-env", Key: e.Name, Masked: redact.Mask(v), Length: utf8.RuneCountInString(v)}
+					add(p, c.Name, "env", e.Name, m, e.Name+"=[REDACTED]")
 				}
 			}
 			cmd := strings.Join(append(append([]string{}, c.Command...), c.Args...), " ")
-			for _, typ := range redact.Find(cmd) {
-				add(p, c.Name, "args", "args", typ, redact.String(cmd))
+			for _, m := range redact.Matches(cmd) {
+				add(p, c.Name, "args", "args", m, redact.String(cmd))
 			}
 		}
 	}
@@ -222,20 +256,21 @@ func (s *secretScanner) recordLogLines(p *corev1.Pod, container string, raw []by
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	for sc.Scan() {
 		line := sc.Text()
-		types := redact.Find(line)
-		if len(types) == 0 {
+		ms := redact.Matches(line)
+		if len(ms) == 0 {
 			continue
 		}
-		for _, typ := range types {
-			key := "log|" + p.Namespace + "|" + owner + "|" + container + "|" + typ
+		for _, m := range ms {
+			key := "log|" + p.Namespace + "|" + owner + "|" + container + "|" + m.Type + "|" + m.Key
 			f := s.logs[key]
 			if f == nil {
-				f = &contract.SecretFinding{Source: "log", Type: typ, Namespace: p.Namespace, Owner: owner, Container: container, FirstSeen: now}
+				f = &contract.SecretFinding{Source: "log", Type: m.Type, Namespace: p.Namespace, Owner: owner, Container: container, Key: m.Key, FirstSeen: now}
 				s.logs[key] = f
 			}
 			f.Pod = p.Name
 			f.Count++
 			f.LastSeen = now
+			f.Masked, f.Length = m.Masked, m.Length
 			f.Context = clip(redact.String(strings.TrimSpace(line)))
 		}
 	}
