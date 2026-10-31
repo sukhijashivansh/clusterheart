@@ -1,0 +1,71 @@
+# Build the Clusterheart host agent (plain Linux servers) for amd64 and arm64
+# and publish both to the public Vercel Blob store under STABLE paths, so the
+# installer (server/install-host.sh) always downloads the latest build:
+#   https://<store>.public.blob.vercel-storage.com/sre/clusterheart-host-agent-linux-<arch>
+# Runs on host agent / contract / redaction changes, or manually.
+#
+# Required repo secret: BLOB_READ_WRITE_TOKEN (same store as the other agents).
+
+name: Publish host agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sre/cmd/hostagent/**'
+      - 'sre/internal/hostagent/**'
+      - 'sre/internal/contract/**'
+      - 'sre/internal/redact/**'
+      - '.github/workflows/publish-hostagent.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-hostagent
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sre/go.mod
+
+      - name: Test host agent
+        working-directory: sre
+        run: go test ./internal/hostagent/... ./internal/redact/...
+
+      - name: Build host agent (linux amd64 + arm64)
+        working-directory: sre
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o clusterheart-host-agent-linux-amd64 ./cmd/hostagent
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o clusterheart-host-agent-linux-arm64 ./cmd/hostagent
+
+      - name: Publish to Vercel Blob
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
+            echo "::error::Missing repo secret BLOB_READ_WRITE_TOKEN"; exit 1
+          fi
+          npm install --no-save @vercel/blob
+          node --input-type=module <<'JS'
+          import { put } from '@vercel/blob'
+          import { readFileSync } from 'node:fs'
+          for (const arch of ['amd64', 'arm64']) {
+            const name = `clusterheart-host-agent-linux-${arch}`
+            const buf = readFileSync(`sre/${name}`)
+            const res = await put(`sre/${name}`, buf, {
+              access: 'public',
+              addRandomSuffix: false,
+              allowOverwrite: true,
+              contentType: 'application/octet-stream',
+              token: process.env.BLOB_READ_WRITE_TOKEN,
+            })
+            console.log('published:', res.url, buf.length, 'bytes')
+          }
+          JS
