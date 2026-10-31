@@ -322,6 +322,9 @@ func (a *app) clusterChatContext(tenant, id string) (string, error) {
 			fmt.Fprintf(&b, "Cluster %q (env %s, Kubernetes %s)\n", c.Name, orDash(c.Environment), orDash(c.K8sVersion))
 		}
 		writeSnapshotText(&b, c.Latest)
+		if c.Kind == "server" {
+			a.writeServerTrend(&b, tenant, id)
+		}
 	}
 	if !found {
 		return "", fmt.Errorf("cluster not found")
@@ -483,7 +486,15 @@ type hostSnap struct {
 	CPUPercent, Load1, Load5, Load15               float64 `json:"-"`
 	MemTotalMi, MemUsedMi, SwapTotalMi, SwapUsedMi int64   `json:"-"`
 	UptimeSec                                      int64   `json:"uptimeSec"`
-	Disks                                          []struct {
+	NetRxKBps, NetTxKBps                           float64 `json:"-"`
+	GPUs                                           []struct {
+		Index                 int
+		Vendor, Name          string
+		UtilPercent           float64
+		MemUsedMi, MemTotalMi int64
+		TempC, PowerW         float64
+	} `json:"gpus"`
+	Disks []struct {
 		Mount, FS       string
 		TotalMi, UsedMi int64
 	} `json:"disks"`
@@ -515,6 +526,8 @@ func (h *hostSnap) UnmarshalJSON(b []byte) error {
 		MemUsedMi   int64   `json:"memUsedMi"`
 		SwapTotalMi int64   `json:"swapTotalMi"`
 		SwapUsedMi  int64   `json:"swapUsedMi"`
+		NetRxKBps   float64 `json:"netRxKBps"`
+		NetTxKBps   float64 `json:"netTxKBps"`
 	}
 	if err := json.Unmarshal(b, &aux); err != nil {
 		return err
@@ -522,19 +535,26 @@ func (h *hostSnap) UnmarshalJSON(b []byte) error {
 	*h = hostSnap(aux.plain)
 	h.CPUPercent, h.Load1, h.Load5, h.Load15 = aux.CPUPercent, aux.Load1, aux.Load5, aux.Load15
 	h.MemTotalMi, h.MemUsedMi, h.SwapTotalMi, h.SwapUsedMi = aux.MemTotalMi, aux.MemUsedMi, aux.SwapTotalMi, aux.SwapUsedMi
+	h.NetRxKBps, h.NetTxKBps = aux.NetRxKBps, aux.NetTxKBps
 	return nil
 }
 
 func writeHostText(b *strings.Builder, at time.Time, h *hostSnap) {
 	fmt.Fprintf(b, "Snapshot taken %s. Host %s, %s, kernel %s, %s, %d cores, up %dh.\n",
 		at.Format(time.RFC3339), h.Hostname, orDash(h.OS), orDash(h.Kernel), orDash(h.Arch), h.CPUCores, h.UptimeSec/3600)
-	fmt.Fprintf(b, "CPU %.1f%%. Load %.2f / %.2f / %.2f. Memory %d of %d MiB used. Swap %d of %d MiB.\n",
-		h.CPUPercent, h.Load1, h.Load5, h.Load15, h.MemUsedMi, h.MemTotalMi, h.SwapUsedMi, h.SwapTotalMi)
+	fmt.Fprintf(b, "CPU %.1f%%. Load %.2f / %.2f / %.2f. Memory %d of %d MiB used. Swap %d of %d MiB. Network in %.1f KB/s, out %.1f KB/s.\n",
+		h.CPUPercent, h.Load1, h.Load5, h.Load15, h.MemUsedMi, h.MemTotalMi, h.SwapUsedMi, h.SwapTotalMi, h.NetRxKBps, h.NetTxKBps)
+	if len(h.GPUs) > 0 {
+		b.WriteString("\nGPUs (index name util% memUsed/total MiB temp°C power W):\n")
+		for _, g := range h.GPUs {
+			fmt.Fprintf(b, "- %d %s %.0f%% %d/%d %.0f %.0f\n", g.Index, g.Name, g.UtilPercent, g.MemUsedMi, g.MemTotalMi, g.TempC, g.PowerW)
+		}
+	}
 	b.WriteString("\nDisks (mount fs used/size MiB):\n")
 	for _, d := range h.Disks {
 		fmt.Fprintf(b, "- %s %s %d/%d\n", d.Mount, d.FS, d.UsedMi, d.TotalMi)
 	}
-	b.WriteString("\nTop processes (name pid user cpu%% memMiB):\n")
+	b.WriteString("\nTop processes (name pid user cpu% memMiB):\n")
 	for _, p := range h.Processes {
 		fmt.Fprintf(b, "- %s %d %s %.1f %d\n", p.Name, p.PID, p.User, p.CPUPercent, p.MemMi)
 	}
@@ -559,5 +579,74 @@ func writeHostText(b *strings.Builder, at time.Time, h *hostSnap) {
 		for _, l := range logs {
 			fmt.Fprintf(b, "- %s %s: %s\n", l.Time.Format(time.RFC3339), l.Unit, l.Message)
 		}
+	}
+}
+
+// serverHistory is the part of the control plane's metric history the AI uses.
+type serverHistory struct {
+	Points []struct {
+		T                                             time.Time
+		CPU, CPUMax, Mem, MemMax, Disk, Load, LoadMax float64
+	} `json:"points"`
+	GPUs []struct {
+		Index  int
+		Name   string
+		Points []struct{ Util, UtilMax, Mem, Temp, TempMax float64 } `json:"points"`
+	} `json:"gpus"`
+}
+
+// writeServerTrend adds a 7-day summary (average, peak and when) so the AI can
+// answer "was it busy last night?" without the raw series.
+func (a *app) writeServerTrend(b *strings.Builder, tenant, id string) {
+	code, data, err := a.cpDo("GET", "/api/v1/clusters/"+url.PathEscape(id)+"/metrics?range=7d&tenantId="+url.QueryEscape(tenant), nil)
+	if err != nil || code != 200 {
+		return
+	}
+	var h serverHistory
+	if json.Unmarshal(data, &h) != nil || len(h.Points) == 0 {
+		return
+	}
+	writeTrendText(b, h)
+}
+
+func writeTrendText(b *strings.Builder, h serverHistory) {
+	type agg struct {
+		sum, peak float64
+		at        time.Time
+	}
+	var cpu, mem, disk, load agg
+	add := func(a *agg, avg, peak float64, t time.Time) {
+		a.sum += avg
+		if peak >= a.peak {
+			a.peak, a.at = peak, t
+		}
+	}
+	for _, p := range h.Points {
+		add(&cpu, p.CPU, p.CPUMax, p.T)
+		add(&mem, p.Mem, p.MemMax, p.T)
+		add(&disk, p.Disk, p.Disk, p.T)
+		add(&load, p.Load, p.LoadMax, p.T)
+	}
+	n := float64(len(h.Points))
+	first, last := h.Points[0].T, h.Points[len(h.Points)-1].T
+	fmt.Fprintf(b, "\nHistory %s to %s (30-minute buckets, average / peak at time):\n", first.Format(time.RFC3339), last.Format(time.RFC3339))
+	fmt.Fprintf(b, "- CPU %.0f%% / %.0f%% at %s\n", cpu.sum/n, cpu.peak, cpu.at.Format(time.RFC3339))
+	fmt.Fprintf(b, "- Memory %.0f%% / %.0f%% at %s\n", mem.sum/n, mem.peak, mem.at.Format(time.RFC3339))
+	fmt.Fprintf(b, "- Fullest disk %.0f%% / %.0f%% at %s (now %.0f%%)\n", disk.sum/n, disk.peak, disk.at.Format(time.RFC3339), h.Points[len(h.Points)-1].Disk)
+	fmt.Fprintf(b, "- Load %.2f / %.2f at %s\n", load.sum/n, load.peak, load.at.Format(time.RFC3339))
+	for _, g := range h.GPUs {
+		if len(g.Points) == 0 {
+			continue
+		}
+		var util, temp float64
+		var peakUtil, peakTemp float64
+		for _, p := range g.Points {
+			util += p.Util
+			temp += p.Temp
+			peakUtil = max(peakUtil, p.UtilMax)
+			peakTemp = max(peakTemp, p.TempMax)
+		}
+		gn := float64(len(g.Points))
+		fmt.Fprintf(b, "- GPU %d %s: utilization %.0f%% / %.0f%%, temperature %.0f / %.0f°C\n", g.Index, g.Name, util/gn, peakUtil, temp/gn, peakTemp)
 	}
 }

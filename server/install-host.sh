@@ -2,6 +2,7 @@
 # Clusterheart host agent installer.
 #
 #   curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh | sudo sh -s -- --id <server-id> --token <token>
+#   curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh | sudo sh -s -- --update
 #   curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh | sudo sh -s -- --uninstall
 #
 # Installs a small read-only agent that runs as its own unprivileged user,
@@ -14,6 +15,7 @@ BIN_BASE="https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/sre"
 ID=""
 TOKEN=""
 UNINSTALL=""
+UPDATE=""
 SERVICE=clusterheart-host-agent
 BIN=/usr/local/bin/clusterheart-host-agent
 ENV_FILE=/etc/clusterheart/host-agent.env
@@ -25,6 +27,7 @@ while [ $# -gt 0 ]; do
     --token) TOKEN="$2"; shift 2 ;;
     --url) CP_URL="$2"; shift 2 ;;
     --uninstall) UNINSTALL=1; shift ;;
+    --update) UPDATE=1; shift ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -48,26 +51,52 @@ if [ -n "$UNINSTALL" ]; then
   exit 0
 fi
 
-if [ -z "$ID" ] || [ -z "$TOKEN" ]; then
-  echo "Usage: install-host.sh --id <server-id> --token <token>  (copy the command from the dashboard)" >&2
-  exit 1
-fi
-
 case "$(uname -m)" in
   x86_64|amd64) ARCH=amd64 ;;
   aarch64|arm64) ARCH=arm64 ;;
   *) echo "Unsupported CPU architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-echo "Downloading the Clusterheart host agent ($ARCH)..."
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$BIN_BASE/clusterheart-host-agent-linux-$ARCH" -o "$TMP"
-else
-  wget -qO "$TMP" "$BIN_BASE/clusterheart-host-agent-linux-$ARCH"
+download_agent() {
+  echo "Downloading the Clusterheart host agent ($ARCH)..."
+  TMP="$(mktemp)"
+  trap 'rm -f "$TMP"' EXIT
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$BIN_BASE/clusterheart-host-agent-linux-$ARCH" -o "$TMP"
+  else
+    wget -qO "$TMP" "$BIN_BASE/clusterheart-host-agent-linux-$ARCH"
+  fi
+  install -m 0755 "$TMP" "$BIN"
+}
+
+check_running() {
+  sleep 2
+  if systemctl is-active --quiet "$SERVICE"; then
+    echo "$1"
+  else
+    echo "The agent did not start. Check: journalctl -u $SERVICE -n 50" >&2
+    exit 1
+  fi
+}
+
+# --update: newest agent, same server id and token.
+if [ -n "$UPDATE" ]; then
+  if [ ! -f "$ENV_FILE" ]; then
+    echo "The agent is not installed on this server. Use the install command from the dashboard." >&2
+    exit 1
+  fi
+  download_agent
+  systemctl restart "$SERVICE"
+  check_running "Clusterheart host agent updated and running."
+  exit 0
 fi
-install -m 0755 "$TMP" "$BIN"
+
+if [ -z "$ID" ] || [ -z "$TOKEN" ]; then
+  echo "Usage: install-host.sh --id <server-id> --token <token>  (copy the command from the dashboard)" >&2
+  exit 1
+fi
+
+download_agent
 
 # Unprivileged user; the journal groups let it read system logs.
 if ! id clusterheart >/dev/null 2>&1; then
@@ -120,10 +149,4 @@ EOF
 systemctl daemon-reload
 systemctl enable "$SERVICE" >/dev/null 2>&1
 systemctl restart "$SERVICE"
-sleep 2
-if systemctl is-active --quiet "$SERVICE"; then
-  echo "Clusterheart host agent is running. This server will show as Connected within a minute."
-else
-  echo "The agent did not start. Check: journalctl -u $SERVICE -n 50" >&2
-  exit 1
-fi
+check_running "Clusterheart host agent is running. This server will show as Connected within a minute."

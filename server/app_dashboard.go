@@ -293,6 +293,22 @@ func (a *app) handleAppClusterUsage(w http.ResponseWriter, r *http.Request) {
 	cpRelay(w, code, data, err)
 }
 
+// handleAppServerMetrics returns a server's downsampled history (CPU, memory,
+// disk, load, network, GPUs) for the Timeline charts:
+// GET /api/app/clusters/{id}/metrics?range=1h|24h|7d.
+func (a *app) handleAppServerMetrics(w http.ResponseWriter, r *http.Request) {
+	_, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	rg := r.URL.Query().Get("range")
+	if rg != "1h" && rg != "24h" && rg != "7d" {
+		rg = "7d"
+	}
+	code, data, err := a.cpDo("GET", "/api/v1/clusters/"+url.PathEscape(r.PathValue("id"))+"/metrics?range="+rg+"&tenantId="+url.QueryEscape(tenant), nil)
+	cpRelay(w, code, data, err)
+}
+
 // appSREUser gates the SRE endpoints the same way as the cluster ones and
 // returns the caller's tenant.
 func (a *app) appSREUser(w http.ResponseWriter, r *http.Request) (*User, string, bool) {
@@ -656,7 +672,8 @@ async function load(){
         var hs=L.host,dk=hs?fullestDisk(hs):null;
         metrics='<div class="cl-metric"><b>'+(hs?Math.round(hs.cpuPercent)+'%':'—')+'</b><span>CPU</span></div>'+
           '<div class="cl-metric"><b>'+(hs?pctOf(hs.memUsedMi,hs.memTotalMi)+'%':'—')+'</b><span>Memory</span></div>'+
-          '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk'+fbadge(hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0)+'</span></div>';
+          '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk'+fbadge(hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0)+'</span></div>'+
+          (hs&&(hs.gpus||[]).length?'<div class="cl-metric"><b>'+Math.round(hs.gpus.reduce(function(a,g){return a+(g.utilPercent||0);},0)/hs.gpus.length)+'%</b><span>GPU ×'+hs.gpus.length+'</span></div>':'');
       }
       html+='<div class="cl-card">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a><div class="cl-env">'+(c.kind==='server'?'Server':'Kubernetes')+(c.environment?' · '+esc(c.environment):'')+'</div></div>'+
@@ -923,15 +940,18 @@ function renderServerDetail(c,html,box){
     return;
   }
   var memP=pctOf(h.memUsedMi,h.memTotalMi),dk=fullestDisk(h),dkP=dk?pctOf(dk.usedMi,dk.totalMi):0,perCore=h.cpuCores?h.load5/h.cpuCores:0;
+  var gpus=h.gpus||[],gpuAvg=gpus.length?gpus.reduce(function(a,g){return a+(g.utilPercent||0);},0)/gpus.length:0;
   html+='<div class="statgrid">'+
     stat('CPU','<span class="pill '+sevClass(h.cpuPercent,80,90)+'" style="font-size:inherit">'+Math.round(h.cpuPercent)+'%</span>',h.cpuCores+' cores')+
     stat('Memory','<span class="pill '+sevClass(memP,80,90)+'" style="font-size:inherit">'+memP+'%</span>',fmtMem(h.memUsedMi)+' of '+fmtMem(h.memTotalMi))+
     stat('Disk',dk?'<span class="pill '+sevClass(dkP,80,90)+'" style="font-size:inherit">'+dkP+'%</span>':'—',dk?esc(dk.mount)+' (fullest)':'no disks reported')+
     stat('Load',(h.load5||0).toFixed(2),perCore.toFixed(2)+' per core (5 min)')+
+    (gpus.length?stat('GPU',Math.round(gpuAvg)+'%',gpus.length+' × '+esc(gpus[0].name)+' · average use'):'')+
   '</div>';
   var probs=h.problems||[],secrets=L.secretFindings||[];
   html+='<div class="tabs" role="tablist">'+
     '<button class="tab active" data-tab="overview">Overview</button>'+
+    '<button class="tab" data-tab="timeline">Timeline</button>'+
     '<button class="tab" data-tab="health">Health'+(probs.length?' <span class="tab-badge">'+probs.length+'</span>':'')+'</button>'+
     '<button class="tab" data-tab="secrets">Secrets'+(secrets.length?' <span class="tab-badge">'+secrets.length+'</span>':'')+'</button>'+
     '<button class="tab" data-tab="ai">AI</button>'+
@@ -943,6 +963,16 @@ function renderServerDetail(c,html,box){
     row('Architecture',esc(h.arch||'-'))+row('Uptime',fmtUptime(h.uptimeSec))+
     (h.swapTotalMi?row('Swap',fmtMem(h.swapUsedMi)+' of '+fmtMem(h.swapTotalMi)):'')+
   '</div></div></section>';
+  if(gpus.length){
+    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">GPUs ('+gpus.length+')</p></div><div class="tscroll"><table class="users ptable"><thead><tr><th>GPU</th><th>Use</th><th>Memory</th><th>Temp</th><th>Power</th></tr></thead><tbody>'+
+      gpus.map(function(g){var mp=pctOf(g.memUsedMi,g.memTotalMi);
+        return '<tr><td><div class="u-name pod-name">'+esc(g.name)+'</div><div class="u-email">GPU '+g.index+' · '+(g.vendor==='amd'?'AMD':'NVIDIA')+'</div></td>'+
+          '<td class="u-time">'+Math.round(g.utilPercent||0)+'%</td>'+
+          '<td class="u-time">'+fmtMem(g.memUsedMi)+' of '+fmtMem(g.memTotalMi)+' <span class="u-email">'+mp+'%</span></td>'+
+          '<td>'+(g.tempC?'<span class="pill '+sevClass(g.tempC,85,92)+'">'+Math.round(g.tempC)+'°C</span>':'—')+'</td>'+
+          '<td class="u-time">'+(g.powerW?Math.round(g.powerW)+' W'+(g.powerLimitW?' of '+Math.round(g.powerLimitW)+' W':''):'—')+'</td></tr>';}).join('')+
+      '</tbody></table></div></section>';
+  }
   if((h.disks||[]).length){
     ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Disks</p></div><div class="tscroll"><table class="users ptable"><thead><tr><th>Mount</th><th>Type</th><th>Used</th><th>Size</th><th>Full</th></tr></thead><tbody>'+
       h.disks.map(function(d){var p=pctOf(d.usedMi,d.totalMi);return '<tr><td><span class="u-name" style="font-size:13.5px">'+esc(d.mount)+'</span></td><td class="u-email">'+esc(d.fs)+'</td><td class="u-time">'+fmtMem(d.usedMi)+'</td><td class="u-time">'+fmtMem(d.totalMi)+'</td><td><span class="pill '+sevClass(p,80,90)+'">'+p+'%</span></td></tr>';}).join('')+
@@ -969,6 +999,7 @@ function renderServerDetail(c,html,box){
   }
   if(!he)he='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">Healthy.</span> No problems or errors reported.</p></div></section>';
   html+='<div class="tabpanel active" data-panel="overview">'+ov+'</div>'+
+    '<div class="tabpanel" data-panel="timeline"><div id="tl-root"></div></div>'+
     '<div class="tabpanel" data-panel="health">'+he+'</div>'+
     '<div class="tabpanel" data-panel="secrets">'+secretsSection(secrets,c)+'</div>'+
     '<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>';
@@ -979,11 +1010,253 @@ function renderServerDetail(c,html,box){
     _activeTab=t.dataset.tab;
     document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('active',x===t);});
     document.querySelectorAll('.tabpanel').forEach(function(pnl){pnl.classList.toggle('active',pnl.dataset.panel===t.dataset.tab);});
+    if(t.dataset.tab==='timeline')loadTimeline(id);
   });});
   var keep=document.querySelector('.tab[data-tab="'+_activeTab+'"]');
   if(keep&&_activeTab!=='overview')keep.click();
   document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
 }
+
+// ---------- Server timeline ----------
+// A week of history from the control plane (MongoDB time-series): one small
+// chart per measure, one shared range picker above them, a hover crosshair,
+// and a table view with every value.
+var tlState={cluster:null,range:'7d',data:null,table:false,seq:0,charts:[]};
+var TL_RANGES=[['1h','1 hour'],['24h','24 hours'],['7d','7 days']];
+var TL_MAX_SERIES=8;
+function tlColor(i){return 'var(--s'+(i+1)+')';}
+function tlPct(v){return v==null?'—':(v>0&&v<10?v.toFixed(1):Math.round(v))+'%';}
+function tlRate(v){if(v==null)return '—';if(v>=1024)return (v/1024).toFixed(v>=10240?0:1)+' MB/s';return (v>=10?Math.round(v):v.toFixed(1))+' KB/s';}
+function tlLoad(v){return v==null?'—':v.toFixed(2);}
+function tlTemp(v){return v==null||!v?'—':Math.round(v)+'°C';}
+function tlMap(arr,key,peak){return (arr||[]).map(function(p){return {t:new Date(p.t).getTime(),v:p[key]||0,pk:peak?(p[peak]||0):null};});}
+function tlAny(series){return series.some(function(s){return s.pts.some(function(p){return p.v>0;});});}
+function tlAxPct(v){return Math.round(v)+'%';}
+function tlAxNum(v){return String(+v.toFixed(2));}
+function tlAxRate(v){return v===0?'0':tlRate(v);}
+function tlAxTemp(v){return Math.round(v)+'°C';}
+// Rates get round numbers in the unit they are shown in (KB/s or MB/s).
+function tlNiceRate(m){return m>=1024?tlNice(m/1024)*1024:tlNice(m);}
+function tlNice(m){if(m<=0)return 1;var e=Math.pow(10,Math.floor(Math.log10(m))),f=m/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e;}
+function tlTimeLabel(t,range){
+  var d=new Date(t);
+  if(range==='7d')return d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'})+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(range==='24h'?' · '+d.toLocaleDateString([],{weekday:'short'}):'');
+}
+function tlTicks(from,to,range){
+  var out=[],d=new Date(from);
+  if(range==='7d'){
+    d.setHours(0,0,0,0);d.setDate(d.getDate()+1);
+    for(;d.getTime()<to;d.setDate(d.getDate()+1))out.push({t:d.getTime(),l:d.toLocaleDateString([],{weekday:'short',day:'numeric'})});
+  }else{
+    var stepMin=range==='24h'?240:15;
+    d.setSeconds(0,0);
+    var mins=d.getHours()*60+d.getMinutes(),next=Math.ceil((mins+1)/stepMin)*stepMin;
+    d.setHours(0,next,0,0);
+    for(;d.getTime()<to;d=new Date(d.getTime()+stepMin*60000))out.push({t:d.getTime(),l:d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+  }
+  return out;
+}
+
+// tlCharts turns the history into chart specs; measures with no data are left out.
+function tlCharts(d){
+  var P=d.points||[],G=(d.gpus||[]).slice(0,TL_MAX_SERIES),out=[];
+  out.push({id:'cpu',title:'CPU',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'CPU',pts:tlMap(P,'cpu','cpuMax')}]});
+  out.push({id:'mem',title:'Memory',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'Memory',pts:tlMap(P,'mem','memMax')}]});
+  out.push({id:'disk',title:'Disk',sub:'fullest',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'Disk',pts:tlMap(P,'disk')}]});
+  out.push({id:'load',title:'Load',sub:'5 min',fmt:tlLoad,axis:tlAxNum,series:[{name:'Load',pts:tlMap(P,'load','loadMax')}]});
+  var net=[{name:'In',pts:tlMap(P,'rx','rxMax')},{name:'Out',pts:tlMap(P,'tx','txMax')}];
+  if(tlAny(net))out.push({id:'net',title:'Network',fmt:tlRate,axis:tlAxRate,nice:tlNiceRate,series:net});
+  if(G.length){
+    var gs=function(key,peak){return G.map(function(g){return {name:'GPU '+g.index,full:g.name,pts:tlMap(g.points,key,peak)};});};
+    out.push({id:'gutil',title:'GPU utilization',fmt:tlPct,axis:tlAxPct,max:100,series:gs('util','utilMax')});
+    out.push({id:'gmem',title:'GPU memory',fmt:tlPct,axis:tlAxPct,max:100,series:gs('mem','memMax')});
+    var temp=gs('temp','tempMax');
+    if(tlAny(temp))out.push({id:'gtemp',title:'GPU temperature',fmt:tlTemp,axis:tlAxTemp,series:temp});
+  }
+  out.forEach(function(ch){
+    var seen={};ch.times=[];
+    ch.series.forEach(function(s){s.pts.forEach(function(p){if(!seen[p.t]){seen[p.t]=1;ch.times.push(p.t);}});});
+    ch.times.sort(function(a,b){return a-b;});
+  });
+  return out;
+}
+
+var TL_H=176,TL_PAD={r:12,t:12,b:26};
+function tlGeom(ch,W,from,to){
+  var max=ch.max;
+  if(!max){var m=0;ch.series.forEach(function(s){s.pts.forEach(function(p){m=Math.max(m,p.v,p.pk||0);});});max=(ch.nice||tlNice)(m*1.05);}
+  // The left margin fits the widest y-axis label.
+  var widest=Math.max.apply(null,[0,0.5,1].map(function(f){return ch.axis(max*f).length;}));
+  var padL=Math.max(30,Math.round(12+widest*6.6));
+  var pw=W-padL-TL_PAD.r,ph=TL_H-TL_PAD.t-TL_PAD.b;
+  return {W:W,max:max,pw:pw,ph:ph,from:from,to:to,padL:padL,
+    x:function(t){return padL+(t-from)/(to-from)*pw;},
+    y:function(v){return TL_PAD.t+ph-Math.min(Math.max(v,0),max)/max*ph;}};
+}
+
+function tlSvg(ch,g,range,step){
+  var base=TL_PAD.t+g.ph,svg='<svg width="'+g.W+'" height="'+TL_H+'" viewBox="0 0 '+g.W+' '+TL_H+'" aria-hidden="true">';
+  [0,0.5,1].forEach(function(f){
+    var v=g.max*f,yy=g.y(v).toFixed(1);
+    svg+='<line class="tl-gl'+(f===0?' tl-base':'')+'" x1="'+g.padL+'" x2="'+(g.W-TL_PAD.r)+'" y1="'+yy+'" y2="'+yy+'"/>'+
+      '<text class="tl-ax" x="'+(g.padL-8)+'" y="'+yy+'" text-anchor="end" dominant-baseline="middle">'+esc(ch.axis(v))+'</text>';
+  });
+  var ticks=tlTicks(g.from,g.to,range),minGap=range==='7d'?44:40,lastX=-1e9;
+  ticks.forEach(function(tk){
+    var xx=g.x(tk.t);
+    if(xx<g.padL+16||xx>g.W-TL_PAD.r-16||xx-lastX<minGap)return;
+    lastX=xx;
+    svg+='<text class="tl-ax" x="'+xx.toFixed(1)+'" y="'+(TL_H-8)+'" text-anchor="middle">'+esc(tk.l)+'</text>';
+  });
+  var gap=step*1.5,single=ch.series.length===1;
+  ch.series.forEach(function(s,i){
+    var segs=[],cur=[];
+    s.pts.forEach(function(p){if(cur.length&&p.t-cur[cur.length-1].t>gap){segs.push(cur);cur=[];}cur.push(p);});
+    if(cur.length)segs.push(cur);
+    var col=tlColor(i);
+    segs.forEach(function(seg){
+      var d=seg.map(function(p,j){return (j?'L':'M')+g.x(p.t).toFixed(1)+' '+g.y(p.v).toFixed(1);}).join('');
+      if(seg.length===1){svg+='<circle cx="'+g.x(seg[0].t).toFixed(1)+'" cy="'+g.y(seg[0].v).toFixed(1)+'" r="2.5" fill="'+col+'"/>';return;}
+      if(single)svg+='<path d="'+d+'L'+g.x(seg[seg.length-1].t).toFixed(1)+' '+base+'L'+g.x(seg[0].t).toFixed(1)+' '+base+'Z" fill="'+col+'" fill-opacity=".1" stroke="none"/>';
+      svg+='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    });
+    var last=s.pts[s.pts.length-1];
+    if(last)svg+='<circle class="tl-end" cx="'+g.x(last.t).toFixed(1)+'" cy="'+g.y(last.v).toFixed(1)+'" r="4" fill="'+col+'"/>';
+  });
+  svg+='<g class="tl-hover" visibility="hidden"><line class="tl-cross" x1="0" x2="0" y1="'+TL_PAD.t+'" y2="'+base+'"/>'+
+    ch.series.map(function(s,i){return '<circle class="tl-hdot" r="4" fill="'+tlColor(i)+'"/>';}).join('')+'</g>';
+  return svg+'</svg>';
+}
+
+function tlLast(s){return s.pts.length?s.pts[s.pts.length-1]:null;}
+function tlPeak(s){var m=null;s.pts.forEach(function(p){var v=p.pk!=null?p.pk:p.v;if(m==null||v>m)m=v;});return m;}
+
+function tlCardHtml(ch,ci,W,from,to,range,step){
+  var g=tlGeom(ch,W,from,to),one=ch.series.length===1,s0=ch.series[0],last=tlLast(s0);
+  var sum=one&&last?'<p class="tl-sum"><b>'+esc(ch.fmt(last.v))+'</b> now · peak <b>'+esc(ch.fmt(tlPeak(s0)))+'</b></p>':'';
+  var legend='';
+  if(!one){
+    legend='<div class="tl-legend">'+ch.series.map(function(s,i){var l=tlLast(s);
+      return '<span class="tl-li" title="'+esc(s.full||s.name)+'"><span class="tl-key" style="background:'+tlColor(i)+'"></span>'+esc(s.name)+(s.full?' <span class="tl-li-sub">'+esc(s.full)+'</span>':'')+(l?' <b>'+esc(ch.fmt(l.v))+'</b>':'')+'</span>';}).join('')+'</div>';
+  }
+  var label=ch.title+' over the last '+(range==='7d'?'7 days':range==='24h'?'24 hours':'hour')+(one&&last?', now '+ch.fmt(last.v)+', peak '+ch.fmt(tlPeak(s0)):'')+'. Use the arrow keys to read values.';
+  return '<section class="card2 tl-card"><div class="card2-head tl-head"><p class="card2-title">'+esc(ch.title)+(ch.sub?' <span class="tl-title-sub">'+esc(ch.sub)+'</span>':'')+'</p>'+sum+'</div>'+
+    '<div class="tl-chart" data-ci="'+ci+'" tabindex="0" role="img" aria-label="'+esc(label)+'">'+tlSvg(ch,g,range,step)+'<div class="tl-tip" hidden></div></div>'+legend+'</section>';
+}
+
+function tlTableHtml(d,charts){
+  var cols=[];
+  charts.forEach(function(ch){ch.series.forEach(function(s){cols.push({h:ch.series.length===1?ch.title:ch.title.replace('GPU ','')+' · '+s.name,fmt:ch.fmt,pts:s.pts});});});
+  var byT={};
+  cols.forEach(function(c,ci){c.pts.forEach(function(p){(byT[p.t]=byT[p.t]||{})[ci]=p;});});
+  var times=Object.keys(byT).map(Number).sort(function(a,b){return b-a;});
+  var html='<section class="card2"><div class="tscroll tl-tscroll"><table class="users ptable tl-table"><thead><tr><th>Time</th>'+cols.map(function(c){return '<th>'+esc(c.h)+'</th>';}).join('')+'</tr></thead><tbody>';
+  times.forEach(function(t){
+    html+='<tr><td class="u-time" style="white-space:nowrap">'+esc(tlTimeLabel(t,tlState.range))+'</td>'+cols.map(function(c,ci){var p=byT[t][ci];
+      return '<td class="u-time tl-num">'+(p?esc(c.fmt(p.v))+(p.pk!=null&&p.pk>p.v?' <span class="u-email">(peak '+esc(c.fmt(p.pk))+')</span>':''):'—')+'</td>';}).join('')+'</tr>';
+  });
+  return html+'</tbody></table></div></section>';
+}
+
+function tlRender(){
+  var root=document.getElementById('tl-root');
+  if(!root)return;
+  var d=tlState.data;
+  var bar='<div class="tl-bar"><div class="tl-ranges" role="group" aria-label="Time range">'+
+    TL_RANGES.map(function(r){return '<button class="tl-range'+(tlState.range===r[0]?' on':'')+'" data-r="'+r[0]+'" aria-pressed="'+(tlState.range===r[0])+'">'+r[1]+'</button>';}).join('')+
+    '</div><button class="tl-view" aria-pressed="'+tlState.table+'">'+(tlState.table?'Charts':'Table')+'</button></div>';
+  if(!d){root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Loading history…</p></div></section>';tlWireBar(root);return;}
+  if(d.error){root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Could not load history'+(d.error?': '+esc(d.error):'')+'.</p></div></section>';tlWireBar(root);return;}
+  if(!(d.points||[]).length){
+    root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No history yet. It fills in as the agent reports, every 30 seconds, and keeps 7 days.</p></div></section>';
+    tlWireBar(root);return;
+  }
+  var charts=tlCharts(d);tlState.charts=charts;
+  var from=new Date(d.from).getTime(),to=new Date(d.to).getTime(),step=(d.stepSec||60)*1000;
+  if(tlState.table){root.innerHTML=bar+tlTableHtml(d,charts);tlWireBar(root);return;}
+  root.innerHTML=bar+'<div class="tl-grid"></div>';
+  var grid=root.querySelector('.tl-grid');
+  // Measure the card's inner width once the grid is in the page.
+  grid.innerHTML='<section class="card2 tl-card"><div class="tl-chart tl-probe"></div></section>';
+  var W=Math.max(260,Math.floor(grid.querySelector('.tl-probe').clientWidth));
+  grid.innerHTML=charts.map(function(ch,ci){return tlCardHtml(ch,ci,W,from,to,tlState.range,step);}).join('');
+  tlWireBar(root);
+  grid.querySelectorAll('.tl-chart').forEach(function(el){tlWireHover(el,charts[+el.dataset.ci],tlGeom(charts[+el.dataset.ci],W,from,to));});
+}
+
+function tlWireBar(root){
+  root.querySelectorAll('.tl-range').forEach(function(b){b.addEventListener('click',function(){
+    if(tlState.range===b.dataset.r)return;
+    tlState.range=b.dataset.r;
+    root.querySelectorAll('.tl-range').forEach(function(x){x.classList.toggle('on',x===b);x.setAttribute('aria-pressed',x===b);});
+    loadTimeline(tlState.cluster);
+  });});
+  var v=root.querySelector('.tl-view');
+  if(v)v.addEventListener('click',function(){tlState.table=!tlState.table;tlRender();});
+}
+
+function tlWireHover(el,ch,g){
+  var hover=el.querySelector('.tl-hover'),cross=el.querySelector('.tl-cross'),dots=el.querySelectorAll('.tl-hdot'),tip=el.querySelector('.tl-tip'),idx=-1;
+  function show(i){
+    if(i<0||i>=ch.times.length)return;
+    idx=i;var t=ch.times[i],xx=g.x(t);
+    cross.setAttribute('x1',xx);cross.setAttribute('x2',xx);
+    var rows='';
+    ch.series.forEach(function(s,si){
+      var p=null;for(var k=0;k<s.pts.length;k++){if(s.pts[k].t===t){p=s.pts[k];break;}}
+      var dot=dots[si];
+      if(p){dot.setAttribute('cx',xx);dot.setAttribute('cy',g.y(p.v));dot.setAttribute('visibility','visible');}else dot.setAttribute('visibility','hidden');
+      rows+='<div class="tl-row"><span class="tl-key" style="background:'+tlColor(si)+'"></span><b>'+(p?esc(ch.fmt(p.v)):'—')+'</b> <span class="tl-sn">'+esc(s.name)+'</span>'+
+        (p&&p.pk!=null&&p.pk>p.v?' <span class="tl-pk">peak '+esc(ch.fmt(p.pk))+'</span>':'')+'</div>';
+    });
+    tip.innerHTML='<div class="tl-tt">'+esc(tlTimeLabel(t,tlState.range))+'</div>'+rows;
+    hover.setAttribute('visibility','visible');tip.hidden=false;
+    var tw=tip.offsetWidth,left=xx+14;
+    if(left+tw>g.W-4)left=xx-14-tw;
+    tip.style.left=Math.max(4,left)+'px';
+  }
+  function hide(){hover.setAttribute('visibility','hidden');tip.hidden=true;idx=-1;}
+  function nearest(px){
+    var t=g.from+(px-g.padL)/g.pw*(g.to-g.from),best=0,bd=Infinity;
+    for(var i=0;i<ch.times.length;i++){var dd=Math.abs(ch.times[i]-t);if(dd<bd){bd=dd;best=i;}}
+    return best;
+  }
+  el.addEventListener('pointermove',function(e){var r=el.getBoundingClientRect();show(nearest(e.clientX-r.left));});
+  el.addEventListener('pointerleave',hide);
+  el.addEventListener('focus',function(){show(ch.times.length-1);});
+  el.addEventListener('blur',hide);
+  el.addEventListener('keydown',function(e){
+    if(e.key==='ArrowLeft'){e.preventDefault();show(Math.max(0,(idx<0?ch.times.length:idx)-1));}
+    else if(e.key==='ArrowRight'){e.preventDefault();show(Math.min(ch.times.length-1,idx+1));}
+    else if(e.key==='Escape')hide();
+  });
+}
+
+// loadTimeline fetches the history. While it loads, the previous charts stay
+// on screen, dimmed, so the layout does not jump.
+async function loadTimeline(id){
+  if(!id)return;
+  if(tlState.cluster!==id){tlState.cluster=id;tlState.data=null;}
+  var root=document.getElementById('tl-root');
+  if(root&&!root.firstChild)tlRender();
+  if(root)root.classList.add('tl-loading');
+  var seq=++tlState.seq;
+  try{
+    var r=await fetch('/api/app/clusters/'+encodeURIComponent(id)+'/metrics?range='+encodeURIComponent(tlState.range),{headers:{'Accept':'application/json'}});
+    var d=await r.json().catch(function(){return {};});
+    if(seq!==tlState.seq)return;
+    tlState.data=r.ok?d:{error:d.error||('HTTP '+r.status)};
+  }catch(e){if(seq!==tlState.seq)return;tlState.data={error:'network error'};}
+  root=document.getElementById('tl-root');
+  if(root)root.classList.remove('tl-loading');
+  tlRender();
+}
+function tlVisible(){var p=document.querySelector('.tabpanel[data-panel="timeline"]');return !!(p&&p.classList.contains('active')&&!document.hidden);}
+var _tlResize=null;
+window.addEventListener('resize',function(){clearTimeout(_tlResize);_tlResize=setTimeout(function(){if(tlVisible()&&tlState.data)tlRender();},150);});
+// Refresh once a minute while the Timeline is on screen.
+setInterval(function(){if(tlVisible())loadTimeline(tlState.cluster);},60000);
 
 // ---------- Rightsizing ----------
 // Per workload (namespace + owner, so history survives pod restarts and

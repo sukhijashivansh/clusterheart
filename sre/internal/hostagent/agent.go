@@ -15,7 +15,7 @@ import (
 )
 
 // Version is reported in heartbeats.
-const Version = "host-0.1.0"
+const Version = "host-0.2.0"
 
 const (
 	maxJournalLines = 2000 // per cycle
@@ -57,7 +57,12 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Drain so the connection is reused instead of a new TLS handshake
+		// for every request.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+	}()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("control plane %s -> %d: %s", path, resp.StatusCode, b)
@@ -76,16 +81,20 @@ type Agent struct {
 
 	sys     *sys
 	run     runFunc
+	gpus    *gpuReader
 	secrets *secretScanner
 	cursor  string
-	errLogs []contract.HostLogLine
-	buffer  []contract.ClusterSnapshot
+	// oldJournal is set once journalctl rejected --output-fields (systemd < 236).
+	oldJournal bool
+	errLogs    []contract.HostLogLine
+	buffer     []contract.ClusterSnapshot
 }
 
 // New builds an agent reading the real /proc, /etc, systemd and journal.
 func New(c *Client, interval time.Duration, log *slog.Logger) *Agent {
 	return &Agent{Client: c, Interval: interval, Log: log,
-		sys: &sys{proc: "/proc", etc: "/etc", statfs: statfsMi}, run: execRun, secrets: newSecretScanner()}
+		sys: &sys{proc: "/proc", etc: "/etc", sysfs: "/sys", statfs: statfsMi, uidOf: fileOwner}, run: execRun,
+		gpus: newGPUReader(execRun, "/sys"), secrets: newSecretScanner()}
 }
 
 // collect builds one snapshot.
@@ -93,8 +102,16 @@ func (a *Agent) collect(ctx context.Context, now time.Time) contract.ClusterSnap
 	h := a.sys.sample(now)
 	a.secrets.host = h.Hostname
 	h.FailedUnits = failedUnits(ctx, a.run)
+	var gpuProbs []contract.HostProblem
+	if a.gpus != nil {
+		h.GPUs, gpuProbs = a.gpus.read(ctx, now)
+	}
 
-	entries, cursor := readJournal(ctx, a.run, a.cursor)
+	entries, cursor, err := readJournal(ctx, a.run, a.cursor, !a.oldJournal)
+	if err != nil && !a.oldJournal {
+		a.oldJournal = true
+		entries, cursor, _ = readJournal(ctx, a.run, a.cursor, false)
+	}
 	a.cursor = cursor
 	for _, e := range entries {
 		if e.priority <= 3 { // emerg, alert, crit, err
@@ -115,7 +132,7 @@ func (a *Agent) collect(ctx context.Context, now time.Time) contract.ClusterSnap
 
 	a.secrets.recordJournal(entries, now)
 	a.secrets.scanUnitEnv(unitEnv(ctx, a.run), now)
-	h.Problems = problems(h)
+	h.Problems = append(problems(h), gpuProbs...)
 	return contract.ClusterSnapshot{CollectedAt: now.UTC(), Host: &h, SecretFindings: a.secrets.findings(now)}
 }
 

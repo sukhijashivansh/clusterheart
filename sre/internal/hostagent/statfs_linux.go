@@ -22,3 +22,12 @@ func statfsMi(path string) (totalMi, usedMi int64, err error) {
 	}
 	return total >> 20, used >> 20, nil
 }
+
+// fileOwner returns the uid owning path, or -1.
+func fileOwner(path string) int {
+	var st syscall.Stat_t
+	if syscall.Stat(path, &st) != nil {
+		return -1
+	}
+	return int(st.Uid)
+}

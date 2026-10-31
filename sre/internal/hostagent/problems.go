@@ -59,5 +59,5 @@ func problems(h contract.HostSnapshot) []contract.HostProblem {
 	if h.UptimeSec > 0 && h.UptimeSec < recentRebootSec {
 		add("RecentReboot", "medium", fmt.Sprintf("rebooted %d minutes ago", h.UptimeSec/60))
 	}
-	return out
+	return append(out, gpuProblems(h.GPUs)...)
 }

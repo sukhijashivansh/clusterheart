@@ -43,6 +43,8 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
   --accent:#0a0a0a;--accent2:#262626;--accent-ink:#ffffff;
   --active-bg:#ffffff;--hover:rgba(0,0,0,.05);--focus:rgba(0,0,0,.09);
   --green:#16a34a;--amber:#d97706;--red:#dc2626;
+  /* chart series, fixed order (validated for colour-blind separation) */
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948;
 }
 .dark{
   --bg:#000000;--panel:#000000;--surface2:#06090f;--input-bg:#0a0e16;
@@ -51,6 +53,7 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
   --accent:#8EC6FA;--accent2:#BBDDFC;--accent-ink:#04070F;
   --active-bg:#0e1726;--hover:rgba(142,198,250,.08);--focus:rgba(142,198,250,.18);
   --green:#4ade80;--amber:#fb923c;--red:#f87171;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
 }
 .logo-mark{transform-box:fill-box;transform-origin:center;cursor:pointer}
 [data-theme-logo]{cursor:pointer}
@@ -305,6 +308,42 @@ table.users tbody tr:hover{background:var(--hover)}
 .util-val.crit{color:var(--red)}
 .util-val.cap{color:var(--muted);font-weight:500}
 /* detail tabs (Pods / Nodes) */
+/* Server timeline */
+.tl-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;flex-wrap:wrap}
+.tl-ranges{display:inline-flex;border:1px solid var(--border);background:var(--surface2)}
+.tl-range,.tl-view{font:inherit;font-size:13px;font-weight:600;color:var(--muted);background:none;border:none;padding:7px 13px;cursor:pointer}
+.tl-range+.tl-range{border-left:1px solid var(--border)}
+.tl-range:hover,.tl-view:hover{color:var(--text);background:var(--hover)}
+.tl-range.on{color:var(--text);background:var(--active-bg);box-shadow:inset 0 -2px 0 var(--accent)}
+.tl-view{border:1px solid var(--border);background:var(--surface2)}
+.tl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.tl-grid .card2{margin:0}
+.tl-loading .tl-grid,.tl-loading .tl-tscroll{opacity:.5;transition:opacity .15s}
+.tl-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:14px 16px 10px;border-bottom:none}
+.tl-title-sub{font-weight:500;color:var(--faint);font-size:12.5px}
+.tl-sum{margin:0;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.tl-sum b{color:var(--text);font-weight:650}
+.tl-chart{position:relative;padding:0;outline:none;touch-action:pan-y;line-height:0}
+.tl-chart:focus-visible{box-shadow:inset 0 0 0 2px var(--focus)}
+.tl-chart svg{display:block}
+.tl-chart .tl-gl{stroke:var(--border);stroke-width:1;shape-rendering:crispEdges}
+.tl-chart .tl-base{stroke:var(--border-strong)}
+.tl-chart .tl-ax{fill:var(--faint);font-size:11px;font-variant-numeric:tabular-nums;font-family:inherit}
+.tl-chart .tl-cross{stroke:var(--muted);stroke-width:1;shape-rendering:crispEdges}
+.tl-chart .tl-hdot,.tl-chart .tl-end{stroke:var(--surface2);stroke-width:2}
+.tl-tip{position:absolute;top:8px;z-index:3;min-width:130px;padding:8px 10px;background:var(--bg);border:1px solid var(--border-strong);box-shadow:0 6px 20px rgba(0,0,0,.18);font-size:12.5px;line-height:1.45;pointer-events:none}
+.tl-tt{color:var(--muted);font-size:11.5px;margin-bottom:3px;white-space:nowrap}
+.tl-row{white-space:nowrap;color:var(--text)}
+.tl-row b{font-weight:650}
+.tl-sn{color:var(--muted)}
+.tl-pk{color:var(--faint)}
+.tl-key{display:inline-block;width:12px;height:2px;border-radius:1px;vertical-align:middle;margin-right:6px}
+.tl-legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 16px 14px;font-size:12.5px;color:var(--muted)}
+.tl-li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tl-li b{color:var(--text);font-weight:650}
+.tl-li-sub{color:var(--faint)}
+.tl-num{font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (max-width:900px){.tl-grid{grid-template-columns:minmax(0,1fr)}}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:4px 0 18px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .ai-log{max-height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}

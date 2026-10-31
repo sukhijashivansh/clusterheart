@@ -9,3 +9,5 @@ import "errors"
 func statfsMi(string) (int64, int64, error) {
 	return 0, 0, errors.New("statfs: unsupported platform")
 }
+
+func fileOwner(string) int { return -1 }

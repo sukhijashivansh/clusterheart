@@ -5,7 +5,6 @@
 package hostagent
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,14 +18,24 @@ import (
 // sys reads system state under configurable roots so tests can point it at a
 // fake /proc and /etc.
 type sys struct {
-	proc, etc string
-	statfs    func(path string) (totalMi, usedMi int64, err error)
+	proc, etc, sysfs string
+	statfs           func(path string) (totalMi, usedMi int64, err error)
+	// uidOf returns the owner of /proc/<pid> (the process's user). Tests fake it.
+	uidOf func(path string) int
 
 	prevCPU      cpuTimes
 	prevProcs    map[int]uint64 // pid -> utime+stime ticks
+	prevNet      netBytes
 	prevSampleAt time.Time
 	users        map[int]string
 }
+
+type netBytes struct{ rx, tx uint64 }
+
+// primeWait is how long the first sample waits so CPU usage is measured over
+// a window long enough for the 10ms tick resolution (a 0.5s window turned a
+// few ticks of the agent's own startup into "6% CPU").
+var primeWait = 5 * time.Second
 
 type cpuTimes struct{ total, idle uint64 }
 
@@ -39,18 +48,11 @@ const maxProcesses = 15
 var realFS = map[string]bool{"ext2": true, "ext3": true, "ext4": true, "xfs": true, "btrfs": true, "zfs": true, "f2fs": true, "vfat": true, "jfs": true, "reiserfs": true, "nfs": true, "nfs4": true}
 
 func readLines(path string) []string {
-	f, err := os.Open(path)
-	if err != nil {
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) == 0 {
 		return nil
 	}
-	defer f.Close()
-	var out []string
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), 1<<20)
-	for sc.Scan() {
-		out = append(out, sc.Text())
-	}
-	return out
+	return strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 }
 
 func readFirst(path string) string {
@@ -199,11 +201,12 @@ func (s *sys) userName(uid int) string {
 }
 
 // processes returns the busiest processes: CPU% since the previous sample
-// (percent of one core) and resident memory.
+// (percent of one core) and resident memory. It reads one small file per
+// process (/proc/<pid>/stat); the user comes from the directory's owner.
 func (s *sys) processes(now time.Time) []contract.HostProcess {
 	entries, _ := os.ReadDir(s.proc)
 	elapsed := now.Sub(s.prevSampleAt).Seconds()
-	cur := map[int]uint64{}
+	cur := make(map[int]uint64, len(s.prevProcs))
 	var out []contract.HostProcess
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
@@ -219,38 +222,27 @@ func (s *sys) processes(now time.Time) []contract.HostProcess {
 		}
 		name := stat[open+1 : close]
 		rest := strings.Fields(stat[close+1:])
-		if len(rest) < 13 {
+		if len(rest) < 22 {
 			continue
 		}
+		// rest[0] is field 3 (state): utime=14, stime=15, rss=24 (pages).
 		ut, _ := strconv.ParseUint(rest[11], 10, 64)
 		st, _ := strconv.ParseUint(rest[12], 10, 64)
+		rssPages, _ := strconv.ParseInt(rest[21], 10, 64)
 		ticks := ut + st
 		cur[pid] = ticks
-		var rssKB int64
-		uid := -1
-		for _, l := range readLines(filepath.Join(dir, "status")) {
-			if v, ok := strings.CutPrefix(l, "VmRSS:"); ok {
-				f := strings.Fields(v)
-				if len(f) > 0 {
-					rssKB, _ = strconv.ParseInt(f[0], 10, 64)
-				}
-			} else if v, ok := strings.CutPrefix(l, "Uid:"); ok {
-				f := strings.Fields(v)
-				if len(f) > 0 {
-					uid, _ = strconv.Atoi(f[0])
-				}
-			}
-		}
-		if rssKB == 0 { // kernel threads
+		if rssPages <= 0 { // kernel threads
 			continue
 		}
 		cpu := 0.0
 		if prev, ok := s.prevProcs[pid]; ok && elapsed > 0 && ticks >= prev {
 			cpu = float64(ticks-prev) / clockTicks / elapsed * 100
 		}
-		p := contract.HostProcess{PID: pid, Name: name, CPUPercent: round1(cpu), MemMi: rssKB / 1024}
-		if uid >= 0 {
-			p.User = s.userName(uid)
+		p := contract.HostProcess{PID: pid, Name: name, CPUPercent: round1(cpu), MemMi: rssPages * int64(pageSize) / (1 << 20)}
+		if s.uidOf != nil {
+			if uid := s.uidOf(dir); uid >= 0 {
+				p.User = s.userName(uid)
+			}
 		}
 		out = append(out, p)
 	}
@@ -267,6 +259,43 @@ func (s *sys) processes(now time.Time) []contract.HostProcess {
 	return out
 }
 
+var pageSize = os.Getpagesize()
+
+// virtualIface marks interfaces whose traffic is already counted on a
+// physical one (containers, bridges, VPN tunnels).
+func virtualIface(name string) bool {
+	if name == "lo" {
+		return true
+	}
+	for _, p := range []string{"veth", "docker", "br-", "cni", "flannel", "cali", "virbr", "vnet", "tun", "tap", "kube", "lxc", "vxlan", "wg"} {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// netTotals sums received and sent bytes over physical interfaces.
+func (s *sys) netTotals() netBytes {
+	var n netBytes
+	for _, l := range readLines(filepath.Join(s.proc, "net", "dev")) {
+		name, rest, ok := strings.Cut(l, ":")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		f := strings.Fields(rest)
+		if virtualIface(name) || len(f) < 9 {
+			continue
+		}
+		rx, _ := strconv.ParseUint(f[0], 10, 64)
+		tx, _ := strconv.ParseUint(f[8], 10, 64)
+		n.rx += rx
+		n.tx += tx
+	}
+	return n
+}
+
 func round1(v float64) float64 { return float64(int64(v*10+0.5)) / 10 }
 
 // sample fills the machine metrics of a host snapshot. CPU usage is measured
@@ -274,24 +303,32 @@ func round1(v float64) float64 { return float64(int64(v*10+0.5)) / 10 }
 func (s *sys) sample(now time.Time) contract.HostSnapshot {
 	if s.prevSampleAt.IsZero() {
 		s.prevCPU = s.cpuTimes()
+		s.prevNet = s.netTotals()
 		s.prevSampleAt = now
 		s.processes(now) // prime per-process counters
-		time.Sleep(500 * time.Millisecond)
-		now = now.Add(500 * time.Millisecond)
+		time.Sleep(primeWait)
+		now = now.Add(primeWait)
 	}
+	elapsed := now.Sub(s.prevSampleAt).Seconds()
 	cpu := s.cpuTimes()
 	pct := 0.0
 	if dt := cpu.total - s.prevCPU.total; cpu.total > s.prevCPU.total && dt > 0 {
 		pct = round1(100 * float64(dt-(cpu.idle-s.prevCPU.idle)) / float64(dt))
 	}
 	procs := s.processes(now)
-	s.prevCPU, s.prevSampleAt = cpu, now
+	net := s.netTotals()
+	var rxKBps, txKBps float64
+	if elapsed > 0 && net.rx >= s.prevNet.rx && net.tx >= s.prevNet.tx {
+		rxKBps = round1(float64(net.rx-s.prevNet.rx) / 1024 / elapsed)
+		txKBps = round1(float64(net.tx-s.prevNet.tx) / 1024 / elapsed)
+	}
+	s.prevCPU, s.prevNet, s.prevSampleAt = cpu, net, now
 	l1, l5, l15 := s.loadAvg()
 	memTotal, memUsed, swapTotal, swapUsed := s.memInfo()
 	return contract.HostSnapshot{
 		Hostname: s.hostname(), OS: s.osName(), Kernel: s.kernel(), Arch: goarch,
 		CPUCores: s.cpuCores(), CPUPercent: pct, Load1: l1, Load5: l5, Load15: l15,
 		MemTotalMi: memTotal, MemUsedMi: memUsed, SwapTotalMi: swapTotal, SwapUsedMi: swapUsed,
-		UptimeSec: s.uptime(), Disks: s.disks(), Processes: procs,
+		UptimeSec: s.uptime(), NetRxKBps: rxKBps, NetTxKBps: txKBps, Disks: s.disks(), Processes: procs,
 	}
 }
