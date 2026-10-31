@@ -777,11 +777,6 @@ function secretSeverity(f){
   if(f.source==='log'||f.source==='args')return {c:'bad',v:'High'};
   return f.type==='hardcoded-env'?{c:'off',v:'Medium'}:{c:'bad',v:'High'};
 }
-function secretFix(f){
-  if(f.source==='log')return 'Stop logging it, then rotate the credential.';
-  if(f.source==='args')return 'Pass it through a Secret, not command args, then rotate it.';
-  return 'Move it to a Secret and use valueFrom.secretKeyRef.';
-}
 function agentAtLeast(v,want){
   var a=String(v||'0').replace(/^v/,'').split('.').map(Number),b=want.split('.').map(Number);
   for(var i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return (a[i]||0)>(b[i]||0);}
@@ -789,28 +784,62 @@ function agentAtLeast(v,want){
 }
 function secretsSection(list,c){
   if(!agentAtLeast(c.agentVersion,'0.2.0')){
-    return '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent to scan for leaked secrets</p><p class="card2-desc">Secret scanning needs agent 0.2.0 or newer'+(c.agentVersion?' (this cluster runs '+esc(c.agentVersion)+')':'')+'. Re-apply the manifest and restart the agent once.</p></div>'+
+    return '<section class="card2"><div class="card2-head"><p class="card2-title">Leaked secrets</p><p class="card2-desc">Update the agent to turn this on.</p></div>'+
       '<div class="card2-body"><textarea class="nb" rows="2" readonly onclick="this.select()">kubectl apply -f https://clusterheart.com/agent.yaml\nkubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
       '<div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
   }
-  var head='<section class="card2"><div class="card2-head"><p class="card2-title">Secrets</p><p class="card2-desc">Credentials found in container logs or written into pod specs. Values are never sent, only where they are.</p></div>';
-  if(!list.length){
-    return head+'<div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">No exposed secrets found.</span> The agent checks every pod spec each cycle and scans the new log output of every running container every few minutes.</p></div></section>';
-  }
+  var head='<section class="card2"><div class="card2-head"><p class="card2-title">Leaked secrets'+(list.length?' ('+list.length+')':'')+'</p></div>';
+  if(!list.length)return head+'<div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">None found.</span></p></div></section>';
   var rank={bad:0,off:1};
   var rows=list.slice().sort(function(a,b){var sa=secretSeverity(a),sb=secretSeverity(b);return (rank[sa.c]-rank[sb.c])||(new Date(b.lastSeen)-new Date(a.lastSeen));});
-  var html=head+'<div class="tscroll"><table class="users ptable sec-table"><thead><tr><th>Workload</th><th>Severity</th><th>What</th><th>Where and fix</th><th>Seen</th></tr></thead><tbody>';
-  rows.forEach(function(f){
+  // On phones the Severity and Seen columns are hidden; span only what's visible.
+  var span=window.matchMedia&&window.matchMedia('(max-width:640px)').matches?3:5;
+  var html=head+'<div class="tscroll sec-scroll"><table class="users ptable sec-table"><thead><tr><th>Workload</th><th class="sec-sev">Severity</th><th>Leaked</th><th class="sec-seen">Seen</th><th></th></tr></thead><tbody>';
+  rows.forEach(function(f,i){
     var sev=secretSeverity(f),parts=(f.owner||'').split('/'),kind=parts[0],name=parts.slice(1).join('/');
-    var src=f.source==='log'?'in logs':(f.source==='args'?'in command args':'in env');
-    var where=f.source==='env'?'<span class="mono-chip">'+esc(f.field||'')+'</span>':'<div class="sec-ctx" title="'+esc(f.context||'')+'">'+esc(f.context||'')+'</div>';
+    var label=SECRET_LABELS[f.type]||f.type,src=f.source==='log'?'in logs':(f.source==='args'?'in command args':'in env');
+    var what=f.key?'<span class="mono-chip">'+esc(f.key)+'</span><div class="u-email" style="margin-top:4px">'+esc(label)+' · '+src+'</div>'
+                  :'<div class="u-name" style="font-size:13px">'+esc(label)+'</div><div class="u-email">'+src+'</div>';
     var seen=f.source==='log'?(f.count||1)+'× · '+ago(f.lastSeen):'since '+ago(f.firstSeen);
-    html+='<tr><td><div class="u-name pod-name" title="'+esc(f.owner)+'">'+esc(name||f.owner)+'</div><div class="u-email">'+esc(f.namespace)+' · '+esc(kind)+' · '+esc(f.container||'')+'</div></td>'+
-      '<td><span class="pill '+sev.c+'">'+sev.v+'</span></td>'+
-      '<td style="white-space:nowrap"><div class="u-name" style="font-size:13px">'+esc(SECRET_LABELS[f.type]||f.type)+'</div><div class="u-email">'+src+'</div></td>'+
-      '<td>'+where+'<div class="sec-fix">'+secretFix(f)+'</div></td><td class="u-time" style="white-space:nowrap">'+seen+'</td></tr>';
+    html+='<tr class="sec-row" data-i="'+i+'"><td><div class="u-name pod-name" title="'+esc(f.owner)+'">'+esc(name||f.owner)+'</div><div class="u-email">'+esc(f.namespace)+' · '+esc(kind)+'</div><span class="pill '+sev.c+' sec-sev-inline">'+sev.v+'</span></td>'+
+      '<td class="sec-sev"><span class="pill '+sev.c+'">'+sev.v+'</span></td><td>'+what+'</td>'+
+      '<td class="u-time sec-seen" style="white-space:nowrap">'+seen+'</td><td class="sec-caret">›</td></tr>'+
+      '<tr class="sec-detail" data-i="'+i+'" hidden><td colspan="'+span+'">'+secretDetail(f,label,src)+'</td></tr>';
   });
   return html+'</tbody></table></div></section>';
+}
+
+// secretHighlight escapes text and marks every redaction.
+function secretHighlight(t){return esc(t).replace(/\[REDACTED\]/g,'<mark class="sec-mark">[REDACTED]</mark>');}
+
+// secretDetail is the expanded view of one finding: exactly what leaked, where,
+// the full (redacted) line and what to do about it.
+function secretDetail(f,label,src){
+  var parts=(f.owner||'').split('/'),kind=parts[0],name=parts.slice(1).join('/');
+  var secret=(f.key?'<span class="mono-chip">'+esc(f.key)+'</span> = ':'')+
+    (f.masked?'<span class="mono-chip sec-masked">'+esc(f.masked)+'</span>':'<span class="mono-chip sec-masked">hidden</span>')+
+    (f.length?' <span class="u-email">'+f.length+' characters</span>':'');
+  var line=f.context||'';
+  try{var parsed=JSON.parse(line);line=JSON.stringify(parsed,null,2);}catch(e){}
+  var steps;
+  if(f.source==='log')steps=['Rotate or revoke this credential now: anyone who can read these logs may have it.',
+    'Find where the app prints '+(f.key?'<b>'+esc(f.key)+'</b>':'it')+' and stop logging it.',
+    'This entry clears 24 hours after it was last seen.'];
+  else if(f.source==='env')steps=['Store the value in a Kubernetes Secret.',
+    'Point <b>'+esc(f.key||f.field||'the variable')+'</b> at it with <span class="mono-chip">valueFrom.secretKeyRef</span> instead of a plain value.',
+    'Rotate it if this manifest is kept in git or shared.'];
+  else steps=['Rotate this credential.','Pass it in through a Secret (env var or mounted file) instead of command arguments.'];
+  var row=function(k,v){return '<div class="sec-k">'+k+'</div><div class="sec-v">'+v+'</div>';};
+  return '<div class="sec-box"><div class="sec-grid">'+
+    row('Secret',secret)+
+    row('Type',esc(label)+' · '+src)+
+    row('Workload',esc(kind)+' <b>'+esc(name)+'</b> in <b>'+esc(f.namespace)+'</b>')+
+    row('Found in',(f.pod?'pod <span class="mono-chip">'+esc(f.pod)+'</span> · ':'')+'container <span class="mono-chip">'+esc(f.container||'')+'</span>')+
+    row('Seen',f.source==='log'?(f.count||1)+' time'+((f.count||1)===1?'':'s')+' · first '+ago(f.firstSeen)+' · last '+ago(f.lastSeen):'since '+ago(f.firstSeen))+
+    '</div>'+
+    (line?'<div class="sec-k" style="margin-top:14px">'+(f.source==='log'?'Log line':(f.source==='env'?'Setting':'Command'))+'</div><pre class="log-pre sec-pre">'+secretHighlight(line)+'</pre>':'')+
+    '<div class="sec-k" style="margin-top:14px">What to do</div><ol class="sec-steps">'+steps.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ol>'+
+    '<p class="u-email" style="margin:10px 0 0">The full value never leaves your cluster; the hint above is enough to tell which credential it is.</p></div>';
 }
 
 // ---------- Rightsizing ----------
@@ -1243,6 +1272,11 @@ var _sbox=document.getElementById('clusters');
 if(_sbox)_sbox.addEventListener('click',async function(e){
   var t=e.target;if(!t.closest)return;
   var b;
+  if(b=t.closest('tr.sec-row')){
+    var d=b.nextElementSibling;
+    if(d&&d.classList.contains('sec-detail')){d.hidden=!d.hidden;b.classList.toggle('open',!d.hidden);}
+    return;
+  }
   if(b=t.closest('.copy-cmd')){navigator.clipboard.writeText(b.dataset.cmd);b.textContent='Copied';return;}
   if(b=t.closest('.rs-apply')){
     var d=b.dataset,cpu=+d.cpu,mem=+d.mem,lines=[];

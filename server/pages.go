@@ -360,8 +360,38 @@ table.users tbody tr:hover{background:var(--hover)}
 .log-box[open] summary{border-bottom:1px solid var(--border)}
 .log-pre{margin:0;padding:12px 14px;max-height:320px;overflow:auto;font-size:12px;line-height:1.55;background:var(--input-bg);white-space:pre-wrap;word-break:break-word}
 .sec-table td{vertical-align:top}
-.sec-ctx{font-family:'Geist Mono',ui-monospace,Menlo,monospace;font-size:12px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
-.sec-fix{font-size:12px;color:var(--muted);margin-top:6px}
+.sec-scroll{max-height:none}
+.sec-detail[hidden]{display:none !important}
+#clusters table.users.sec-table{min-width:0}
+.sec-box .u-email{white-space:normal}
+.sec-sev-inline{display:none}
+.sec-row{cursor:pointer}
+.sec-row.open{background:var(--hover)}
+.sec-caret{color:var(--muted);font-size:18px;width:1%;transition:transform .15s}
+.sec-row.open .sec-caret{transform:rotate(90deg)}
+.sec-detail td{background:var(--input-bg);padding:0 !important}
+#clusters table.ptable.sec-table td:first-child{white-space:normal}
+#clusters table.ptable.sec-table .sec-detail td{width:auto;max-width:0;border-right:none}
+.sec-box{padding:18px 22px}
+.sec-grid{display:grid;grid-template-columns:110px 1fr;gap:10px 16px;align-items:baseline}
+.sec-k{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.sec-v{font-size:13px;line-height:1.6}
+.sec-mark{background:rgba(248,113,113,.18);color:var(--red);padding:0 2px}
+.sec-masked{color:var(--red);border-color:rgba(248,113,113,.4)}
+.sec-pre{margin-top:6px;border:1px solid var(--border);max-height:280px}
+.sec-steps{margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.7}
+@media(max-width:640px){
+#clusters table.users.sec-table,#clusters table.users.sec-table tbody{display:block;min-width:0;width:100%}
+#clusters table.users.sec-table thead{display:none}
+#clusters table.users.sec-table tr.sec-row{display:grid;grid-template-columns:1fr 20px;gap:8px 10px;padding:14px 14px 12px}
+#clusters table.users.sec-table tr.sec-row>td{display:block;padding:0 !important;border:none;width:auto}
+#clusters table.users.sec-table tr.sec-row>td:nth-child(3){grid-column:1 / 2;grid-row:2}
+#clusters table.users.sec-table tr.sec-row>td.sec-caret{grid-column:2;grid-row:1;align-self:center}
+#clusters table.users.sec-table tr.sec-row>td.sec-sev{display:none}
+#clusters table.users.sec-table tr.sec-row>td.sec-seen{display:block;grid-column:1 / 2}
+#clusters table.users.sec-table tr.sec-detail{display:block}
+#clusters table.users.sec-table tr.sec-detail>td{display:block;max-width:none;width:auto}
+.sec-grid{grid-template-columns:1fr;gap:4px 0}.sec-grid .sec-k{margin-top:8px}.sec-box{padding:14px}#clusters table.users.sec-table .sec-seen,#clusters table.users.sec-table .sec-sev{display:none}.sec-sev-inline{display:inline-flex;margin-top:4px;font-size:12px}.sec-table .pod-name{max-width:130px}.sec-table .mono-chip,.sec-box .mono-chip{word-break:break-all;white-space:normal}.sec-pre{font-size:11px}}
 .mono-chip{font-family:'Geist Mono',ui-monospace,Menlo,monospace;font-size:12px;padding:2px 6px;border:1px solid var(--border);background:var(--input-bg)}
 .rs-queued{font-size:12px;font-weight:600;color:var(--green)}
 @media(max-width:640px){.rs-table .pod-name{max-width:150px}}
