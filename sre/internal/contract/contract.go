@@ -118,6 +118,17 @@ type PodInfo struct {
 	Owner     string `json:"owner,omitempty"` // controller, e.g. "Deployment/x" or "Job/y"
 	CPUMilli  int64  `json:"cpuMilli,omitempty"`
 	MemMi     int64  `json:"memMi,omitempty"`
+	// Requests/limits summed over the pod's containers (omitted when unset), for
+	// rightsizing. CPU in millicores, memory in mebibytes.
+	CPUReqMilli int64 `json:"cpuReqMilli,omitempty"`
+	MemReqMi    int64 `json:"memReqMi,omitempty"`
+	CPULimMilli int64 `json:"cpuLimMilli,omitempty"`
+	MemLimMi    int64 `json:"memLimMi,omitempty"`
+	// Peak usage the agent has observed for this pod over the last PeakWindowMins
+	// (rolling, up to 6h; resets when the agent restarts).
+	CPUPeakMilli   int64 `json:"cpuPeakMilli,omitempty"`
+	MemPeakMi      int64 `json:"memPeakMi,omitempty"`
+	PeakWindowMins int   `json:"peakWindowMins,omitempty"`
 }
 
 // ProblemType enumerates the deterministic fault signals the agent reports.

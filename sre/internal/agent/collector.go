@@ -49,6 +49,7 @@ type Collector struct {
 	clientset kubernetes.Interface
 	metrics   metricsv.Interface // nil if metrics-server is not installed
 	k8sVer    string
+	peaks     *peakTracker
 }
 
 // NewCollector builds a collector. If kubeconfigPath is non-empty it is used;
@@ -68,7 +69,7 @@ func NewCollector(kubeconfigPath string) (*Collector, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Collector{clientset: cs}
+	c := &Collector{clientset: cs, peaks: newPeakTracker()}
 	// Metrics are best-effort: if metrics-server isn't installed, CPU/mem are
 	// simply omitted - the agent must never fail because metrics are missing.
 	if mc, err := metricsv.NewForConfig(cfg); err == nil {
@@ -317,15 +318,31 @@ func podInfo(p *corev1.Pod) contract.PodInfo {
 			ready++
 		}
 	}
+	cpuReq, memReq, cpuLim, memLim := podResources(p)
 	return contract.PodInfo{
-		Namespace: p.Namespace,
-		Name:      p.Name,
-		Phase:     string(p.Status.Phase),
-		Ready:     fmt.Sprintf("%d/%d", ready, total),
-		Restarts:  int32(podRestarts(p)),
-		Node:      p.Spec.NodeName,
-		Owner:     ownerWorkload(p),
+		Namespace:   p.Namespace,
+		Name:        p.Name,
+		Phase:       string(p.Status.Phase),
+		Ready:       fmt.Sprintf("%d/%d", ready, total),
+		Restarts:    int32(podRestarts(p)),
+		Node:        p.Spec.NodeName,
+		Owner:       ownerWorkload(p),
+		CPUReqMilli: cpuReq, MemReqMi: memReq,
+		CPULimMilli: cpuLim, MemLimMi: memLim,
 	}
+}
+
+// podResources sums CPU (millicores) and memory (MiB) requests and limits over
+// the pod's regular containers. Unset values count as zero.
+func podResources(p *corev1.Pod) (cpuReq, memReq, cpuLim, memLim int64) {
+	for i := range p.Spec.Containers {
+		r := p.Spec.Containers[i].Resources
+		cpuReq += r.Requests.Cpu().MilliValue()
+		memReq += r.Requests.Memory().Value() / (1024 * 1024)
+		cpuLim += r.Limits.Cpu().MilliValue()
+		memLim += r.Limits.Memory().Value() / (1024 * 1024)
+	}
+	return
 }
 
 // mergePodMetrics fills CPU/memory from metrics-server into the inventory, by
@@ -349,11 +366,19 @@ func (c *Collector) mergePodMetrics(ctx context.Context, list []contract.PodInfo
 		}
 		byKey[m.Namespace+"/"+m.Name] = usage{cpu: cpu, mem: mem / (1024 * 1024)}
 	}
+	now := time.Now()
 	for i := range list {
-		if u, ok := byKey[list[i].Namespace+"/"+list[i].Name]; ok {
+		key := list[i].Namespace + "/" + list[i].Name
+		if u, ok := byKey[key]; ok {
 			list[i].CPUMilli = u.cpu
 			list[i].MemMi = u.mem
+			if c.peaks != nil {
+				list[i].CPUPeakMilli, list[i].MemPeakMi, list[i].PeakWindowMins = c.peaks.observe(key, u.cpu, u.mem, now)
+			}
 		}
+	}
+	if c.peaks != nil {
+		c.peaks.prune(now)
 	}
 }
 
