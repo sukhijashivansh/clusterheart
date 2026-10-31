@@ -305,8 +305,18 @@ table.users tbody tr:hover{background:var(--hover)}
 .util-val.crit{color:var(--red)}
 .util-val.cap{color:var(--muted);font-weight:500}
 /* detail tabs (Pods / Nodes) */
-.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:4px 0 18px}
-.tab{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:4px 0 18px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.ai-log{max-height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.ai-q{align-self:flex-end;max-width:80%;padding:9px 13px;font-size:13.5px;background:var(--active-bg);border:1px solid var(--border)}
+.ai-a{padding:4px 0}
+.ai-line{font-size:13.5px;line-height:1.6;padding-left:16px;position:relative}
+.ai-line:before{content:"";position:absolute;left:3px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.ai-ok:before{background:var(--green)}
+.ai-bad{color:var(--red)}.ai-bad:before{background:var(--red)}
+.ai-line code{font-size:12.5px;padding:1px 5px;background:var(--active-bg);border:1px solid var(--border)}
+.tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;border-radius:9px;background:rgba(248,113,113,.16);color:var(--red)}
+.tab{flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--accent)}
 .tabpanel{display:none}

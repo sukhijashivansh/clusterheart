@@ -589,6 +589,7 @@ func main() {
 	mux.HandleFunc("POST /api/app/clusters/{id}/rename", a.handleAppClusterRename)
 	mux.HandleFunc("POST /api/app/clusters/{id}/environment", a.handleAppClusterSetEnv)
 	mux.HandleFunc("GET /api/app/clusters/{id}/sre", a.handleAppClusterSRE)
+	mux.HandleFunc("POST /api/app/clusters/{id}/chat", a.handleAppClusterChat)
 	mux.HandleFunc("POST /api/app/clusters/{id}/automation/{action}", a.handleAppClusterAutomation)
 	mux.HandleFunc("POST /api/app/incidents/{id}/{action}", a.handleAppIncidentAction)
 	mux.HandleFunc("POST /api/app/proposals/{id}/{action}", a.handleAppProposalAction)

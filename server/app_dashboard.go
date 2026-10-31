@@ -345,11 +345,49 @@ func (a *app) handleAppClusterSRE(w http.ResponseWriter, r *http.Request) {
 			clusterPaused = true
 		}
 	}
+	myIncs, myProps := mine(incs.Incidents), mine(props.Proposals)
 	writeJSON(w, 200, map[string]any{
-		"incidents": mine(incs.Incidents),
-		"proposals": mine(props.Proposals),
+		"incidents": myIncs,
+		"proposals": myProps,
 		"policy":    map[string]any{"mode": pol.Mode, "paused": pol.Paused, "clusterPaused": clusterPaused},
+		"activity":  a.clusterActivity(tenant, id, myIncs, myProps),
 	})
+}
+
+// clusterActivity returns the audit events that concern one cluster. Audit
+// events carry no cluster id, so they're matched through this cluster's
+// proposals and incidents, plus pause/resume of this cluster and tenant-wide
+// policy changes (which apply to every cluster). Best effort: an audit failure
+// yields an empty list rather than failing the whole SRE view.
+func (a *app) clusterActivity(tenant, id string, incs, props []map[string]any) []map[string]any {
+	out := []map[string]any{}
+	code, data, err := a.cpDo("GET", "/api/v1/audit?tenantId="+url.QueryEscape(tenant), nil)
+	if err != nil || code != 200 {
+		return out
+	}
+	var aud struct {
+		Events []map[string]any `json:"events"`
+	}
+	if json.Unmarshal(data, &aud) != nil {
+		return out
+	}
+	ids := map[string]bool{}
+	for _, it := range append(append([]map[string]any{}, incs...), props...) {
+		if v, _ := it["id"].(string); v != "" {
+			ids[v] = true
+		}
+	}
+	for _, ev := range aud.Events {
+		pid, _ := ev["proposalId"].(string)
+		iid, _ := ev["incidentId"].(string)
+		name, _ := ev["event"].(string)
+		det, _ := ev["details"].(string)
+		policy := strings.HasPrefix(name, "policy.") && (det == "cluster:"+id || det == "tenant" || name == "policy.updated")
+		if ids[pid] || ids[iid] || policy {
+			out = append(out, ev)
+		}
+	}
+	return out
 }
 
 // handleAppIncidentAction runs AI diagnosis or turns it into a policy-checked
@@ -641,6 +679,125 @@ function nodesSection(nl){
   return setup+table;
 }
 
+// ---------- AI chat ----------
+// Answers come back as "[+] / [!] / [-]" bullet lines (same as the desktop AI
+// tab). An optional personal OpenRouter key and model live in this browser only.
+var aiState={cluster:null,history:[],busy:false};
+function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+function lsSet(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}}
+function aiPanelHtml(){
+  return '<section class="card2"><div class="card2-head"><p class="card2-title">Ask about this cluster</p><p class="card2-desc">Answers use the agent\'s latest snapshot and open incidents. The AI can\'t run commands; it suggests them.</p></div>'+
+    '<div class="card2-body"><div id="ai-log" class="ai-log"></div>'+
+    '<form id="ai-form" class="toolbar-row" style="margin-top:12px;flex-wrap:nowrap"><input id="ai-input" class="toolbar-input" style="flex:1;min-width:0" placeholder="e.g. Why is a pod restarting? Which workloads use the most memory?" autocomplete="off"><button class="act approve" id="ai-send" type="submit">Ask</button></form>'+
+    '<details style="margin-top:14px"><summary class="u-email" style="cursor:pointer">AI settings (optional)</summary><div class="toolbar-row" style="margin-top:10px">'+
+      '<input id="ai-key" class="toolbar-input" type="password" placeholder="Your OpenRouter API key" autocomplete="off" style="flex:1;min-width:200px">'+
+      '<input id="ai-model" class="toolbar-input" placeholder="Model (blank = free models)" autocomplete="off" style="flex:1;min-width:200px">'+
+    '</div><p class="u-email" style="margin:8px 0 0">Stored only in this browser and sent with each question. Leave blank to use the server\'s AI.</p></details>'+
+    '</div></section>';
+}
+function aiFormat(text){
+  return (text||'').split('\n').map(function(l){return l.trim();}).filter(Boolean).map(function(l){
+    var m=l.match(/^\[([+!\-])\]\s*(.*)$/),sig=m?m[1]:'-',body=esc(m?m[2]:l).replace(/\x60([^\x60]+)\x60/g,'<code>$1</code>');
+    return '<div class="ai-line ai-'+(sig==='+'?'ok':sig==='!'?'bad':'neutral')+'">'+body+'</div>';
+  }).join('');
+}
+function aiRender(){
+  var log=document.getElementById('ai-log');if(!log)return;
+  if(!aiState.history.length&&!aiState.busy){log.innerHTML='<p class="sub" style="margin:0">Ask anything about this cluster\'s pods, nodes, jobs, incidents or resource usage.</p>';return;}
+  log.innerHTML=aiState.history.map(function(t){
+    if(t.role==='user')return '<div class="ai-q">'+esc(t.text)+'</div>';
+    if(t.role==='error')return '<div class="ai-a"><div class="ai-line ai-bad">'+esc(t.text)+'</div></div>';
+    return '<div class="ai-a">'+aiFormat(t.text)+'</div>';
+  }).join('')+(aiState.busy?'<div class="ai-a"><div class="ai-line ai-neutral">Thinking…</div></div>':'');
+  log.scrollTop=log.scrollHeight;
+}
+function aiWire(id){
+  if(aiState.cluster!==id){aiState={cluster:id,history:[],busy:false};}
+  var k=document.getElementById('ai-key'),m=document.getElementById('ai-model'),f=document.getElementById('ai-form');
+  if(!f)return;
+  k.value=lsGet('ch-ai-key');m.value=lsGet('ch-ai-model');
+  k.addEventListener('change',function(){lsSet('ch-ai-key',k.value.trim());});
+  m.addEventListener('change',function(){lsSet('ch-ai-model',m.value.trim());});
+  f.addEventListener('submit',async function(e){
+    e.preventDefault();
+    var inp=document.getElementById('ai-input'),q=inp.value.trim();
+    if(!q||aiState.busy)return;
+    inp.value='';aiState.history.push({role:'user',text:q});aiState.busy=true;aiRender();
+    var hist=aiState.history.filter(function(t){return t.role!=='error';});
+    var r=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/chat',{history:hist,apiKey:k.value.trim(),model:m.value.trim()});
+    aiState.busy=false;
+    aiState.history.push(r.ok?{role:'assistant',text:r.data.text}:{role:'error',text:(r.data&&r.data.error)||'The AI request failed.'});
+    aiRender();
+  });
+  aiRender();
+}
+
+// ---------- Rightsizing ----------
+// Per workload: requested vs peak usage (rolling peak the agent keeps over up
+// to 6h) and a suggested request. Mirrors the desktop rules: wait for most of a
+// full window, upsize when the peak reaches the request, downsize when the peak
+// stays under 40% (suggest peak + 20%), never touch kube-* namespaces.
+var RS_WINDOW_MINS=360;
+function rsVerdict(r){
+  if(!r.cpuReq&&!r.memReq)return {v:'No requests',c:'off'};
+  if(r.window<RS_WINDOW_MINS*0.9)return {v:'Learning ('+Math.floor(r.window/60)+'h/6h)',c:'off'};
+  if(r.cpuReq&&r.cpuPeak>=r.cpuReq*0.9)return {v:'Upsize CPU',c:'bad'};
+  if(r.memReq&&r.memPeak>=r.memReq*0.9)return {v:'Upsize memory',c:'bad'};
+  if(r.ns.indexOf('kube-')===0)return {v:'OK',c:'on'};
+  function hr(peak,req){var v=Math.ceil(peak*1.2);return (req&&peak<req*0.4&&v<req)?v:0;}
+  r.sugCpu=r.cpuReq?Math.max(hr(r.cpuPeak,r.cpuReq),r.cpuPeak<r.cpuReq*0.4?10:0):0;
+  r.sugMem=r.memReq?Math.max(hr(r.memPeak,r.memReq),r.memPeak<r.memReq*0.4?16:0):0;
+  if(r.sugCpu&&r.sugMem)return {v:'Downsize',c:'off'};
+  if(r.sugCpu)return {v:'Downsize CPU',c:'off'};
+  if(r.sugMem)return {v:'Downsize memory',c:'off'};
+  return {v:'OK',c:'on'};
+}
+function rightsizingSection(pods,L){
+  var have=pods.some(function(x){return x.cpuReqMilli||x.memReqMi||x.peakWindowMins;});
+  if(!have){
+    return '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent to enable rightsizing</p><p class="card2-desc">Rightsizing needs the newer agent, which also reports each pod\'s requests and peak usage. Restart it once so it downloads the latest version; suggestions appear after about 6 hours of data.</p></div>'+
+      '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">kubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
+      '<div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
+  }
+  var g={};
+  pods.forEach(function(x){
+    if(x.phase!=='Running')return;
+    var owner=x.owner||'Pod/'+x.name;
+    if(owner.indexOf('Job/')===0)return;
+    var k=x.namespace+'|'+owner,r=g[k];
+    if(!r)r=g[k]={ns:x.namespace,owner:owner,replicas:0,cpuReq:0,memReq:0,cpuPeak:0,memPeak:0,window:1e9};
+    r.replicas++;
+    r.cpuReq=Math.max(r.cpuReq,x.cpuReqMilli||0);r.memReq=Math.max(r.memReq,x.memReqMi||0);
+    r.cpuPeak=Math.max(r.cpuPeak,x.cpuPeakMilli||x.cpuMilli||0);r.memPeak=Math.max(r.memPeak,x.memPeakMi||x.memMi||0);
+    r.window=Math.min(r.window,x.peakWindowMins||0);
+  });
+  var rows=Object.keys(g).map(function(k){var r=g[k];r.verdict=rsVerdict(r);return r;});
+  var rank={bad:0,off:1,on:2};
+  rows.sort(function(a,b){return (rank[a.verdict.c]-rank[b.verdict.c])||((b.sugCpu||b.sugMem?1:0)-(a.sugCpu||a.sugMem?1:0))||a.owner.localeCompare(b.owner);});
+  function pct(u,req){return req?' <span class="u-email">'+Math.round(u/req*100)+'%</span>':'';}
+  var html='<section class="card2"><div class="card2-head"><p class="card2-title">Rightsizing</p><p class="card2-desc">Per-pod requests vs the peak usage seen over the last 6 hours. Downsize suggestions use peak + 20% headroom. Apply one by running its command.</p></div>'+
+    '<div class="tscroll"><table class="users ptable"><thead><tr><th>Workload</th><th>Verdict</th><th>CPU req</th><th>CPU peak</th><th>Mem req</th><th>Mem peak</th><th>Suggested</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    var parts=r.owner.split('/'),kind=parts[0],name=parts.slice(1).join('/');
+    var sug='-';
+    if(r.sugCpu||r.sugMem){
+      var req=[];if(r.sugCpu)req.push('cpu='+r.sugCpu+'m');if(r.sugMem)req.push('memory='+r.sugMem+'Mi');
+      sug=(r.sugCpu?fmtCpu(r.sugCpu)+' CPU ':'')+(r.sugMem?fmtMem(r.sugMem)+' mem':'');
+      if(/^(Deployment|StatefulSet|DaemonSet)$/.test(kind)){
+        var cmd='kubectl -n '+r.ns+' set resources '+kind.toLowerCase()+'/'+name+' --requests='+req.join(',');
+        sug+=' <button class="act revoke copy-cmd" data-cmd="'+esc(cmd)+'" style="margin-left:6px">Copy command</button>';
+      }
+    }
+    html+='<tr><td><div class="u-name pod-name" title="'+esc(r.owner)+'">'+esc(name)+'</div><div class="u-email">'+esc(r.ns)+' · '+esc(kind)+' · '+r.replicas+' pod'+(r.replicas===1?'':'s')+'</div></td>'+
+      '<td><span class="pill '+r.verdict.c+'">'+esc(r.verdict.v)+'</span></td>'+
+      '<td class="u-time">'+(r.cpuReq?fmtCpu(r.cpuReq):'-')+'</td><td class="u-time">'+fmtCpu(r.cpuPeak)+pct(r.cpuPeak,r.cpuReq)+'</td>'+
+      '<td class="u-time">'+(r.memReq?fmtMem(r.memReq):'-')+'</td><td class="u-time">'+fmtMem(r.memPeak)+pct(r.memPeak,r.memReq)+'</td>'+
+      '<td class="u-time" style="white-space:nowrap">'+sug+'</td></tr>';
+  });
+  if(!rows.length)html+='<tr><td colspan="7" class="u-time">No running workloads in the latest snapshot.</td></tr>';
+  return html+'</tbody></table></div>'+(L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">Based on the first pods only; '+L.podListTruncated+' more were capped.</p></div>':'')+'</section>';
+}
+
 async function loadDetail(id){
   var box=document.getElementById('clusters');
   box.innerHTML='<div class="spin-wrap"><div class="spinner"></div></div>';
@@ -728,35 +885,44 @@ async function loadDetail(id){
     }else{
       podsHtml='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No pods or jobs reported in the latest snapshot.</p></div></section>';
     }
+    var healthHtml='';
+    var probs=[];
+    (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
+    (L.workloadProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.kind+' '+x.name,msg:x.message});});
+    if(probs.length){
+      healthHtml+='<section class="card2"><div class="card2-head"><p class="card2-title">Problems ('+probs.length+')</p><p class="card2-desc">Measured fault signals from the latest snapshot.</p></div><table class="users ptable"><thead><tr><th>Type</th><th>Object</th><th>Detail</th></tr></thead><tbody>';
+      probs.forEach(function(x){healthHtml+='<tr><td><span class="pill off"><span class="dot"></span>'+esc(x.type)+'</span></td><td class="u-email" title="'+esc(x.where)+'">'+esc(x.where)+'</td><td class="u-time" title="'+esc(x.msg||'')+'">'+esc(x.msg||'')+'</td></tr>';});
+      healthHtml+='</tbody></table></section>';
+    }
+    var w=L.warnings||[];
+    if(w.length){
+      healthHtml+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Recent warnings ('+w.length+')</p></div><table class="users ptable"><thead><tr><th>Reason</th><th>Object</th><th>Count</th><th>Last seen</th></tr></thead><tbody>';
+      w.forEach(function(e){healthHtml+='<tr><td class="u-name" style="font-size:13.5px">'+esc(e.reason)+'</td><td class="u-email" title="'+esc(e.namespace)+'/'+esc(e.object)+'">'+esc(e.namespace)+'/'+esc(e.object)+'</td><td class="u-time">'+(e.count||0)+'</td><td class="u-time">'+(e.lastSeen?new Date(e.lastSeen).toLocaleString():'')+'</td></tr>';});
+      healthHtml+='</tbody></table></section>';
+    }
+    if(!probs.length&&!w.length){healthHtml+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No problems or warnings in the latest snapshot. Looks healthy.</p></div></section>';}
     // Pods / Nodes / SRE tabs. The Nodes tab only appears when the agent reports
     // node data. The SRE panels load lazily from the control plane on first open.
     html+='<div class="tabs" role="tablist">'+
       '<button class="tab active" data-tab="pods">Pods</button>'+
       (nodesHtml?'<button class="tab" data-tab="nodes">Nodes</button>':'')+
+      '<button class="tab" data-tab="health">Health'+(probs.length+w.length?' <span class="tab-badge">'+(probs.length+w.length)+'</span>':'')+'</button>'+
+      '<button class="tab" data-tab="rightsizing">Rightsizing</button>'+
       '<button class="tab" data-tab="sre-overview">SRE overview</button>'+
       '<button class="tab" data-tab="incidents">Incidents</button>'+
       '<button class="tab" data-tab="remediation">Remediation</button>'+
+      '<button class="tab" data-tab="activity">Activity</button>'+
+      '<button class="tab" data-tab="ai">AI</button>'+
     '</div>'+
     '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
     (nodesHtml?'<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>':'')+
+    '<div class="tabpanel" data-panel="health">'+healthHtml+'</div>'+
+    '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all,L)+'</div>'+
     '<div class="tabpanel" data-panel="sre-overview"></div>'+
     '<div class="tabpanel" data-panel="incidents"></div>'+
-    '<div class="tabpanel" data-panel="remediation"></div>';
-    var probs=[];
-    (L.podProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.pod+(x.container?' ['+x.container+']':''),msg:x.message});});
-    (L.workloadProblems||[]).forEach(function(x){probs.push({type:x.type,where:x.namespace+'/'+x.kind+' '+x.name,msg:x.message});});
-    if(probs.length){
-      html+='<section class="card2"><div class="card2-head"><p class="card2-title">Problems ('+probs.length+')</p><p class="card2-desc">Measured fault signals from the latest snapshot.</p></div><table class="users ptable"><thead><tr><th>Type</th><th>Object</th><th>Detail</th></tr></thead><tbody>';
-      probs.forEach(function(x){html+='<tr><td><span class="pill off"><span class="dot"></span>'+esc(x.type)+'</span></td><td class="u-email" title="'+esc(x.where)+'">'+esc(x.where)+'</td><td class="u-time" title="'+esc(x.msg||'')+'">'+esc(x.msg||'')+'</td></tr>';});
-      html+='</tbody></table></section>';
-    }
-    var w=L.warnings||[];
-    if(w.length){
-      html+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Recent warnings ('+w.length+')</p></div><table class="users ptable"><thead><tr><th>Reason</th><th>Object</th><th>Count</th><th>Last seen</th></tr></thead><tbody>';
-      w.forEach(function(e){html+='<tr><td class="u-name" style="font-size:13.5px">'+esc(e.reason)+'</td><td class="u-email" title="'+esc(e.namespace)+'/'+esc(e.object)+'">'+esc(e.namespace)+'/'+esc(e.object)+'</td><td class="u-time">'+(e.count||0)+'</td><td class="u-time">'+(e.lastSeen?new Date(e.lastSeen).toLocaleString():'')+'</td></tr>';});
-      html+='</tbody></table></section>';
-    }
-    if(!probs.length&&!w.length){html+='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No problems or warnings in the latest snapshot. Looks healthy.</p></div></section>';}
+    '<div class="tabpanel" data-panel="remediation"></div>'+
+    '<div class="tabpanel" data-panel="activity"></div>'+
+    '<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>';
     box.innerHTML=html;
     var ps=document.getElementById('pod-search'),pn=document.getElementById('pod-ns'),seg=document.getElementById('pj-seg'),_kind='pod';
     function applyPodFilter(){
@@ -774,6 +940,7 @@ async function loadDetail(id){
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
     applyPodFilter();
     sreState.cluster=id;sreState.data=null;
+    aiWire(id);
     document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
       var name=t.dataset.tab;
       _activeTab=name;
@@ -784,6 +951,7 @@ async function loadDetail(id){
     // Keep the open tab across re-renders (rename, environment change).
     var _keep=document.querySelector('.tab[data-tab="'+_activeTab+'"]');
     if(_keep&&_activeTab!=='pods')_keep.click();
+    document.querySelectorAll('.copy-cmd').forEach(function(btn){btn.addEventListener('click',function(){navigator.clipboard.writeText(btn.dataset.cmd);btn.textContent='Copied';});});
     document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
 }
@@ -791,7 +959,7 @@ async function loadDetail(id){
 // ---------- SRE: overview / incidents / remediation ----------
 // One fetch (/api/app/clusters/{id}/sre) feeds all three tabs; the server keeps
 // only this cluster's incidents and proposals.
-var SRE_TABS=['sre-overview','incidents','remediation'];
+var SRE_TABS=['sre-overview','incidents','remediation','activity'];
 var _activeTab='pods';
 var sreState={cluster:null,data:null,incFilter:'open',propFilter:'',diag:{}};
 function srePanel(name){return document.querySelector('.tabpanel[data-panel="'+name+'"]');}
@@ -812,7 +980,32 @@ async function loadSRE(){
   }catch(e){SRE_TABS.forEach(function(t){var p=srePanel(t);if(p)p.innerHTML=sreMsg('Could not load SRE data.');});return;}
   renderSRE();
 }
-function renderSRE(){renderSREOverview();renderIncidents();renderRemediation();}
+function renderSRE(){renderSREOverview();renderIncidents();renderRemediation();renderActivity();}
+
+// Activity: the control plane's audit trail for this cluster, newest first.
+var EVENT_LABELS={'proposal.created':'Fix proposed','proposal.blocked':'Blocked by policy','proposal.approved':'Fix approved','proposal.rejected':'Fix rejected','remediation.executed':'Fix applied','remediation.failed':'Fix failed','policy.updated':'Policy changed','policy.paused':'Automation paused','policy.resumed':'Automation resumed'};
+function eventPill(ev){
+  var c=/blocked|rejected|failed|paused/.test(ev)?'bad':(/executed|approved|resumed/.test(ev)?'on':'off');
+  return '<span class="pill '+c+'">'+esc(EVENT_LABELS[ev]||ev)+'</span>';
+}
+function renderActivity(){
+  var p=srePanel('activity'),d=sreState.data;if(!p||!d)return;
+  var props={};(d.proposals||[]).forEach(function(x){props[x.id]=x;});
+  var incs={};(d.incidents||[]).forEach(function(x){incs[x.id]=x;});
+  var list=(d.activity||[]).slice().sort(function(a,b){return new Date(b.at||0)-new Date(a.at||0);});
+  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><div><p class="card2-title">Activity</p><p class="card2-desc">Who proposed, approved, rejected or paused what on this cluster.</p></div><button class="act revoke sre-refresh" style="margin-left:auto">Refresh</button></div></div>';
+  if(!list.length){p.innerHTML=html+'<div class="card2-body"><p class="sub" style="margin:0">No activity yet.</p></div></section>';return;}
+  html+='<div class="tscroll"><table class="users ptable"><thead><tr><th>When</th><th>Event</th><th>About</th><th>By</th><th>Details</th></tr></thead><tbody>';
+  list.forEach(function(e){
+    var about='-',pr=props[e.proposalId],inc=incs[e.incidentId];
+    if(pr){var t=pr.target||{};about=esc(pr.action)+'<div class="u-email">'+esc((t.kind||'')+'/'+(t.namespace||'')+'/'+(t.name||''))+'</div>';}
+    else if(inc){about=esc(inc.title||inc.type);}
+    var actor=(e.actor||'').replace(/^user:/,'');
+    html+='<tr><td class="u-time" title="'+esc(e.at?new Date(e.at).toLocaleString():'')+'">'+ago(e.at)+'</td><td>'+eventPill(e.event)+'</td><td><div class="u-name" style="font-size:13.5px">'+about+'</div></td>'+
+      '<td class="u-email">'+esc(actor)+'</td><td class="u-time" style="white-space:normal;max-width:320px">'+esc(e.details||'')+'</td></tr>';
+  });
+  p.innerHTML=html+'</tbody></table></div></section>';
+}
 
 function automationCard(pol){
   var paused=pol.paused||pol.clusterPaused;
