@@ -33,6 +33,7 @@ var (
 const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clusterheart</title>
+<link rel="icon" href="https://clusterheart.com/favicon.ico" sizes="48x48"><link rel="icon" type="image/svg+xml" href="https://clusterheart.com/favicon.svg"><link rel="apple-touch-icon" href="https://clusterheart.com/apple-touch-icon.png">
 <script>(function(){var t=localStorage.getItem('ch-theme')||'dark';if(t==='dark')document.documentElement.classList.add('dark');})();</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
