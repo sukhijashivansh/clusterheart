@@ -41,28 +41,11 @@ type secretScanner struct {
 	lastScan map[string]time.Time               // ns/pod/container -> last log read
 	logs     map[string]*contract.SecretFinding // log findings, kept secretFindingTTL
 	specs    map[string]*contract.SecretFinding // spec findings, recomputed every cycle
-	// values holds the latest raw secret per finding ref, in agent memory only.
-	// It leaves the cluster solely for an explicit reveal (see Value).
-	values map[string]string
 }
 
 func newSecretScanner() *secretScanner {
 	return &secretScanner{lastScan: map[string]time.Time{}, logs: map[string]*contract.SecretFinding{},
-		specs: map[string]*contract.SecretFinding{}, values: map[string]string{}}
-}
-
-// maxRevealLen bounds a revealed value (a private key fits comfortably).
-const maxRevealLen = 8192
-
-// Value returns the raw secret behind a current finding, for a reveal request.
-func (s *secretScanner) Value(ref string) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	v, ok := s.values[ref]
-	if len(v) > maxRevealLen {
-		v = v[:maxRevealLen]
-	}
-	return v, ok
+		specs: map[string]*contract.SecretFinding{}}
 }
 
 // cronJobRun matches a Job created by a CronJob: "<cronjob>-<scheduled minute>".
@@ -129,16 +112,6 @@ func (s *secretScanner) scan(ctx context.Context, cs kubernetes.Interface, pods 
 	for _, f := range s.specs {
 		out = append(out, *f)
 	}
-	// Forget values of findings that are gone (fixed, expired).
-	current := make(map[string]bool, len(out))
-	for _, f := range out {
-		current[f.Ref()] = true
-	}
-	for ref := range s.values {
-		if !current[ref] {
-			delete(s.values, ref)
-		}
-	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].LastSeen.Equal(out[j].LastSeen) {
 			return out[i].LastSeen.After(out[j].LastSeen)
@@ -171,9 +144,6 @@ func (s *secretScanner) scanSpecs(pods []corev1.Pod, now time.Time) {
 			f.FirstSeen = old.FirstSeen
 		}
 		s.specs[key] = f
-		if m.Value != "" {
-			s.values[f.Ref()] = m.Value
-		}
 	}
 	for i := range pods {
 		p := &pods[i]
@@ -191,7 +161,7 @@ func (s *secretScanner) scanSpecs(pods []corev1.Pod, now time.Time) {
 					continue
 				}
 				if sensitiveEnvName.MatchString(e.Name) && len(v) >= 6 && !isBoringValue(v) {
-					m := redact.Match{Type: "hardcoded-env", Key: e.Name, Masked: redact.Mask(v), Length: utf8.RuneCountInString(v), Value: v}
+					m := redact.Match{Type: "hardcoded-env", Key: e.Name, Masked: redact.Mask(v), Length: utf8.RuneCountInString(v)}
 					add(p, c.Name, "env", e.Name, m, e.Name+"=[REDACTED]")
 				}
 			}
@@ -302,9 +272,6 @@ func (s *secretScanner) recordLogLines(p *corev1.Pod, container string, raw []by
 			f.Count++
 			f.LastSeen = now
 			f.Masked, f.Length = m.Masked, m.Length
-			if m.Value != "" {
-				s.values[f.Ref()] = m.Value
-			}
 			f.Context = clip(redact.String(strings.TrimSpace(line)))
 		}
 	}

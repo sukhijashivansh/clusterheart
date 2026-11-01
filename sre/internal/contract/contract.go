@@ -117,29 +117,16 @@ type SecretFinding struct {
 }
 
 // Ref identifies a finding stably: the same workload, container, field, type
-// and key give the same ref. Reveal requests address findings by it.
+// and key give the same ref.
 func (f SecretFinding) Ref() string {
 	return f.Source + "|" + f.Namespace + "|" + f.Owner + "|" + f.Container + "|" + f.Field + "|" + f.Type + "|" + f.Key
 }
 
-// RevealRequest asks an agent for the raw value behind one secret finding. It
-// is created only when a person clicks Reveal in the dashboard.
-type RevealRequest struct {
-	ID  string `json:"id"`
-	Ref string `json:"ref"`
-}
-
-// RevealRequestsResponse is the agent's pending reveal queue.
+// RevealRequestsResponse answers agents up to 0.2.2 / host-0.2.1, which still
+// poll GET /api/v1/agents/reveals. Revealing secret values was removed, so the
+// list is always empty; newer agents do not poll.
 type RevealRequestsResponse struct {
-	Requests []RevealRequest `json:"requests"`
-}
-
-// RevealResult is the agent's answer to one reveal request. Value is the raw
-// secret: the control plane relays it to the requester once, from memory, and
-// never stores or logs it.
-type RevealResult struct {
-	Value string `json:"value,omitempty"`
-	Error string `json:"error,omitempty"`
+	Requests []struct{} `json:"requests"`
 }
 
 // PodLog is the tail of one container's log. Previous is true when the lines

@@ -16,24 +16,22 @@ const (
 	secretFindingTTL  = 24 * time.Hour
 	maxSecretFindings = 100
 	maxContextLen     = 400
-	maxRevealLen      = 8192
 )
 
 // sensitiveEnvName matches env var names that should not hold a literal value.
 var sensitiveEnvName = regexp.MustCompile(`(?i)(pass(word|wd)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential|auth|dsn|conn(ection)?[_-]?str)`)
 
 // secretScanner finds credentials in the journal and in services' literal
-// Environment= settings. Raw values stay in memory for explicit reveals only.
+// Environment= settings. Findings carry a masked hint, never the value.
 type secretScanner struct {
-	mu     sync.Mutex
-	host   string
-	logs   map[string]*contract.SecretFinding
-	specs  map[string]*contract.SecretFinding
-	values map[string]string
+	mu    sync.Mutex
+	host  string
+	logs  map[string]*contract.SecretFinding
+	specs map[string]*contract.SecretFinding
 }
 
 func newSecretScanner() *secretScanner {
-	return &secretScanner{logs: map[string]*contract.SecretFinding{}, specs: map[string]*contract.SecretFinding{}, values: map[string]string{}}
+	return &secretScanner{logs: map[string]*contract.SecretFinding{}, specs: map[string]*contract.SecretFinding{}}
 }
 
 func clip(s string) string {
@@ -86,9 +84,6 @@ func (s *secretScanner) recordJournal(entries []journalEntry, now time.Time) {
 			cur.LastSeen = now
 			cur.Masked, cur.Length = m.Masked, m.Length
 			cur.Context = clip(redact.String(strings.TrimSpace(e.message)))
-			if m.Value != "" {
-				s.values[ref] = m.Value
-			}
 		}
 	}
 }
@@ -109,7 +104,7 @@ func (s *secretScanner) scanUnitEnv(env map[string][]string, now time.Time) {
 			if ms := redact.Matches(val); len(ms) > 0 {
 				m = ms[0]
 			} else if sensitiveEnvName.MatchString(name) && len(val) >= 6 {
-				m = redact.Match{Type: "hardcoded-env", Masked: redact.Mask(val), Length: utf8.RuneCountInString(val), Value: val}
+				m = redact.Match{Type: "hardcoded-env", Masked: redact.Mask(val), Length: utf8.RuneCountInString(val)}
 			} else {
 				continue
 			}
@@ -120,13 +115,11 @@ func (s *secretScanner) scanUnitEnv(env map[string][]string, now time.Time) {
 				f.FirstSeen = old.FirstSeen
 			}
 			s.specs[ref] = &f
-			s.values[ref] = m.Value
 		}
 	}
 }
 
-// findings returns current findings, newest first, and forgets values of
-// findings that are gone.
+// findings returns current findings, newest first.
 func (s *secretScanner) findings(now time.Time) []contract.SecretFinding {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,29 +135,9 @@ func (s *secretScanner) findings(now time.Time) []contract.SecretFinding {
 	for _, f := range s.specs {
 		out = append(out, *f)
 	}
-	current := map[string]bool{}
-	for _, f := range out {
-		current[f.Ref()] = true
-	}
-	for ref := range s.values {
-		if !current[ref] {
-			delete(s.values, ref)
-		}
-	}
 	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
 	if len(out) > maxSecretFindings {
 		out = out[:maxSecretFindings]
 	}
 	return out
-}
-
-// Value returns the raw secret behind a current finding, for a reveal.
-func (s *secretScanner) Value(ref string) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	v, ok := s.values[ref]
-	if len(v) > maxRevealLen {
-		v = v[:maxRevealLen]
-	}
-	return v, ok
 }

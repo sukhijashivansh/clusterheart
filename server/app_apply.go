@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
-	"time"
 )
 
 // remediationManifest is deploy/k8s/remediation/remediation.yaml, served so the
@@ -137,45 +136,5 @@ func (a *app) handleAppRightsize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code, data, err = a.cpDo("POST", "/api/v1/proposals/"+url.PathEscape(p.ID)+"/approve"+q, map[string]any{"approver": actor})
-	cpRelay(w, code, data, err)
-}
-
-// revealRL caps how often a user can reveal secret values.
-var revealRL = newRateLimiter(30, 10*time.Minute)
-
-// handleAppRevealSecret asks the cluster's agent for the raw value behind a
-// secret finding: POST /api/app/clusters/{id}/secrets/reveal {"ref","description"}.
-// The request is recorded in Activity under the user's email; the value itself
-// is relayed from memory and never stored.
-func (a *app) handleAppRevealSecret(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREUser(w, r)
-	if !ok {
-		return
-	}
-	if !revealRL.allow("reveal|" + u.Email) {
-		writeJSON(w, 429, map[string]any{"error": "Too many reveals. Please wait a few minutes."})
-		return
-	}
-	var in struct {
-		Ref         string `json:"ref"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in); err != nil || in.Ref == "" {
-		writeJSON(w, 400, map[string]any{"error": "bad request"})
-		return
-	}
-	code, data, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(r.PathValue("id"))+"/reveals?tenantId="+url.QueryEscape(tenant),
-		map[string]any{"ref": in.Ref, "requestedBy": "user:" + u.Email, "description": in.Description})
-	cpRelay(w, code, data, err)
-}
-
-// handleAppRevealResult polls a reveal: GET /api/app/reveals/{id}.
-func (a *app) handleAppRevealResult(w http.ResponseWriter, r *http.Request) {
-	_, tenant, ok := a.appSREUser(w, r)
-	if !ok {
-		return
-	}
-	code, data, err := a.cpDo("GET", "/api/v1/reveals/"+url.PathEscape(r.PathValue("id"))+"?tenantId="+url.QueryEscape(tenant), nil)
-	w.Header().Set("Cache-Control", "no-store")
 	cpRelay(w, code, data, err)
 }

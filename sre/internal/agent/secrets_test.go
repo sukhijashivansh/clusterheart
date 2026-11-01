@@ -149,24 +149,19 @@ func TestCronJobRunsShareOneFinding(t *testing.T) {
 	}
 }
 
-// Raw values stay in agent memory for reveals, never in findings, and are
-// forgotten with their finding.
-func TestSecretValuesKeptForRevealOnly(t *testing.T) {
+// Findings carry a masked hint only; the raw value is not kept anywhere.
+func TestSecretFindingsCarryNoValue(t *testing.T) {
 	s := newSecretScanner()
 	p := podWithEnv("api-5d8f-a", corev1.EnvVar{Name: "DB_PASSWORD", Value: "hunter22hunter"})
 	got := s.scan(context.Background(), nil, []corev1.Pod{p}, time.Now())
-	if len(got) != 1 {
+	if len(got) != 1 || got[0].Masked != "hu…er" || got[0].Length != 14 {
 		t.Fatalf("findings = %+v", got)
 	}
 	raw, _ := json.Marshal(got)
 	if strings.Contains(string(raw), "hunter22hunter") {
 		t.Fatalf("finding carries the raw value: %s", raw)
 	}
-	if v, ok := s.Value(got[0].Ref()); !ok || v != "hunter22hunter" {
-		t.Fatalf("value for reveal = %q, %v", v, ok)
-	}
-	s.scan(context.Background(), nil, []corev1.Pod{podWithEnv("api-5d8f-a")}, time.Now()) // fixed
-	if _, ok := s.Value(got[0].Ref()); ok {
-		t.Fatal("value kept after the finding went away")
+	if dump, _ := json.Marshal([]any{s.logs, s.specs}); strings.Contains(string(dump), "hunter22hunter") {
+		t.Fatalf("scanner keeps the raw value: %s", dump)
 	}
 }

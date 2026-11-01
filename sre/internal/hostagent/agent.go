@@ -8,21 +8,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"clusterheart/sre/internal/contract"
 )
 
 // Version is reported in heartbeats.
-const Version = "host-0.2.1"
+const Version = "host-0.2.2"
 
 const (
 	maxJournalLines = 2000 // per cycle
 	maxErrorLogs    = 50   // kept and sent
 	errorLogTTL     = 24 * time.Hour
 	maxBuffer       = 20 // snapshots held while the control plane is unreachable
-	revealInterval  = 5 * time.Second
 )
 
 // Client talks to the control plane with the server's agent token.
@@ -141,7 +139,6 @@ func (a *Agent) Run(ctx context.Context) {
 	if a.Interval <= 0 {
 		a.Interval = 30 * time.Second
 	}
-	go a.revealLoop(ctx)
 	for ctx.Err() == nil {
 		a.cycle(ctx)
 		select {
@@ -172,32 +169,5 @@ func (a *Agent) cycle(ctx context.Context) {
 	hb := contract.Heartbeat{APIVersion: contract.APIVersion, AgentVersion: Version, SentAt: time.Now().UTC(), BufferedSnapshots: len(a.buffer)}
 	if err := a.Client.do(ctx, http.MethodPost, "/api/v1/agents/heartbeat", hb, nil); err != nil {
 		a.Log.Warn("heartbeat failed", "err", err)
-	}
-}
-
-// revealLoop answers reveal requests from the dashboard with values from
-// memory. The value is never logged.
-func (a *Agent) revealLoop(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(revealInterval):
-		}
-		var q contract.RevealRequestsResponse
-		if err := a.Client.do(ctx, http.MethodGet, "/api/v1/agents/reveals", nil, &q); err != nil {
-			continue
-		}
-		for _, r := range q.Requests {
-			res := contract.RevealResult{}
-			if v, ok := a.secrets.Value(r.Ref); ok {
-				res.Value = v
-			} else {
-				res.Error = "This secret is no longer visible to the agent (fixed, or not seen since the agent restarted)."
-			}
-			if err := a.Client.do(ctx, http.MethodPost, "/api/v1/agents/reveals/"+url.PathEscape(r.ID), res, nil); err != nil {
-				a.Log.Warn("could not answer reveal request", "id", r.ID, "err", err)
-			}
-		}
 	}
 }

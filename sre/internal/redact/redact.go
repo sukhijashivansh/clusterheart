@@ -133,10 +133,6 @@ type Match struct {
 	Key    string // the field it was under, e.g. "accessToken" or "DB_PASSWORD"; empty if none
 	Masked string // a hint to recognise it, e.g. "eyJh…x9Qz"; never more than 8 characters of it
 	Length int    // length of the secret value
-	// Value is the raw secret. The agent keeps it in memory, inside the cluster,
-	// and only hands it over for an explicit, audited reveal. Never put it in a
-	// finding, a log line or telemetry.
-	Value string
 }
 
 // Find returns the names of the secret detectors that match s, in detector
@@ -201,7 +197,7 @@ func describe(name, s string, loc []int) Match {
 	if m.Key == "" {
 		m.Key = keyBefore(s[:loc[0]])
 	}
-	m.Masked, m.Length, m.Value = Mask(value), utf8.RuneCountInString(value), value
+	m.Masked, m.Length = Mask(value), utf8.RuneCountInString(value)
 	return m
 }
 

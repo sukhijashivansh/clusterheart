@@ -172,10 +172,12 @@ func TestSecretsFromJournalAndUnitEnv(t *testing.T) {
 		if f.Owner != "Service/api" || f.Namespace != "web-01" {
 			t.Errorf("owner/host: %+v", f)
 		}
-		v, ok := s.Value(f.Ref())
-		if !ok || (v != "s3cr3tvalue" && v != "hunter22hunter") {
-			t.Errorf("reveal value for %s = %q", f.Type, v)
+		if f.Masked == "" || f.Length == 0 {
+			t.Errorf("no masked hint: %+v", f)
 		}
+	}
+	if dump, _ := json.Marshal([]any{s.logs, s.specs}); strings.Contains(string(dump), "s3cr3tvalue") || strings.Contains(string(dump), "hunter22hunter") {
+		t.Fatalf("scanner keeps raw values: %s", dump)
 	}
 	s.scanUnitEnv(map[string][]string{}, now) // the setting was removed
 	if len(s.findings(now)) != 1 {
@@ -183,10 +185,10 @@ func TestSecretsFromJournalAndUnitEnv(t *testing.T) {
 	}
 }
 
-func TestAgentCycleSendsHostSnapshotAndAnswersReveals(t *testing.T) {
+func TestAgentCycleSendsHostSnapshot(t *testing.T) {
 	var mu sync.Mutex
 	var batch contract.TelemetryBatch
-	var revealAnswer contract.RevealResult
+	polls := 0
 	heartbeats := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -201,11 +203,8 @@ func TestAgentCycleSendsHostSnapshotAndAnswersReveals(t *testing.T) {
 			_ = json.Unmarshal(body, &batch)
 		case "/api/v1/agents/heartbeat":
 			heartbeats++
-		case "/api/v1/agents/reveals":
-			ref := contract.SecretFinding{Source: "env", Namespace: "web-01", Owner: "Service/api", Container: "api.service", Field: "DB_PASSWORD", Type: "hardcoded-env", Key: "DB_PASSWORD"}.Ref()
-			_ = json.NewEncoder(w).Encode(contract.RevealRequestsResponse{Requests: []contract.RevealRequest{{ID: "rvl_1", Ref: ref}}})
-		case "/api/v1/agents/reveals/rvl_1":
-			_ = json.Unmarshal(body, &revealAnswer)
+		default:
+			polls++
 		}
 	}))
 	defer ts.Close()
@@ -225,25 +224,15 @@ func TestAgentCycleSendsHostSnapshotAndAnswersReveals(t *testing.T) {
 		mu.Unlock()
 		t.Fatalf("findings not sent: %+v", batch.Snapshots[0].SecretFindings)
 	}
-	mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), revealInterval+3*time.Second)
-	defer cancel()
-	go a.revealLoop(ctx)
-	deadline := time.Now().Add(revealInterval + 2*time.Second)
-	for time.Now().Before(deadline) {
-		mu.Lock()
-		v := revealAnswer.Value
+	if polls != 0 {
 		mu.Unlock()
-		if v != "" {
-			if v != "hunter22hunter" {
-				t.Fatalf("reveal answered %q", v)
-			}
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
+		t.Fatalf("agent called %d other endpoints (reveals were removed)", polls)
 	}
-	t.Fatal("reveal request not answered")
+	if strings.Contains(fmt.Sprint(batch), "hunter22hunter") {
+		mu.Unlock()
+		t.Fatal("raw secret sent")
+	}
+	mu.Unlock()
 }
 
 // TestRealHost samples the machine running the tests (Linux only).

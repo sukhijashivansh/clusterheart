@@ -86,15 +86,6 @@ func NewCollector(kubeconfigPath string) (*Collector, error) {
 // K8sVersion returns the discovered server version (may be empty).
 func (c *Collector) K8sVersion() string { return c.k8sVer }
 
-// SecretValue returns the raw value behind a current secret finding, for an
-// explicit reveal. ok is false when the finding is gone or the scanner is off.
-func (c *Collector) SecretValue(ref string) (string, bool) {
-	if c.secrets == nil {
-		return "", false
-	}
-	return c.secrets.Value(ref)
-}
-
 // Snapshot collects one bounded cluster-health summary.
 func (c *Collector) Snapshot(ctx context.Context) (contract.ClusterSnapshot, error) {
 	snap := contract.ClusterSnapshot{CollectedAt: time.Now().UTC()}

@@ -372,7 +372,7 @@
                         </li>
                         <li class="flex gap-3">
                             <span class="text-accent font-bold">•</span>
-                            <span><strong class="text-ink">See it when you need to:</strong> a masked hint by default; admins can reveal the full value, which is never stored.</span>
+                            <span><strong class="text-ink">Detected, not copied:</strong> we show where a secret leaked and a short masked hint, never the secret itself.</span>
                         </li>
                         <li class="flex gap-3">
                             <span class="text-accent font-bold">•</span>
@@ -605,7 +605,7 @@
                         </li>
                         <li class="flex gap-3">
                             <span class="text-accent font-bold">•</span>
-                            <span><strong class="text-ink">Secrets stay secret:</strong> we point out leaked passwords and keys and never store them; a value is only fetched when an admin reveals it.</span>
+                            <span><strong class="text-ink">Secrets stay secret:</strong> we point out leaked passwords and keys without ever copying them.</span>
                         </li>
                     </ul>
                 </div>
@@ -664,7 +664,7 @@
                         <svg class="faq-icon w-[1em] h-[1em] text-faint transition-transform duration-200 shrink-0" viewBox="0 0 448 512" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
                     </button>
                     <div class="faq-a hidden pb-6 -mt-1">
-                        <p class="text-muted leading-relaxed">If a password or key shows up in your apps’ output or settings, we tell you where so you can fix it, with a masked hint. The full value is only fetched when an admin clicks Reveal, and it is never stored. Keeping secrets out of your apps’ output is still up to you.</p>
+                        <p class="text-muted leading-relaxed">If a password or key shows up in your apps’ output or settings, we tell you where it is, with a short masked hint, so you can fix it. The secret itself never leaves your machines. Keeping secrets out of your apps’ output is still up to you.</p>
                     </div>
                 </div>
                 <div class="faq-item border-b border-line">
