@@ -311,12 +311,12 @@ table.users tbody tr:hover{background:var(--hover)}
 /* detail tabs (Pods / Nodes) */
 /* Server timeline */
 .tl-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;flex-wrap:wrap}
-.tl-ranges{display:inline-flex;border:1px solid var(--border);background:var(--surface2)}
-.tl-range,.tl-view{font:inherit;font-size:13px;font-weight:600;color:var(--muted);background:none;border:none;padding:7px 13px;cursor:pointer}
-.tl-range+.tl-range{border-left:1px solid var(--border)}
-.tl-range:hover,.tl-view:hover{color:var(--text);background:var(--hover)}
-.tl-range.on{color:var(--text);background:var(--active-bg);box-shadow:inset 0 -2px 0 var(--accent)}
-.tl-view{border:1px solid var(--border);background:var(--surface2)}
+.tl-view{height:36px;font:inherit;font-size:12.5px;font-weight:600;color:var(--text);background:var(--input-bg);border:1px solid var(--border-strong);padding:0 15px;cursor:pointer}
+.tl-view:hover{background:var(--hover)}
+.subtabs .subpane[hidden]{display:none}
+.subtabs .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}
+.subtabs .seg::-webkit-scrollbar{display:none}
+.subtabs > .subpane > .tscroll{border-top:none}
 .tl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .tl-grid .card2{margin:0}
 .tl-loading .tl-grid,.tl-loading .tl-tscroll{opacity:.5;transition:opacity .15s}

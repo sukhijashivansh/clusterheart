@@ -939,6 +939,28 @@ function secretDetail(f,label,src){
     '<p class="u-email" style="margin:10px 0 0">'+(sreRevealOK?'Reveal fetches the value from your cluster\'s agent on request. It isn\'t stored, and each reveal is recorded in Activity.':'Update the agent to reveal full values.')+'</p></div>';
 }
 
+// ---------- Sub-tabs ----------
+// A switch inside a tab, like Pods / Jobs: panes is [[key,label,html],...].
+// The chosen pane is remembered per switch across re-renders.
+var _subTab={};
+function plural(n,one,many){return n+' '+(n===1?one:(many||one+'s'));}
+function subTabs(id,panes){
+  var cur=_subTab[id];
+  if(!panes.some(function(p){return p[0]===cur;}))cur=panes[0][0];
+  return '<section class="card2 subtabs" data-sub="'+id+'"><div class="card2-head"><div class="toolbar-row"><div class="seg" role="tablist">'+
+    panes.map(function(p){return '<button class="seg-btn'+(p[0]===cur?' active':'')+'" role="tab" aria-selected="'+(p[0]===cur)+'" data-pane="'+p[0]+'">'+p[1]+'</button>';}).join('')+
+    '</div></div></div>'+
+    panes.map(function(p){return '<div class="subpane" data-pane="'+p[0]+'"'+(p[0]===cur?'':' hidden')+'>'+p[2]+'</div>';}).join('')+'</section>';
+}
+document.addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('.subtabs > .card2-head .seg-btn');
+  if(!b)return;
+  var box=b.closest('.subtabs'),key=b.dataset.pane;
+  _subTab[box.dataset.sub]=key;
+  box.querySelectorAll(':scope > .card2-head .seg-btn').forEach(function(x){var on=x===b;x.classList.toggle('active',on);x.setAttribute('aria-selected',on);});
+  box.querySelectorAll(':scope > .subpane').forEach(function(p){p.hidden=p.dataset.pane!==key;});
+});
+
 // ---------- Server detail ----------
 // A plain Linux server watched by the host agent: Overview, Health, Secrets, AI.
 function sevClass(p,warn,bad){return p>=bad?'bad':(p>=warn?'off':'on');}
@@ -971,51 +993,52 @@ function renderServerDetail(c,html,box){
   var upd=hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?'':
     '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent</p><p class="card2-desc">This server runs agent '+esc(c.agentVersion||'unknown')+'. Update it to see GPU and network usage. Run this on the server:</p></div>'+
     '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">'+esc(HOST_UPDATE_CMD)+'</textarea><div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
-  var ov=upd+'<section class="card2"><div class="card2-head"><p class="card2-title">System</p></div><div class="card2-body"><div class="sec-grid">'+
+  var ovPanes=[['system','System','<div class="card2-body"><div class="sec-grid">'+
     row('Hostname','<span class="mono-chip">'+esc(h.hostname)+'</span>')+row('OS',esc(h.os||'-'))+row('Kernel',esc(h.kernel||'-'))+
     row('Architecture',esc(h.arch||'-'))+row('Uptime',fmtUptime(h.uptimeSec))+
     (h.swapTotalMi?row('Swap',fmtMem(h.swapUsedMi)+' of '+fmtMem(h.swapTotalMi)):'')+
-  '</div></div></section>';
+  '</div></div>']];
   var gpuErr=(h.problems||[]).filter(function(x){return x.type==='GPUUnavailable';});
   if(!gpus.length&&gpuErr.length){
-    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">GPUs</p></div><div class="card2-body">'+
-      gpuErr.map(function(x){return '<p class="sub" style="margin:0 0 6px">'+sevPill(x.severity)+' '+esc(x.message)+'</p>';}).join('')+'</div></section>';
+    ovPanes.push(['gpus','GPU','<div class="card2-body">'+
+      gpuErr.map(function(x){return '<p class="sub" style="margin:0 0 6px">'+sevPill(x.severity)+' '+esc(x.message)+'</p>';}).join('')+'</div>']);
   }
   if(gpus.length){
-    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">GPUs ('+gpus.length+')</p></div><div class="tscroll"><table class="users ptable"><thead><tr><th>GPU</th><th>Use</th><th>Memory</th><th>Temp</th><th>Power</th></tr></thead><tbody>'+
+    ovPanes.push(['gpus',plural(gpus.length,'GPU'),'<div class="tscroll"><table class="users ptable"><thead><tr><th>GPU</th><th>Use</th><th>Memory</th><th>Temp</th><th>Power</th></tr></thead><tbody>'+
       gpus.map(function(g){var mp=pctOf(g.memUsedMi,g.memTotalMi);
         return '<tr><td><div class="u-name pod-name">'+esc(g.name)+'</div><div class="u-email">GPU '+g.index+' · '+(g.vendor==='amd'?'AMD':'NVIDIA')+'</div></td>'+
           '<td class="u-time">'+Math.round(g.utilPercent||0)+'%</td>'+
           '<td class="u-time">'+fmtMem(g.memUsedMi)+' of '+fmtMem(g.memTotalMi)+' <span class="u-email">'+mp+'%</span></td>'+
           '<td>'+(g.tempC?'<span class="pill '+sevClass(g.tempC,85,92)+'">'+Math.round(g.tempC)+'°C</span>':'—')+'</td>'+
           '<td class="u-time">'+(g.powerW?Math.round(g.powerW)+' W'+(g.powerLimitW?' of '+Math.round(g.powerLimitW)+' W':''):'—')+'</td></tr>';}).join('')+
-      '</tbody></table></div></section>';
+      '</tbody></table></div>']);
   }
   if((h.disks||[]).length){
-    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Disks</p></div><div class="tscroll"><table class="users ptable"><thead><tr><th>Mount</th><th>Type</th><th>Used</th><th>Size</th><th>Full</th></tr></thead><tbody>'+
+    ovPanes.push(['disks',plural(h.disks.length,'Disk'),'<div class="tscroll"><table class="users ptable"><thead><tr><th>Mount</th><th>Type</th><th>Used</th><th>Size</th><th>Full</th></tr></thead><tbody>'+
       h.disks.map(function(d){var p=pctOf(d.usedMi,d.totalMi);return '<tr><td><span class="u-name" style="font-size:13.5px">'+esc(d.mount)+'</span></td><td class="u-email">'+esc(d.fs)+'</td><td class="u-time">'+fmtMem(d.usedMi)+'</td><td class="u-time">'+fmtMem(d.totalMi)+'</td><td><span class="pill '+sevClass(p,80,90)+'">'+p+'%</span></td></tr>';}).join('')+
-      '</tbody></table></div></section>';
+      '</tbody></table></div>']);
   }
   if((h.processes||[]).length){
-    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Top processes</p></div><div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Process</th><th>User</th><th>CPU</th><th>Memory</th></tr></thead><tbody>'+
+    ovPanes.push(['procs',plural(h.processes.length,'Process','Processes'),'<div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Process</th><th>User</th><th>CPU</th><th>Memory</th></tr></thead><tbody>'+
       h.processes.map(function(x){return '<tr><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">pid '+x.pid+'</div></td><td class="u-email">'+esc(x.user||'')+'</td><td class="u-time">'+(x.cpuPercent||0).toFixed(1)+'%</td><td class="u-time">'+fmtMem(x.memMi)+'</td></tr>';}).join('')+
-      '</tbody></table></div></section>';
+      '</tbody></table></div>']);
   }
   // Health
-  var he='';
+  var hePanes=[];
   if(probs.length){
     var sevRank={high:0,medium:1};
-    he+='<section class="card2"><div class="card2-head"><p class="card2-title">Problems ('+probs.length+')</p></div><div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Problem</th><th>Severity</th><th>Detail</th></tr></thead><tbody>'+
+    hePanes.push(['problems',plural(probs.length,'Problem'),'<div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Problem</th><th>Severity</th><th>Detail</th></tr></thead><tbody>'+
       probs.slice().sort(function(a,b){return (sevRank[a.severity]||2)-(sevRank[b.severity]||2);}).map(function(x){return '<tr><td class="u-name" style="font-size:13.5px">'+esc(x.type)+'</td><td>'+sevPill(x.severity)+'</td><td class="u-time" style="white-space:normal">'+esc(x.message)+'</td></tr>';}).join('')+
-      '</tbody></table></div></section>';
+      '</tbody></table></div>']);
   }
   var logs=(h.errorLogs||[]).slice().reverse();
   if(logs.length){
-    he+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">Recent errors ('+logs.length+')</p></div><div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Service</th><th>Message</th><th>When</th></tr></thead><tbody>'+
+    hePanes.push(['errors',plural(logs.length,'Error'),'<div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Service</th><th>Message</th><th>When</th></tr></thead><tbody>'+
       logs.map(function(l){return '<tr><td class="u-email">'+esc(l.unit||'system')+'</td><td class="u-time" style="white-space:normal;font-family:\'Geist Mono\',ui-monospace,monospace;font-size:12px">'+esc(l.message)+'</td><td class="u-time" style="white-space:nowrap" title="'+esc(l.time?new Date(l.time).toLocaleString():'')+'">'+ago(l.time)+'</td></tr>';}).join('')+
-      '</tbody></table></div></section>';
+      '</tbody></table></div>']);
   }
-  if(!he)he='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">Healthy.</span> No problems or errors reported.</p></div></section>';
+  var ov=upd+subTabs('srv-ov',ovPanes);
+  var he=hePanes.length?subTabs('srv-health',hePanes):'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">Healthy.</span> No problems or errors reported.</p></div></section>';
   html+='<div class="tabpanel active" data-panel="overview">'+ov+'</div>'+
     '<div class="tabpanel" data-panel="timeline"><div id="tl-root"></div></div>'+
     '<div class="tabpanel" data-panel="health">'+he+'</div>'+
@@ -1181,8 +1204,8 @@ function tlRender(){
   var root=document.getElementById('tl-root');
   if(!root)return;
   var d=tlState.data;
-  var bar='<div class="tl-bar"><div class="tl-ranges" role="group" aria-label="Time range">'+
-    TL_RANGES.map(function(r){return '<button class="tl-range'+(tlState.range===r[0]?' on':'')+'" data-r="'+r[0]+'" aria-pressed="'+(tlState.range===r[0])+'">'+r[1]+'</button>';}).join('')+
+  var bar='<div class="tl-bar"><div class="seg tl-ranges" role="group" aria-label="Time range">'+
+    TL_RANGES.map(function(r){return '<button class="seg-btn tl-range'+(tlState.range===r[0]?' active':'')+'" data-r="'+r[0]+'" aria-pressed="'+(tlState.range===r[0])+'">'+r[1]+'</button>';}).join('')+
     '</div><button class="tl-view" aria-pressed="'+tlState.table+'">'+(tlState.table?'Charts':'Table')+'</button></div>';
   if(!d){root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Loading history…</p></div></section>';tlWireBar(root);return;}
   if(d.error){root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Could not load history'+(d.error?': '+esc(d.error):'')+'.</p></div></section>';tlWireBar(root);return;}
@@ -1207,7 +1230,7 @@ function tlWireBar(root){
   root.querySelectorAll('.tl-range').forEach(function(b){b.addEventListener('click',function(){
     if(tlState.range===b.dataset.r)return;
     tlState.range=b.dataset.r;
-    root.querySelectorAll('.tl-range').forEach(function(x){x.classList.toggle('on',x===b);x.setAttribute('aria-pressed',x===b);});
+    root.querySelectorAll('.tl-range').forEach(function(x){x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',x===b);});
     loadTimeline(tlState.cluster);
   });});
   var v=root.querySelector('.tl-view');
