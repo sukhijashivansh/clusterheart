@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -125,4 +128,124 @@ func TestJournalFallsBackOnOldSystemd(t *testing.T) {
 	if withFields != 1 {
 		t.Fatalf("retried --output-fields %d times", withFields)
 	}
+}
+
+// fakeStart hands out pipes standing in for long-running nvidia-smi processes.
+type fakeStart struct {
+	mu     sync.Mutex
+	starts int
+	args   []string
+	w      *io.PipeWriter
+}
+
+func (f *fakeStart) start(_ context.Context, _ string, args ...string) (io.ReadCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.starts++
+	f.args = args
+	r, w := io.Pipe()
+	f.w = w
+	return r, nil
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("condition not met")
+}
+
+func TestNvidiaStreamKeepsOneProcess(t *testing.T) {
+	fs := &fakeStart{}
+	oneShots := 0
+	r := &gpuReader{sysfs: t.TempDir(), start: fs.start, lookPath: func(string) (string, error) { return "/usr/bin/nvidia-smi", nil },
+		run: func(context.Context, string, ...string) ([]byte, error) {
+			oneShots++
+			return []byte("0, GPU-1, NVIDIA L4, 5, 100, 23034, 40, 20, 72\n"), nil
+		}}
+	now := time.Now()
+	// First sample: the stream has just started, so nvidia-smi runs once.
+	if g, _ := r.read(context.Background(), now); len(g) != 1 || g[0].UtilPercent != 5 || oneShots != 1 || fs.starts != 1 {
+		t.Fatalf("first read: %+v oneShots=%d starts=%d", g, oneShots, fs.starts)
+	}
+	if strings.Join(fs.args, " ") != strings.Join(nvidiaQuery, " ")+" -l 15" {
+		t.Fatalf("stream args: %v", fs.args)
+	}
+	fs.w.Write([]byte("0, GPU-1, NVIDIA L4, 77, 9000, 23034, 61, 55.5, 72\n"))
+	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return !r.stream.last.IsZero() })
+	g, probs := r.read(context.Background(), time.Now())
+	if len(g) != 1 || g[0].UtilPercent != 77 || g[0].MemUsedMi != 9000 || len(probs) != 0 || oneShots != 1 || fs.starts != 1 {
+		t.Fatalf("streamed read: %+v probs=%v oneShots=%d starts=%d", g, probs, oneShots, fs.starts)
+	}
+	// nvidia-smi exits: back to one-shot, restarted only after a pause.
+	fs.w.Close()
+	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return !r.stream.running })
+	r.read(context.Background(), time.Now())
+	if oneShots != 2 || fs.starts != 1 {
+		t.Fatalf("after exit: oneShots=%d starts=%d", oneShots, fs.starts)
+	}
+	r.read(context.Background(), time.Now().Add(nvidiaRestart+time.Second))
+	if fs.starts != 2 {
+		t.Fatalf("not restarted after %v: starts=%d", nvidiaRestart, fs.starts)
+	}
+}
+
+func TestNvidiaStreamSilentFallsBack(t *testing.T) {
+	fs := &fakeStart{}
+	oneShots := 0
+	r := &gpuReader{sysfs: t.TempDir(), start: fs.start, lookPath: func(string) (string, error) { return "/usr/bin/nvidia-smi", nil },
+		run: func(context.Context, string, ...string) ([]byte, error) {
+			oneShots++
+			return []byte("0, GPU-1, NVIDIA L4, 5, 100, 23034, 40, 20, 72\n"), nil
+		}}
+	now := time.Now()
+	r.read(context.Background(), now)
+	// Nothing printed for 3 intervals: stop using the stream for good.
+	if g, _ := r.read(context.Background(), now.Add(3*nvidiaStreamEvery+time.Second)); len(g) != 1 {
+		t.Fatalf("no fallback data: %+v", g)
+	}
+	r.read(context.Background(), now.Add(time.Hour))
+	if !r.stream.unusable || fs.starts != 1 || oneShots != 3 {
+		t.Fatalf("unusable=%v starts=%d oneShots=%d", r.stream.unusable, fs.starts, oneShots)
+	}
+}
+
+func TestNvidiaSMIFailureReportedWithoutPCIMatch(t *testing.T) {
+	r := &gpuReader{sysfs: t.TempDir(), lookPath: func(string) (string, error) { return "/usr/bin/nvidia-smi", nil },
+		run: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("Failed to initialize NVML: Insufficient Permissions"), &exec.ExitError{}
+		}}
+	if _, probs := r.read(context.Background(), time.Now()); len(probs) != 1 || !strings.Contains(probs[0].Message, "Insufficient Permissions") {
+		t.Fatalf("problems: %+v", probs)
+	}
+}
+
+// TestExecStartWithFakeNvidiaSMI runs a stand-in nvidia-smi that prints a
+// sample every 50ms, like "-l", and checks lines arrive and it stops with ctx.
+func TestExecStartWithFakeNvidiaSMI(t *testing.T) {
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		t.Skip("no /bin/sh")
+	}
+	dir := t.TempDir()
+	smi := filepath.Join(dir, "nvidia-smi")
+	// Like nvidia-smi: one sample, or one every interval with "-l".
+	write(t, smi, "#!/bin/sh\nsample() { echo '0, GPU-1, NVIDIA L4, 42, 1000, 23034, 50, 30, 72'; echo '1, GPU-2, NVIDIA L4, 7, 10, 23034, 35, 16, 72'; }\n"+
+		"case \"$*\" in *-l*) while true; do sample; sleep 0.05; done ;; *) sample ;; esac\n")
+	if err := os.Chmod(smi, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &gpuReader{sysfs: dir, start: execStart, run: execRun, lookPath: func(string) (string, error) { return smi, nil }}
+	r.read(ctx, time.Now())
+	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return len(r.stream.seen) == 2 })
+	g, _ := r.read(ctx, time.Now())
+	if len(g) != 2 || g[0].UtilPercent != 42 || g[1].Index != 1 {
+		t.Fatalf("streamed: %+v", g)
+	}
+	cancel() // agent shutting down
+	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return !r.stream.running })
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // Version is reported in heartbeats.
-const Version = "host-0.2.0"
+const Version = "host-0.2.1"
 
 const (
 	maxJournalLines = 2000 // per cycle
@@ -94,7 +94,7 @@ type Agent struct {
 func New(c *Client, interval time.Duration, log *slog.Logger) *Agent {
 	return &Agent{Client: c, Interval: interval, Log: log,
 		sys: &sys{proc: "/proc", etc: "/etc", sysfs: "/sys", statfs: statfsMi, uidOf: fileOwner}, run: execRun,
-		gpus: newGPUReader(execRun, "/sys"), secrets: newSecretScanner()}
+		gpus: newGPUReader(execRun, execStart, "/sys"), secrets: newSecretScanner()}
 }
 
 // collect builds one snapshot.

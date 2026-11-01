@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -20,10 +21,40 @@ var goarch = runtime.GOARCH
 // runFunc runs a read-only command and returns its stdout. Tests replace it.
 type runFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
 
+// execRun runs a command with a 10s limit unless ctx already has a deadline.
 func execRun(ctx context.Context, name string, args ...string) ([]byte, error) {
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	return exec.CommandContext(cctx, name, args...).Output()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+	}
+	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+// startFunc starts a long-running read-only command and returns its output;
+// closing it stops the command. Tests replace it.
+type startFunc func(ctx context.Context, name string, args ...string) (io.ReadCloser, error)
+
+type cmdOutput struct {
+	io.ReadCloser
+	cmd *exec.Cmd
+}
+
+func (c cmdOutput) Close() error {
+	_ = c.ReadCloser.Close()
+	return c.cmd.Wait()
+}
+
+func execStart(ctx context.Context, name string, args ...string) (io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmdOutput{out, cmd}, nil
 }
 
 // failedUnits lists systemd units in the failed state.

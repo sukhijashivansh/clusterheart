@@ -515,6 +515,11 @@ func hostInstallSnippet(id, token string) string {
 	return "curl -fsSL " + script + " | sudo sh -s -- --id " + id + " --token " + token + extra
 }
 
+// hostUpdateSnippet updates the host agent in place (same id and token).
+func hostUpdateSnippet() string {
+	return "curl -fsSL " + envOr("HOST_INSTALL_URL", "https://clusterheart-server.clusterheart.com/install-host.sh") + " | sudo sh -s -- --update"
+}
+
 func agentInstallSnippet(clusterID, token string) string {
 	cpURL := envOr("AGENT_CONTROLPLANE_URL", "https://clusterheart-server.clusterheart.com/cp")
 	manifest := envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml")
@@ -537,7 +542,8 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
 		return
 	}
-	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email, "ManifestURL": envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml")})
+	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email, "ManifestURL": envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml"),
+		"HostUpdateCmd": hostUpdateSnippet()})
 }
 
 var appTmpl = page(appBody)
@@ -569,6 +575,10 @@ const appBody = `{{define "body"}}<div class="app2">
 </div>{{end}}
 {{define "script"}}<script>
 var NODE_MANIFEST_URL={{.ManifestURL}};
+var HOST_UPDATE_CMD={{.HostUpdateCmd}};
+// HOST_AGENT_LATEST is the host agent with GPU and network metrics.
+var HOST_AGENT_LATEST='0.2.1';
+function hostAgentAtLeast(v,want){return agentAtLeast(String(v||'').replace(/^host-/,''),want);}
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
 
@@ -679,7 +689,7 @@ async function load(){
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a><div class="cl-env">'+(c.kind==='server'?'Server':'Kubernetes')+(c.environment?' · '+esc(c.environment):'')+'</div></div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
         '<div class="cl-metrics">'+metrics+'</div>'+
-        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+'</span>'+kebab(c)+'</div>'+
+        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+(c.kind==='server'&&c.agentVersion&&!hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?' · <span class="cl-upd">agent update available</span>':'')+'</span>'+kebab(c)+'</div>'+
       '</div>';
     });
     html+='</div>';
@@ -939,7 +949,7 @@ function renderServerDetail(c,html,box){
     box.innerHTML=html+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No data yet. Once the agent reports (every ~30s), this server shows up here. On the server, check it with <span class="mono-chip">systemctl status clusterheart-host-agent</span>.</p></div></section>';
     return;
   }
-  var memP=pctOf(h.memUsedMi,h.memTotalMi),dk=fullestDisk(h),dkP=dk?pctOf(dk.usedMi,dk.totalMi):0,perCore=h.cpuCores?h.load5/h.cpuCores:0;
+  var memP=pctOf(h.memUsedMi,h.memTotalMi),dk=fullestDisk(h),dkP=dk?pctOf(dk.usedMi,dk.totalMi):0,perCore=h.cpuCores?(h.load5||0)/h.cpuCores:0;
   var gpus=h.gpus||[],gpuAvg=gpus.length?gpus.reduce(function(a,g){return a+(g.utilPercent||0);},0)/gpus.length:0;
   html+='<div class="statgrid">'+
     stat('CPU','<span class="pill '+sevClass(h.cpuPercent,80,90)+'" style="font-size:inherit">'+Math.round(h.cpuPercent)+'%</span>',h.cpuCores+' cores')+
@@ -958,11 +968,19 @@ function renderServerDetail(c,html,box){
   '</div>';
   // Overview
   var row=function(k,v){return '<div class="sec-k">'+k+'</div><div class="sec-v">'+v+'</div>';};
-  var ov='<section class="card2"><div class="card2-head"><p class="card2-title">System</p></div><div class="card2-body"><div class="sec-grid">'+
+  var upd=hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?'':
+    '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent</p><p class="card2-desc">This server runs agent '+esc(c.agentVersion||'unknown')+'. Update it to see GPU and network usage. Run this on the server:</p></div>'+
+    '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">'+esc(HOST_UPDATE_CMD)+'</textarea><div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
+  var ov=upd+'<section class="card2"><div class="card2-head"><p class="card2-title">System</p></div><div class="card2-body"><div class="sec-grid">'+
     row('Hostname','<span class="mono-chip">'+esc(h.hostname)+'</span>')+row('OS',esc(h.os||'-'))+row('Kernel',esc(h.kernel||'-'))+
     row('Architecture',esc(h.arch||'-'))+row('Uptime',fmtUptime(h.uptimeSec))+
     (h.swapTotalMi?row('Swap',fmtMem(h.swapUsedMi)+' of '+fmtMem(h.swapTotalMi)):'')+
   '</div></div></section>';
+  var gpuErr=(h.problems||[]).filter(function(x){return x.type==='GPUUnavailable';});
+  if(!gpus.length&&gpuErr.length){
+    ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">GPUs</p></div><div class="card2-body">'+
+      gpuErr.map(function(x){return '<p class="sub" style="margin:0 0 6px">'+sevPill(x.severity)+' '+esc(x.message)+'</p>';}).join('')+'</div></section>';
+  }
   if(gpus.length){
     ov+='<section class="card2" style="margin-top:16px"><div class="card2-head"><p class="card2-title">GPUs ('+gpus.length+')</p></div><div class="tscroll"><table class="users ptable"><thead><tr><th>GPU</th><th>Use</th><th>Memory</th><th>Temp</th><th>Power</th></tr></thead><tbody>'+
       gpus.map(function(g){var mp=pctOf(g.memUsedMi,g.memTotalMi);

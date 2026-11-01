@@ -1,9 +1,11 @@
 package hostagent
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"clusterheart/sre/internal/contract"
@@ -23,20 +26,48 @@ const (
 	gpuRecheck                = time.Hour // how often to look for newly installed GPUs or drivers
 )
 
+// nvidiaQuery asks nvidia-smi for one CSV line per GPU (see parseNvidiaSMI).
+var nvidiaQuery = []string{"--query-gpu=index,uuid,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit", "--format=csv,noheader,nounits"}
+
+const (
+	nvidiaStreamEvery = 15 * time.Second // sample interval of the long-running nvidia-smi
+	nvidiaRestart     = 5 * time.Minute  // wait before restarting one that exited
+	nvidiaOneShotMax  = 30 * time.Second // nvidia-smi can be slow without persistence mode
+)
+
 // gpuReader reads GPUs: NVIDIA through nvidia-smi, AMD through the amdgpu
 // driver's sysfs files. Both are read-only.
 type gpuReader struct {
 	run      runFunc
+	start    startFunc // nil: run nvidia-smi once per sample instead of streaming
 	sysfs    string
 	lookPath func(string) (string, error)
 
 	checkedAt time.Time
 	nvidiaSMI string // path to nvidia-smi, "" when not installed
 	nvidiaHW  bool   // an NVIDIA display/3D controller is on the PCI bus
+	stream    nvidiaStream
 }
 
-func newGPUReader(run runFunc, sysfs string) *gpuReader {
-	return &gpuReader{run: run, sysfs: sysfs, lookPath: exec.LookPath}
+// nvidiaStream keeps one "nvidia-smi --query-gpu ... -l 15" running, so the
+// driver stays initialised between samples: starting nvidia-smi for every
+// sample can cost seconds of CPU on GPUs without persistence mode. If it
+// exits, or prints nothing (e.g. buffered output), the reader falls back to
+// running nvidia-smi once per sample.
+type nvidiaStream struct {
+	mu        sync.Mutex
+	running   bool
+	unusable  bool
+	started   time.Time
+	stoppedAt time.Time
+	last      time.Time // last GPU line
+	gpus      map[int]contract.HostGPU
+	seen      map[int]time.Time
+	cancel    context.CancelFunc
+}
+
+func newGPUReader(run runFunc, start startFunc, sysfs string) *gpuReader {
+	return &gpuReader{run: run, start: start, sysfs: sysfs, lookPath: exec.LookPath}
 }
 
 // read returns the GPUs and problems reading them (driver down, tools missing).
@@ -56,11 +87,18 @@ func (g *gpuReader) read(ctx context.Context, now time.Time) ([]contract.HostGPU
 	var probs []contract.HostProblem
 	switch {
 	case g.nvidiaSMI != "":
-		out, err := g.run(ctx, g.nvidiaSMI, "--query-gpu=index,uuid,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit", "--format=csv,noheader,nounits")
+		if streamed, ok := g.streamed(ctx, now); ok {
+			gpus = append(gpus, streamed...)
+			break
+		}
+		cctx, cancel := context.WithTimeout(ctx, nvidiaOneShotMax)
+		out, err := g.run(cctx, g.nvidiaSMI, nvidiaQuery...)
+		cancel()
 		if err != nil {
-			// Without NVIDIA hardware this is just "No devices were found".
-			if g.nvidiaHW {
-				probs = append(probs, contract.HostProblem{Type: "GPUUnavailable", Severity: "high", Message: "nvidia-smi failed: " + firstLine(out, err)})
+			msg := firstLine(out, err)
+			// "No devices were found" on a machine without an NVIDIA card is normal.
+			if g.nvidiaHW || !strings.Contains(msg, "No devices were found") {
+				probs = append(probs, contract.HostProblem{Type: "GPUUnavailable", Severity: "high", Message: "nvidia-smi failed: " + msg})
 			}
 		} else {
 			gpus = append(gpus, parseNvidiaSMI(out)...)
@@ -75,6 +113,77 @@ func (g *gpuReader) read(ctx context.Context, now time.Time) ([]contract.HostGPU
 		gpus = append(gpus, amd[i])
 	}
 	return gpus, probs
+}
+
+// streamed returns the latest GPUs from the long-running nvidia-smi, starting
+// it when needed. ok is false when the caller should run nvidia-smi once.
+func (g *gpuReader) streamed(ctx context.Context, now time.Time) ([]contract.HostGPU, bool) {
+	if g.start == nil {
+		return nil, false
+	}
+	s := &g.stream
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.unusable {
+		return nil, false
+	}
+	if !s.running {
+		if !s.stoppedAt.IsZero() && now.Sub(s.stoppedAt) < nvidiaRestart {
+			return nil, false
+		}
+		sctx, cancel := context.WithCancel(ctx)
+		args := append(append([]string(nil), nvidiaQuery...), "-l", strconv.Itoa(int(nvidiaStreamEvery.Seconds())))
+		r, err := g.start(sctx, g.nvidiaSMI, args...)
+		if err != nil {
+			cancel()
+			s.unusable = true
+			return nil, false
+		}
+		s.running, s.started, s.cancel = true, now, cancel
+		s.last, s.gpus, s.seen = time.Time{}, map[int]contract.HostGPU{}, map[int]time.Time{}
+		go s.consume(r)
+		return nil, false // nothing read yet
+	}
+	stale := 3 * nvidiaStreamEvery
+	if s.last.IsZero() || now.Sub(s.last) > stale {
+		if now.Sub(s.started) > stale { // silent: output buffered or nvidia-smi hung
+			s.cancel()
+			s.running, s.unusable = false, true
+		}
+		return nil, false
+	}
+	var out []contract.HostGPU
+	for idx, at := range s.seen {
+		if now.Sub(at) <= 2*nvidiaStreamEvery {
+			out = append(out, s.gpus[idx])
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
+	return out, len(out) > 0
+}
+
+func (s *nvidiaStream) consume(r io.ReadCloser) {
+	defer r.Close()
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		gs := parseNvidiaSMI(sc.Bytes())
+		if len(gs) == 0 {
+			continue
+		}
+		at := time.Now()
+		s.mu.Lock()
+		for _, g := range gs {
+			s.gpus[g.Index], s.seen[g.Index] = g, at
+		}
+		s.last = at
+		s.mu.Unlock()
+	}
+	s.mu.Lock()
+	if s.running {
+		s.running, s.stoppedAt = false, time.Now()
+		s.cancel()
+	}
+	s.mu.Unlock()
 }
 
 func firstLine(out []byte, err error) string {

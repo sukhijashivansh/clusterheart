@@ -194,6 +194,7 @@ input::placeholder{color:var(--faint)}
 .cl-metric span{font-size:10.5px;color:var(--faint);letter-spacing:.03em}
 .cl-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--border)}
 .cl-seen{font-size:12px;color:var(--muted)}
+.cl-upd{color:var(--amber);font-weight:600}
 .cl-foot-actions{display:flex;gap:6px;flex-shrink:0}
 .cl-foot-actions .act{margin:0;padding:6px 12px;font-size:12.5px}
 /* loading spinner (accent comet ring) */

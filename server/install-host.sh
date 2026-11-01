@@ -79,16 +79,15 @@ check_running() {
   fi
 }
 
-# --update: newest agent, same server id and token.
+# --update: newest agent and setup, same server id and token.
 if [ -n "$UPDATE" ]; then
   if [ ! -f "$ENV_FILE" ]; then
     echo "The agent is not installed on this server. Use the install command from the dashboard." >&2
     exit 1
   fi
-  download_agent
-  systemctl restart "$SERVICE"
-  check_running "Clusterheart host agent updated and running."
-  exit 0
+  ID="$(sed -n 's/^CLUSTER_ID=//p' "$ENV_FILE")"
+  TOKEN="$(sed -n 's/^AGENT_TOKEN=//p' "$ENV_FILE")"
+  CP_URL="$(sed -n 's/^CONTROLPLANE_URL=//p' "$ENV_FILE")"
 fi
 
 if [ -z "$ID" ] || [ -z "$TOKEN" ]; then
@@ -98,12 +97,13 @@ fi
 
 download_agent
 
-# Unprivileged user; the journal groups let it read system logs.
+# Unprivileged user; the journal groups let it read system logs, video and
+# render let it query GPUs where the driver restricts its device files.
 if ! id clusterheart >/dev/null 2>&1; then
   useradd --system --no-create-home --shell /usr/sbin/nologin clusterheart 2>/dev/null \
     || useradd -r -M -s /sbin/nologin clusterheart
 fi
-for g in systemd-journal adm; do
+for g in systemd-journal adm video render; do
   if getent group "$g" >/dev/null 2>&1; then usermod -aG "$g" clusterheart; fi
 done
 
@@ -149,4 +149,8 @@ EOF
 systemctl daemon-reload
 systemctl enable "$SERVICE" >/dev/null 2>&1
 systemctl restart "$SERVICE"
-check_running "Clusterheart host agent is running. This server will show as Connected within a minute."
+if [ -n "$UPDATE" ]; then
+  check_running "Clusterheart host agent updated and running."
+else
+  check_running "Clusterheart host agent is running. This server will show as Connected within a minute."
+fi
