@@ -960,6 +960,12 @@ document.addEventListener('click',function(e){
 // ---------- Server detail ----------
 // A plain Linux server watched by the host agent: Overview, Health, Secrets, AI.
 function sevClass(p,warn,bad){return p>=bad?'bad':(p>=warn?'off':'on');}
+// diskLabel says which disk the Disk card shows, in plain words: "/" is the
+// main (system) disk; with several disks the card shows the fullest one.
+function diskLabel(d,n){
+  var name=d.mount==='/'?'Main disk':esc(d.mount);
+  return name+' · '+fmtMem(d.usedMi)+' of '+fmtMem(d.totalMi)+(n>1?' · fullest of '+n:'');
+}
 function fmtUptime(sec){sec=sec||0;var d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?d+'d '+h+'h':(h?h+'h '+m+'m':m+'m');}
 function renderServerDetail(c,html,box){
   var id=c.clusterId,L=c.latest,h=L&&L.host;
@@ -972,7 +978,7 @@ function renderServerDetail(c,html,box){
   html+='<div class="statgrid">'+
     stat('CPU','<span class="pill '+sevClass(h.cpuPercent||0,80,90)+'" style="font-size:inherit">'+Math.round(h.cpuPercent||0)+'%</span>',h.cpuCores+' cores')+
     stat('Memory','<span class="pill '+sevClass(memP,80,90)+'" style="font-size:inherit">'+memP+'%</span>',fmtMem(h.memUsedMi)+' of '+fmtMem(h.memTotalMi))+
-    stat('Disk',dk?'<span class="pill '+sevClass(dkP,80,90)+'" style="font-size:inherit">'+dkP+'%</span>':'—',dk?esc(dk.mount)+' (fullest)':'no disks reported')+
+    stat('Disk',dk?'<span class="pill '+sevClass(dkP,80,90)+'" style="font-size:inherit">'+dkP+'%</span>':'—',dk?diskLabel(dk,(h.disks||[]).length):'no disks reported')+
     stat('Load',(h.load5||0).toFixed(2),perCore.toFixed(2)+' per core (5 min)')+
     (gpus.length?stat('GPU',Math.round(gpuAvg)+'%',gpus.length+' × '+esc(gpus[0].name)+' · average use'):'')+
   '</div>';
@@ -1100,7 +1106,7 @@ function tlCharts(d){
   var P=d.points||[],G=(d.gpus||[]).slice(0,TL_MAX_SERIES),out=[];
   out.push({id:'cpu',title:'CPU',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'CPU',pts:tlMap(P,'cpu','cpuMax')}]});
   out.push({id:'mem',title:'Memory',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'Memory',pts:tlMap(P,'mem','memMax')}]});
-  out.push({id:'disk',title:'Disk',sub:'fullest',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'Disk',pts:tlMap(P,'disk')}]});
+  out.push({id:'disk',title:'Disk',sub:'fullest disk',fmt:tlPct,axis:tlAxPct,max:100,series:[{name:'Disk',pts:tlMap(P,'disk')}]});
   out.push({id:'load',title:'Load',sub:'5 min',fmt:tlLoad,axis:tlAxNum,series:[{name:'Load',pts:tlMap(P,'load','loadMax')}]});
   var net=[{name:'In',pts:tlMap(P,'rx','rxMax')},{name:'Out',pts:tlMap(P,'tx','txMax')}];
   if(tlAny(net))out.push({id:'net',title:'Network',fmt:tlRate,axis:tlAxRate,nice:tlNiceRate,series:net});
