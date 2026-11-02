@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -295,17 +296,29 @@ func (a *app) handleAppClusterUsage(w http.ResponseWriter, r *http.Request) {
 
 // handleAppServerMetrics returns a server's downsampled history (CPU, memory,
 // disk, load, network, GPUs) for the Timeline charts:
-// GET /api/app/clusters/{id}/metrics?range=1h|24h|7d.
+// GET /api/app/clusters/{id}/metrics?range=15m|1h|6h|24h|7d[&from=ms&to=ms].
 func (a *app) handleAppServerMetrics(w http.ResponseWriter, r *http.Request) {
 	_, tenant, ok := a.appSREUser(w, r)
 	if !ok {
 		return
 	}
-	rg := r.URL.Query().Get("range")
-	if rg != "1h" && rg != "24h" && rg != "7d" {
+	q := r.URL.Query()
+	rg := q.Get("range")
+	switch rg {
+	case "15m", "1h", "6h", "24h", "7d":
+	default:
 		rg = "7d"
 	}
-	code, data, err := a.cpDo("GET", "/api/v1/clusters/"+url.PathEscape(r.PathValue("id"))+"/metrics?range="+rg+"&tenantId="+url.QueryEscape(tenant), nil)
+	extra := ""
+	// A zoomed-in window: from/to in Unix milliseconds.
+	if f, t := q.Get("from"), q.Get("to"); f != "" && t != "" {
+		if _, err := strconv.ParseInt(f, 10, 64); err == nil {
+			if _, err := strconv.ParseInt(t, 10, 64); err == nil {
+				extra = "&from=" + f + "&to=" + t
+			}
+		}
+	}
+	code, data, err := a.cpDo("GET", "/api/v1/clusters/"+url.PathEscape(r.PathValue("id"))+"/metrics?range="+rg+extra+"&tenantId="+url.QueryEscape(tenant), nil)
 	cpRelay(w, code, data, err)
 }
 
@@ -1064,8 +1077,13 @@ function renderServerDetail(c,html,box){
 // A week of history from the control plane (MongoDB time-series): one small
 // chart per measure, one shared range picker above them, a hover crosshair,
 // and a table view with every value.
-var tlState={cluster:null,range:'7d',data:null,table:false,seq:0,charts:[]};
-var TL_RANGES=[['1h','1 hour'],['24h','24 hours'],['7d','7 days']];
+// Each chart draws the bucket average as a line and the bucket peak as a
+// thinner line above it, so a spike shorter than a bucket still shows at full
+// height. Drag across a chart (or use "Zoom to peak") to zoom into a window;
+// zoomed windows come back at up to 30s resolution.
+var tlState={cluster:null,range:'7d',zoom:null,data:null,table:false,seq:0,charts:[]};
+var TL_RANGES=[['15m','15 min'],['1h','1 hour'],['6h','6 hours'],['24h','24 hours'],['7d','7 days']];
+var TL_RANGE_NAMES={'15m':'15 minutes','1h':'hour','6h':'6 hours','24h':'24 hours','7d':'7 days'};
 var TL_MAX_SERIES=8;
 function tlColor(i){return 'var(--s'+(i+1)+')';}
 function tlPct(v){return v==null?'—':(v>0&&v<10?v.toFixed(1):Math.round(v))+'%';}
@@ -1081,23 +1099,33 @@ function tlAxTemp(v){return Math.round(v)+'°C';}
 // Rates get round numbers in the unit they are shown in (KB/s or MB/s).
 function tlNiceRate(m){return m>=1024?tlNice(m/1024)*1024:tlNice(m);}
 function tlNice(m){if(m<=0)return 1;var e=Math.pow(10,Math.floor(Math.log10(m))),f=m/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e;}
-function tlTimeLabel(t,range){
-  var d=new Date(t);
-  if(range==='7d')return d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'})+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(range==='24h'?' · '+d.toLocaleDateString([],{weekday:'short'}):'');
+// Labels follow the window shown: dates for multi-day spans, the weekday when
+// the window crosses midnight, seconds for 30s buckets.
+function tlSpan(){var d=tlState.data;return d&&d.from?new Date(d.to).getTime()-new Date(d.from).getTime():86400000;}
+function tlTimeLabel(t){
+  var d=new Date(t),span=tlSpan(),stepSec=(tlState.data&&tlState.data.stepSec)||60;
+  if(span>2*86400000)return d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'})+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  var o={hour:'2-digit',minute:'2-digit'};if(stepSec<60)o.second='2-digit';
+  return d.toLocaleTimeString([],o)+(span>6*3600000||new Date(t).toDateString()!==new Date().toDateString()?' · '+d.toLocaleDateString([],{weekday:'short'}):'');
 }
-function tlTicks(from,to,range){
-  var out=[],d=new Date(from);
-  if(range==='7d'){
+function tlRangeText(){
+  if(!tlState.zoom)return 'the last '+(TL_RANGE_NAMES[tlState.range]||'24 hours');
+  return tlTimeLabel(tlState.zoom.from)+' to '+tlTimeLabel(tlState.zoom.to);
+}
+function tlTicks(from,to){
+  var out=[],d=new Date(from),span=to-from;
+  if(span>3*86400000){
     d.setHours(0,0,0,0);d.setDate(d.getDate()+1);
     for(;d.getTime()<to;d.setDate(d.getDate()+1))out.push({t:d.getTime(),l:d.toLocaleDateString([],{weekday:'short',day:'numeric'})});
-  }else{
-    var stepMin=range==='24h'?240:15;
-    d.setSeconds(0,0);
-    var mins=d.getHours()*60+d.getMinutes(),next=Math.ceil((mins+1)/stepMin)*stepMin;
-    d.setHours(0,next,0,0);
-    for(;d.getTime()<to;d=new Date(d.getTime()+stepMin*60000))out.push({t:d.getTime(),l:d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+    return out;
   }
+  // About six ticks on round minute boundaries.
+  var opts=[1,2,5,10,15,30,60,120,180,240,360,720],stepMin=opts[opts.length-1];
+  for(var i=0;i<opts.length;i++){if(span/(opts[i]*60000)<=7){stepMin=opts[i];break;}}
+  d.setSeconds(0,0);
+  var mins=d.getHours()*60+d.getMinutes(),next=Math.ceil((mins+1)/stepMin)*stepMin;
+  d.setHours(0,next,0,0);
+  for(;d.getTime()<to;d=new Date(d.getTime()+stepMin*60000))out.push({t:d.getTime(),l:d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
   return out;
 }
 
@@ -1138,21 +1166,22 @@ function tlGeom(ch,W,from,to){
     y:function(v){return TL_PAD.t+ph-Math.min(Math.max(v,0),max)/max*ph;}};
 }
 
-function tlSvg(ch,g,range,step){
+function tlSvg(ch,g,step){
   var base=TL_PAD.t+g.ph,svg='<svg width="'+g.W+'" height="'+TL_H+'" viewBox="0 0 '+g.W+' '+TL_H+'" aria-hidden="true">';
   [0,0.5,1].forEach(function(f){
     var v=g.max*f,yy=g.y(v).toFixed(1);
     svg+='<line class="tl-gl'+(f===0?' tl-base':'')+'" x1="'+g.padL+'" x2="'+(g.W-TL_PAD.r)+'" y1="'+yy+'" y2="'+yy+'"/>'+
       '<text class="tl-ax" x="'+(g.padL-8)+'" y="'+yy+'" text-anchor="end" dominant-baseline="middle">'+esc(ch.axis(v))+'</text>';
   });
-  var ticks=tlTicks(g.from,g.to,range),minGap=range==='7d'?44:40,lastX=-1e9;
+  var ticks=tlTicks(g.from,g.to),minGap=g.to-g.from>3*86400000?44:40,lastX=-1e9;
   ticks.forEach(function(tk){
     var xx=g.x(tk.t);
     if(xx<g.padL+16||xx>g.W-TL_PAD.r-16||xx-lastX<minGap)return;
     lastX=xx;
     svg+='<text class="tl-ax" x="'+xx.toFixed(1)+'" y="'+(TL_H-8)+'" text-anchor="middle">'+esc(tk.l)+'</text>';
   });
-  var gap=step*1.5,single=ch.series.length===1;
+  // Agents report every ~30s, so a missing 30s bucket is jitter, not a gap.
+  var gap=Math.max(step*1.5,90000),single=ch.series.length===1;
   ch.series.forEach(function(s,i){
     var segs=[],cur=[];
     s.pts.forEach(function(p){if(cur.length&&p.t-cur[cur.length-1].t>gap){segs.push(cur);cur=[];}cur.push(p);});
@@ -1161,31 +1190,59 @@ function tlSvg(ch,g,range,step){
     segs.forEach(function(seg){
       var d=seg.map(function(p,j){return (j?'L':'M')+g.x(p.t).toFixed(1)+' '+g.y(p.v).toFixed(1);}).join('');
       if(seg.length===1){svg+='<circle cx="'+g.x(seg[0].t).toFixed(1)+'" cy="'+g.y(seg[0].v).toFixed(1)+'" r="2.5" fill="'+col+'"/>';return;}
+      // Peak envelope: band from the average up to the bucket peak, plus a thin
+      // peak line, drawn only where the peak is above the average.
+      var hasPk=seg.some(function(p){return p.pk!=null&&p.pk>p.v+0.01;});
+      if(hasPk){
+        var pd=seg.map(function(p,j){return (j?'L':'M')+g.x(p.t).toFixed(1)+' '+g.y(Math.max(p.pk||0,p.v)).toFixed(1);}).join('');
+        var back=seg.slice().reverse().map(function(p){return 'L'+g.x(p.t).toFixed(1)+' '+g.y(p.v).toFixed(1);}).join('');
+        svg+='<path d="'+pd+back+'Z" fill="'+col+'" fill-opacity="'+(single?'.16':'.1')+'" stroke="none"/>';
+        svg+='<path class="tl-pkline" d="'+pd+'" fill="none" stroke="'+col+'" stroke-width="1.25" stroke-opacity=".7" stroke-dasharray="3 2" stroke-linejoin="round"/>';
+      }
       if(single)svg+='<path d="'+d+'L'+g.x(seg[seg.length-1].t).toFixed(1)+' '+base+'L'+g.x(seg[0].t).toFixed(1)+' '+base+'Z" fill="'+col+'" fill-opacity=".1" stroke="none"/>';
       svg+='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
     });
     var last=s.pts[s.pts.length-1];
     if(last)svg+='<circle class="tl-end" cx="'+g.x(last.t).toFixed(1)+'" cy="'+g.y(last.v).toFixed(1)+'" r="4" fill="'+col+'"/>';
+    // Mark where the highest peak happened.
+    var pp=tlNotablePeak(s);
+    if(pp)svg+='<circle class="tl-pkdot" cx="'+g.x(pp.t).toFixed(1)+'" cy="'+g.y(tlPkVal(pp)).toFixed(1)+'" r="3.5" fill="none" stroke="'+col+'" stroke-width="1.5"/>';
   });
+  svg+='<rect class="tl-sel" x="0" y="'+TL_PAD.t+'" width="0" height="'+g.ph+'" visibility="hidden"/>';
   svg+='<g class="tl-hover" visibility="hidden"><line class="tl-cross" x1="0" x2="0" y1="'+TL_PAD.t+'" y2="'+base+'"/>'+
     ch.series.map(function(s,i){return '<circle class="tl-hdot" r="4" fill="'+tlColor(i)+'"/>';}).join('')+'</g>';
   return svg+'</svg>';
 }
 
 function tlLast(s){return s.pts.length?s.pts[s.pts.length-1]:null;}
-function tlPeak(s){var m=null;s.pts.forEach(function(p){var v=p.pk!=null?p.pk:p.v;if(m==null||v>m)m=v;});return m;}
+function tlPkVal(p){return p.pk!=null?Math.max(p.pk,p.v):p.v;}
+function tlPeakPt(s){var m=null;s.pts.forEach(function(p){if(m==null||tlPkVal(p)>tlPkVal(m))m=p;});return m;}
+function tlPeak(s){var p=tlPeakPt(s);return p?tlPkVal(p):null;}
+// The series' peak across all series of a chart, for "Zoom to peak".
+// Only a peak that stands out from the series' average is worth marking.
+function tlChartPeak(ch){var best=null;ch.series.forEach(function(s){var p=tlNotablePeak(s);if(p&&(best==null||tlPkVal(p)>tlPkVal(best)))best=p;});return best;}
+function tlNotablePeak(s){
+  var p=tlPeakPt(s);if(!p||!s.pts.length)return null;
+  var avg=s.pts.reduce(function(a,q){return a+q.v;},0)/s.pts.length,pk=tlPkVal(p);
+  return pk>0&&pk>avg*1.2&&pk-avg>0.05?p:null;
+}
 
-function tlCardHtml(ch,ci,W,from,to,range,step){
+function tlCardHtml(ch,ci,W,from,to,step){
   var g=tlGeom(ch,W,from,to),one=ch.series.length===1,s0=ch.series[0],last=tlLast(s0);
-  var sum=one&&last?'<p class="tl-sum"><b>'+esc(ch.fmt(last.v))+'</b> now · peak <b>'+esc(ch.fmt(tlPeak(s0)))+'</b></p>':'';
+  var cp=tlChartPeak(ch),stepMs=step;
+  // Zooming only helps when the peak sits in a bucket wider than 30s.
+  var zoomBtn=cp&&stepMs>30000?' <button class="tl-pkzoom" data-ci="'+ci+'" title="Zoom in around this peak">at '+esc(tlTimeLabel(cp.t))+' &rsaquo;</button>':
+    (cp?' <span class="tl-pkat">at '+esc(tlTimeLabel(cp.t))+'</span>':'');
+  var sum=one&&last?'<p class="tl-sum"><b>'+esc(ch.fmt(last.v))+'</b> now · peak <b>'+esc(ch.fmt(tlPeak(s0)))+'</b>'+zoomBtn+'</p>':
+    (cp?'<p class="tl-sum">peak <b>'+esc(ch.fmt(tlPkVal(cp)))+'</b>'+zoomBtn+'</p>':'');
   var legend='';
   if(!one){
     legend='<div class="tl-legend">'+ch.series.map(function(s,i){var l=tlLast(s);
       return '<span class="tl-li" title="'+esc(s.full||s.name)+'"><span class="tl-key" style="background:'+tlColor(i)+'"></span>'+esc(s.name)+(s.full?' <span class="tl-li-sub">'+esc(s.full)+'</span>':'')+(l?' <b>'+esc(ch.fmt(l.v))+'</b>':'')+'</span>';}).join('')+'</div>';
   }
-  var label=ch.title+' over the last '+(range==='7d'?'7 days':range==='24h'?'24 hours':'hour')+(one&&last?', now '+ch.fmt(last.v)+', peak '+ch.fmt(tlPeak(s0)):'')+'. Use the arrow keys to read values.';
+  var label=ch.title+' over '+tlRangeText()+(one&&last?', now '+ch.fmt(last.v)+', peak '+ch.fmt(tlPeak(s0)):'')+'. Use the arrow keys to read values; drag across the chart to zoom in.';
   return '<section class="card2 tl-card"><div class="card2-head tl-head"><p class="card2-title">'+esc(ch.title)+(ch.sub?' <span class="tl-title-sub">'+esc(ch.sub)+'</span>':'')+'</p>'+sum+'</div>'+
-    '<div class="tl-chart" data-ci="'+ci+'" tabindex="0" role="img" aria-label="'+esc(label)+'">'+tlSvg(ch,g,range,step)+'<div class="tl-tip" hidden></div></div>'+legend+'</section>';
+    '<div class="tl-chart" data-ci="'+ci+'" tabindex="0" role="img" aria-label="'+esc(label)+'">'+tlSvg(ch,g,step)+'<div class="tl-tip" hidden></div></div>'+legend+'</section>';
 }
 
 function tlTableHtml(d,charts){
@@ -1196,7 +1253,7 @@ function tlTableHtml(d,charts){
   var times=Object.keys(byT).map(Number).sort(function(a,b){return b-a;});
   var html='<section class="card2"><div class="tscroll tl-tscroll"><table class="users ptable tl-table"><thead><tr><th>Time</th>'+cols.map(function(c){return '<th>'+esc(c.h)+'</th>';}).join('')+'</tr></thead><tbody>';
   times.forEach(function(t){
-    html+='<tr><td class="u-time" style="white-space:nowrap">'+esc(tlTimeLabel(t,tlState.range))+'</td>'+cols.map(function(c,ci){var p=byT[t][ci];
+    html+='<tr><td class="u-time" style="white-space:nowrap">'+esc(tlTimeLabel(t))+'</td>'+cols.map(function(c,ci){var p=byT[t][ci];
       return '<td class="u-time tl-num">'+(p?esc(c.fmt(p.v))+(p.pk!=null&&p.pk>p.v?' <span class="u-email">(peak '+esc(c.fmt(p.pk))+')</span>':''):'—')+'</td>';}).join('')+'</tr>';
   });
   return html+'</tbody></table></div></section>';
@@ -1207,8 +1264,11 @@ function tlRender(){
   if(!root)return;
   var d=tlState.data;
   var bar='<div class="tl-bar"><div class="seg tl-ranges" role="group" aria-label="Time range">'+
-    TL_RANGES.map(function(r){return '<button class="seg-btn tl-range'+(tlState.range===r[0]?' active':'')+'" data-r="'+r[0]+'" aria-pressed="'+(tlState.range===r[0])+'">'+r[1]+'</button>';}).join('')+
-    '</div><button class="tl-view" aria-pressed="'+tlState.table+'">'+(tlState.table?'Charts':'Table')+'</button></div>';
+    TL_RANGES.map(function(r){var on=!tlState.zoom&&tlState.range===r[0];return '<button class="seg-btn tl-range'+(on?' active':'')+'" data-r="'+r[0]+'" aria-pressed="'+on+'">'+r[1]+'</button>';}).join('')+
+    '</div><div class="tl-bar-r">'+
+    (tlState.zoom?'<span class="tl-zoomed">'+esc(tlRangeText())+(d&&d.stepSec?' · '+(d.stepSec<60?d.stepSec+'s':Math.round(d.stepSec/60)+' min')+' buckets':'')+'</span><button class="tl-view tl-unzoom">Reset zoom</button>':
+      (d&&d.stepSec?'<span class="tl-hint">'+(d.stepSec<60?d.stepSec+'s':Math.round(d.stepSec/60)+' min')+' buckets · drag a chart to zoom</span>':''))+
+    '<button class="tl-view" aria-pressed="'+tlState.table+'">'+(tlState.table?'Charts':'Table')+'</button></div></div>';
   if(!d){root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Loading history…</p></div></section>';tlWireBar(root);return;}
   if(d.error){root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">Could not load history'+(d.error?': '+esc(d.error):'')+'.</p></div></section>';tlWireBar(root);return;}
   if(!(d.points||[]).length){
@@ -1223,20 +1283,34 @@ function tlRender(){
   // Measure the card's inner width once the grid is in the page.
   grid.innerHTML='<section class="card2 tl-card"><div class="tl-chart tl-probe"></div></section>';
   var W=Math.max(260,Math.floor(grid.querySelector('.tl-probe').clientWidth));
-  grid.innerHTML=charts.map(function(ch,ci){return tlCardHtml(ch,ci,W,from,to,tlState.range,step);}).join('');
+  grid.innerHTML=charts.map(function(ch,ci){return tlCardHtml(ch,ci,W,from,to,step);}).join('');
   tlWireBar(root);
+  grid.querySelectorAll('.tl-pkzoom').forEach(function(b){b.addEventListener('click',function(){
+    var p=tlChartPeak(charts[+b.dataset.ci]);if(!p)return;
+    // 30 minutes around the peak bucket: fine enough for 30s resolution.
+    var mid=p.t+step/2;tlZoom(mid-15*60000,mid+15*60000);
+  });});
   grid.querySelectorAll('.tl-chart').forEach(function(el){tlWireHover(el,charts[+el.dataset.ci],tlGeom(charts[+el.dataset.ci],W,from,to));});
 }
 
 function tlWireBar(root){
   root.querySelectorAll('.tl-range').forEach(function(b){b.addEventListener('click',function(){
-    if(tlState.range===b.dataset.r)return;
-    tlState.range=b.dataset.r;
+    if(tlState.range===b.dataset.r&&!tlState.zoom)return;
+    tlState.range=b.dataset.r;tlState.zoom=null;
     root.querySelectorAll('.tl-range').forEach(function(x){x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',x===b);});
     loadTimeline(tlState.cluster);
   });});
-  var v=root.querySelector('.tl-view');
+  var v=root.querySelector('.tl-view:not(.tl-unzoom)');
   if(v)v.addEventListener('click',function(){tlState.table=!tlState.table;tlRender();});
+  var uz=root.querySelector('.tl-unzoom');
+  if(uz)uz.addEventListener('click',function(){tlState.zoom=null;loadTimeline(tlState.cluster);});
+}
+
+function tlZoom(from,to){
+  var now=Date.now();
+  if(to>now){from-=to-now;to=now;}
+  tlState.zoom={from:Math.round(from),to:Math.round(to)};
+  loadTimeline(tlState.cluster);
 }
 
 function tlWireHover(el,ch,g){
@@ -1250,10 +1324,10 @@ function tlWireHover(el,ch,g){
       var p=null;for(var k=0;k<s.pts.length;k++){if(s.pts[k].t===t){p=s.pts[k];break;}}
       var dot=dots[si];
       if(p){dot.setAttribute('cx',xx);dot.setAttribute('cy',g.y(p.v));dot.setAttribute('visibility','visible');}else dot.setAttribute('visibility','hidden');
-      rows+='<div class="tl-row"><span class="tl-key" style="background:'+tlColor(si)+'"></span><b>'+(p?esc(ch.fmt(p.v)):'—')+'</b> <span class="tl-sn">'+esc(s.name)+'</span>'+
+      rows+='<div class="tl-row"><span class="tl-key" style="background:'+tlColor(si)+'"></span><b>'+(p?esc(ch.fmt(p.v)):'—')+'</b> <span class="tl-sn">'+esc(s.name)+(p&&p.pk!=null&&p.pk>p.v?' avg':'')+'</span>'+
         (p&&p.pk!=null&&p.pk>p.v?' <span class="tl-pk">peak '+esc(ch.fmt(p.pk))+'</span>':'')+'</div>';
     });
-    tip.innerHTML='<div class="tl-tt">'+esc(tlTimeLabel(t,tlState.range))+'</div>'+rows;
+    tip.innerHTML='<div class="tl-tt">'+esc(tlTimeLabel(t))+'</div>'+rows;
     hover.setAttribute('visibility','visible');tip.hidden=false;
     var tw=tip.offsetWidth,left=xx+14;
     if(left+tw>g.W-4)left=xx-14-tw;
@@ -1265,8 +1339,31 @@ function tlWireHover(el,ch,g){
     for(var i=0;i<ch.times.length;i++){var dd=Math.abs(ch.times[i]-t);if(dd<bd){bd=dd;best=i;}}
     return best;
   }
-  el.addEventListener('pointermove',function(e){var r=el.getBoundingClientRect();show(nearest(e.clientX-r.left));});
-  el.addEventListener('pointerleave',hide);
+  // Drag across the chart to zoom into that window.
+  var sel=el.querySelector('.tl-sel'),dragX=null;
+  function clampX(px){return Math.min(Math.max(px,g.padL),g.padL+g.pw);}
+  function tAt(px){return g.from+(clampX(px)-g.padL)/g.pw*(g.to-g.from);}
+  el.addEventListener('pointerdown',function(e){
+    if(e.button!==0)return;
+    var r=el.getBoundingClientRect();dragX=clampX(e.clientX-r.left);
+    try{el.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  el.addEventListener('pointermove',function(e){
+    var r=el.getBoundingClientRect(),px=e.clientX-r.left;
+    show(nearest(px));
+    if(dragX!=null&&sel){
+      var a=Math.min(dragX,clampX(px)),b=Math.max(dragX,clampX(px));
+      sel.setAttribute('x',a);sel.setAttribute('width',b-a);sel.setAttribute('visibility',b-a>3?'visible':'hidden');
+    }
+  });
+  el.addEventListener('pointerup',function(e){
+    if(dragX==null)return;
+    var r=el.getBoundingClientRect(),px=clampX(e.clientX-r.left),a=Math.min(dragX,px),b=Math.max(dragX,px);
+    dragX=null;if(sel)sel.setAttribute('visibility','hidden');
+    if(b-a>=8)tlZoom(tAt(a),tAt(b));
+  });
+  el.addEventListener('pointercancel',function(){dragX=null;if(sel)sel.setAttribute('visibility','hidden');});
+  el.addEventListener('pointerleave',function(){if(dragX==null)hide();});
   el.addEventListener('focus',function(){show(ch.times.length-1);});
   el.addEventListener('blur',hide);
   el.addEventListener('keydown',function(e){
@@ -1280,13 +1377,14 @@ function tlWireHover(el,ch,g){
 // on screen, dimmed, so the layout does not jump.
 async function loadTimeline(id){
   if(!id)return;
-  if(tlState.cluster!==id){tlState.cluster=id;tlState.data=null;}
+  if(tlState.cluster!==id){tlState.cluster=id;tlState.data=null;tlState.zoom=null;}
   var root=document.getElementById('tl-root');
   if(root&&!root.firstChild)tlRender();
   if(root)root.classList.add('tl-loading');
   var seq=++tlState.seq;
   try{
-    var r=await fetch('/api/app/clusters/'+encodeURIComponent(id)+'/metrics?range='+encodeURIComponent(tlState.range),{headers:{'Accept':'application/json'}});
+    var q='range='+encodeURIComponent(tlState.range)+(tlState.zoom?'&from='+tlState.zoom.from+'&to='+tlState.zoom.to:'');
+    var r=await fetch('/api/app/clusters/'+encodeURIComponent(id)+'/metrics?'+q,{headers:{'Accept':'application/json'}});
     var d=await r.json().catch(function(){return {};});
     if(seq!==tlState.seq)return;
     tlState.data=r.ok?d:{error:d.error||('HTTP '+r.status)};

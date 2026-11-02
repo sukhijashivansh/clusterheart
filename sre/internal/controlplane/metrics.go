@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,11 +102,60 @@ type MetricsStore interface {
 	DeleteMetrics(ctx context.Context, clusterID string) error
 }
 
-// historyRanges maps a chart range to its bucket size (~60-340 points each).
+// historyRanges maps a chart range to its bucket size (~30-340 points each).
+// Short ranges use 30s buckets, the agent's default sample interval, so every
+// raw sample is its own point and short spikes are not averaged away.
 var historyRanges = map[string]struct{ span, step time.Duration }{
-	"1h":  {time.Hour, time.Minute},
+	"15m": {15 * time.Minute, 30 * time.Second},
+	"1h":  {time.Hour, 30 * time.Second},
+	"6h":  {6 * time.Hour, time.Minute},
 	"24h": {24 * time.Hour, 5 * time.Minute},
 	"7d":  {7 * 24 * time.Hour, 30 * time.Minute},
+}
+
+// customSteps are the bucket sizes a custom (zoomed) window can use; the
+// smallest that keeps the window under maxCustomPoints wins.
+var customSteps = []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute,
+	10 * time.Minute, 15 * time.Minute, 30 * time.Minute, time.Hour}
+
+const (
+	maxCustomPoints = 400
+	minCustomSpan   = 5 * time.Minute
+)
+
+// stepFor picks the finest bucket that keeps span under maxCustomPoints.
+func stepFor(span time.Duration) time.Duration {
+	for _, st := range customSteps {
+		if span/st <= maxCustomPoints {
+			return st
+		}
+	}
+	return customSteps[len(customSteps)-1]
+}
+
+// customWindow parses from/to (Unix milliseconds) for a zoomed-in chart. It
+// clamps the window into the retention period and widens it to minCustomSpan.
+func customWindow(fromS, toS string, now time.Time) (from, to time.Time, ok bool) {
+	f, err1 := strconv.ParseInt(fromS, 10, 64)
+	t, err2 := strconv.ParseInt(toS, 10, 64)
+	if err1 != nil || err2 != nil || t <= f {
+		return time.Time{}, time.Time{}, false
+	}
+	from, to = time.UnixMilli(f).UTC(), time.UnixMilli(t).UTC()
+	if to.After(now) {
+		to = now
+	}
+	if earliest := now.Add(-metricRetention); from.Before(earliest) {
+		from = earliest
+	}
+	if to.Sub(from) < minCustomSpan {
+		mid := from.Add(to.Sub(from) / 2)
+		from, to = mid.Add(-minCustomSpan/2), mid.Add(minCustomSpan/2)
+		if to.After(now) {
+			from, to = now.Add(-minCustomSpan), now
+		}
+	}
+	return from, to, true
 }
 
 func clampPct(v float64) float64 {
@@ -173,7 +223,8 @@ func metricPoints(snaps []contract.ClusterSnapshot, now time.Time) ([]HostPoint,
 }
 
 // handleServerMetrics serves a server's history for charts:
-// GET /api/v1/clusters/{id}/metrics?tenantId=...&range=1h|24h|7d
+// GET /api/v1/clusters/{id}/metrics?tenantId=...&range=15m|1h|6h|24h|7d
+// or, for a zoomed-in window, &from=<unix ms>&to=<unix ms> (range "custom").
 func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 	tenantID := strings.TrimSpace(r.URL.Query().Get("tenantId"))
 	if tenantID == "" {
@@ -189,14 +240,21 @@ func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "metric history is not available")
 		return
 	}
-	name := r.URL.Query().Get("range")
-	rg, ok := historyRanges[name]
-	if !ok {
-		name, rg = "24h", historyRanges["24h"]
+	now := s.now().UTC()
+	q := r.URL.Query()
+	name := q.Get("range")
+	var from, to time.Time
+	var step time.Duration
+	if f, t, ok := customWindow(q.Get("from"), q.Get("to"), now); ok {
+		name, from, to, step = "custom", f, t, stepFor(t.Sub(f))
+	} else {
+		rg, ok := historyRanges[name]
+		if !ok {
+			name, rg = "24h", historyRanges["24h"]
+		}
+		from, to, step = now.Add(-rg.span), now, rg.step
 	}
-	to := s.now().UTC()
-	from := to.Add(-rg.span)
-	hosts, gpus, err := s.metrics.HostHistory(r.Context(), c.ID, from, to, rg.step)
+	hosts, gpus, err := s.metrics.HostHistory(r.Context(), c.ID, from, to, step)
 	if err != nil {
 		s.log.Error("metric history query failed", "clusterId", c.ID, "err", err)
 		writeErr(w, http.StatusInternalServerError, "could not load metric history")
@@ -208,7 +266,7 @@ func (s *Server) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 	if gpus == nil {
 		gpus = []GPUHistory{}
 	}
-	writeJSON(w, http.StatusOK, MetricHistory{Range: name, StepSec: int(rg.step.Seconds()), From: from, To: to, Points: hosts, GPUs: gpus})
+	writeJSON(w, http.StatusOK, MetricHistory{Range: name, StepSec: int(step.Seconds()), From: from, To: to, Points: hosts, GPUs: gpus})
 }
 
 // --- in-memory implementation and the shared bucketing ---------------------
