@@ -15,7 +15,7 @@ import (
 )
 
 // Version is the agent build version, reported in heartbeats for compatibility.
-const Version = "0.2.3"
+const Version = "0.3.0"
 
 // maxBuffer bounds how many snapshots the agent holds during a control-plane
 // outage. Oldest snapshots are dropped first (bounded telemetry, no unbounded
@@ -102,6 +102,8 @@ type Runner struct {
 	Collector *Collector
 	Interval  time.Duration
 	Log       *slog.Logger
+	// ProbeEvery is how often to check for latency checks (0: 4s).
+	ProbeEvery time.Duration
 
 	buffer     []contract.ClusterSnapshot
 	failures   int
@@ -117,6 +119,7 @@ func (r *Runner) Run(ctx context.Context) {
 	if r.Log == nil {
 		r.Log = slog.Default()
 	}
+	go r.probeLoop(ctx)
 	for {
 		if ctx.Err() != nil {
 			return

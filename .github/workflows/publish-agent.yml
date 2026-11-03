@@ -14,6 +14,8 @@ on:
       - 'sre/cmd/agent/**'
       - 'sre/internal/agent/**'
       - 'sre/internal/contract/**'
+      - 'sre/internal/redact/**'
+      - 'sre/internal/probe/**'
       - '.github/workflows/publish-agent.yml'
   workflow_dispatch:
 
@@ -30,6 +32,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: sre/go.mod
+
+      - name: Test agent
+        working-directory: sre
+        run: go test ./internal/agent/... ./internal/probe/... ./internal/redact/...
 
       - name: Build agent (linux/amd64)
         working-directory: sre

@@ -17,6 +17,7 @@ on:
       - 'sre/internal/controlplane/**'
       - 'sre/internal/contract/**'
       - 'sre/internal/redact/**'
+      - 'sre/internal/probe/**'
       - 'sre/go.mod'
       - 'sre/go.sum'
       - '.github/workflows/deploy-controlplane.yml'

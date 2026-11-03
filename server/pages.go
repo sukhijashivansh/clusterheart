@@ -310,6 +310,30 @@ table.users tbody tr:hover{background:var(--hover)}
 .util-val.crit{color:var(--red)}
 .util-val.cap{color:var(--muted);font-weight:500}
 /* detail tabs (Pods / Nodes) */
+/* Latency check */
+.lat-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}
+.lat-f{display:flex;flex-direction:column;gap:6px;margin:0;font-size:12px;font-weight:600;color:var(--muted)}
+.lat-f > span{letter-spacing:.02em}
+.lat-f .toolbar-input{height:36px}
+.lat-pod{flex:1 1 260px;min-width:0}.lat-pod select{width:100%}
+.lat-port{width:96px}.lat-path{flex:1 1 180px}.lat-path input,.lat-port input{width:100%}
+.lat-n{width:96px}
+.lat-run{height:36px}
+.lat-status{margin:12px 0 0}
+.lat-head{flex-wrap:wrap}.lat-head .tl-sum{white-space:normal;overflow-wrap:anywhere}
+.lat-stats{margin:0 0 6px}
+.lat-verdict{margin:10px 0 18px;font-size:13.5px;color:var(--text)}
+.lat-legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);margin-bottom:10px}
+.lat-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.lat-bars{display:flex;flex-direction:column;gap:8px}
+.lat-row{display:grid;grid-template-columns:76px minmax(0,1fr) 72px;align-items:center;gap:10px}
+.lat-lbl,.lat-val{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.lat-val{text-align:right;color:var(--text)}
+.lat-track{display:flex;gap:2px;height:14px;min-width:0}
+.lat-seg{display:block;height:100%;min-width:2px}
+.lat-seg:last-child{border-radius:0 4px 4px 0}
+.lat-err{grid-column:2/4;font-size:12.5px;color:var(--red)}
+@media (max-width:640px){.lat-row{grid-template-columns:58px minmax(0,1fr) 60px}.lat-port,.lat-n{width:84px}}
 /* Server timeline */
 .tl-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;flex-wrap:wrap}
 .tl-view{height:36px;font:inherit;font-size:12.5px;font-weight:600;color:var(--text);background:var(--input-bg);border:1px solid var(--border-strong);padding:0 15px;cursor:pointer}

@@ -129,6 +129,65 @@ type RevealRequestsResponse struct {
 	Requests []struct{} `json:"requests"`
 }
 
+// ProbeTarget is a pod port to time HTTP GET requests against (latency check).
+type ProbeTarget struct {
+	Namespace string `json:"namespace"`
+	Pod       string `json:"pod"`
+	Port      int    `json:"port,omitempty"` // 0: the pod's first declared TCP port
+	Scheme    string `json:"scheme"`         // http | https
+	Path      string `json:"path"`
+	Samples   int    `json:"samples"`
+}
+
+// ProbeRequest is one latency check a person started in the dashboard.
+type ProbeRequest struct {
+	ID     string      `json:"id"`
+	Target ProbeTarget `json:"target"`
+}
+
+// ProbeRequestsResponse is the agent's queue of latency checks to run.
+type ProbeRequestsResponse struct {
+	Requests []ProbeRequest `json:"requests"`
+}
+
+// ProbeSample is one timed request, split into the phases curl -w reports.
+// The agent reaches the pod IP directly, so there is no DNS phase.
+type ProbeSample struct {
+	ConnectMs  float64 `json:"connectMs"`  // TCP handshake
+	TLSms      float64 `json:"tlsMs"`      // TLS handshake (0 for http)
+	WaitMs     float64 `json:"waitMs"`     // request sent -> first byte
+	TransferMs float64 `json:"transferMs"` // first byte -> last byte
+	FirstByte  float64 `json:"firstByteMs"`
+	TotalMs    float64 `json:"totalMs"`
+	Status     int     `json:"status,omitempty"`
+	Bytes      int64   `json:"bytes"`
+	Err        string  `json:"err,omitempty"`
+}
+
+// ProbeStat is min/avg/max of one phase across the successful samples.
+type ProbeStat struct {
+	Min float64 `json:"min"`
+	Avg float64 `json:"avg"`
+	Max float64 `json:"max"`
+}
+
+// ProbeResult is the agent's answer to a latency check. Response bodies are
+// never returned, only their size.
+type ProbeResult struct {
+	URL       string        `json:"url,omitempty"` // what was requested, e.g. https://10.0.3.7:8443/health
+	Port      int           `json:"port,omitempty"`
+	OKCount   int           `json:"okCount"`
+	Count     int           `json:"count"`
+	Samples   []ProbeSample `json:"samples,omitempty"`
+	Connect   ProbeStat     `json:"connect"`
+	TLS       ProbeStat     `json:"tls"`
+	Wait      ProbeStat     `json:"wait"`
+	Transfer  ProbeStat     `json:"transfer"`
+	FirstByte ProbeStat     `json:"firstByte"`
+	Total     ProbeStat     `json:"total"`
+	Error     string        `json:"error,omitempty"` // the check could not run at all
+}
+
 // PodLog is the tail of one container's log. Previous is true when the lines
 // come from the last terminated instance (what a crash looked like).
 type PodLog struct {

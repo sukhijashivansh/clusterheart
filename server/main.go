@@ -591,6 +591,8 @@ func main() {
 	mux.HandleFunc("GET /api/app/clusters/{id}/sre", a.handleAppClusterSRE)
 	mux.HandleFunc("GET /api/app/clusters/{id}/usage", a.handleAppClusterUsage)
 	mux.HandleFunc("GET /api/app/clusters/{id}/metrics", a.handleAppServerMetrics)
+	mux.HandleFunc("POST /api/app/clusters/{id}/probes", a.handleAppStartProbe)
+	mux.HandleFunc("GET /api/app/probes/{id}", a.handleAppProbeResult)
 	mux.HandleFunc("POST /api/app/clusters/{id}/remediation", a.handleAppEnableRemediation)
 	mux.HandleFunc("POST /api/app/clusters/{id}/rightsize", a.handleAppRightsize)
 	mux.HandleFunc("POST /api/app/clusters/{id}/chat", a.handleAppClusterChat)

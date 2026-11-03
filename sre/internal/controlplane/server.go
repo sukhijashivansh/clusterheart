@@ -34,6 +34,7 @@ type Server struct {
 	runbooks    RunbookStore
 	notifier    Notifier
 	metrics     MetricsStore // nil when the store keeps no history
+	probes      *probeStore
 	adminToken  string
 	log         *slog.Logger
 	now         func() time.Time
@@ -60,6 +61,7 @@ func NewServer(store Store, incidents IncidentStore, rem RemediationStore, pol P
 	return &Server{
 		store:       store,
 		metrics:     metrics,
+		probes:      newProbeStore(),
 		incidents:   incidents,
 		engine:      newEngine(incidents, notifier, log),
 		remediation: remSvc,
@@ -112,6 +114,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/remediation/{id}/result", s.requireRemediator(s.handleReportResult))
 	// Agent.
 	mux.HandleFunc("GET /api/v1/agents/reveals", s.requireAgent(s.handleAgentRevealsCompat))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/probes", s.requireAdmin(s.handleCreateProbe))
+	mux.HandleFunc("GET /api/v1/probes/{id}", s.requireAdmin(s.handleGetProbe))
+	mux.HandleFunc("GET /api/v1/agents/probes", s.requireAgent(s.handleAgentProbes))
+	mux.HandleFunc("POST /api/v1/agents/probes/{id}", s.requireAgent(s.handleAgentProbeResult))
 	mux.HandleFunc("POST /api/v1/agents/heartbeat", s.requireAgent(s.handleHeartbeat))
 	mux.HandleFunc("POST /api/v1/telemetry", s.requireAgent(s.handleTelemetry))
 	// Health.
@@ -738,8 +744,19 @@ func logging(log *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
-		log.Info("request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "dur", time.Since(start).String())
+		level := slog.LevelInfo
+		if quietPoll(r, sw.status) {
+			level = slog.LevelDebug
+		}
+		log.Log(r.Context(), level, "request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "dur", time.Since(start).String())
 	})
+}
+
+// quietPoll is true for agents' routine "anything for me?" polls, which come
+// every few seconds per cluster and would drown the log.
+func quietPoll(r *http.Request, status int) bool {
+	return r.Method == http.MethodGet && status == http.StatusOK &&
+		(r.URL.Path == "/api/v1/agents/probes" || r.URL.Path == "/api/v1/agents/reveals")
 }
 
 type statusWriter struct {

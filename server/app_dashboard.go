@@ -1301,6 +1301,145 @@ window.addEventListener('resize',function(){clearTimeout(_tlResize);_tlResize=se
 // Refresh once a minute while the Timeline is on screen.
 setInterval(function(){if(tlVisible())loadTimeline(tlState.cluster);},60000);
 
+// ---------- Latency check ----------
+// The cluster's agent sends a few GET requests straight to one pod and reports
+// where the time goes: TCP connect, TLS handshake, server wait (until the first
+// byte) and download. Results are kept per cluster while the page is open.
+var latState={cluster:null,pods:[],form:{},results:{},running:false};
+var LAT_PHASES=[['connectMs','Connect','TCP handshake'],['tlsMs','TLS','TLS handshake'],['waitMs','Server wait','until the first byte'],['transferMs','Download','first byte to last']];
+var LAT_SYSTEM_NS=/^(kube-|clusterheart-|amazon-|aws-|gke-|calico-|tigera-|cert-manager$|ingress-nginx$|karpenter$)/;
+function latMs(v){v=v||0;if(v>=1000)return (v/1000).toFixed(2)+' s';return (v>=100?Math.round(v):v.toFixed(1))+' ms';}
+function latSize(b){b=b||0;return b>=1048576?'1 MiB+':(b>=1024?(b/1024).toFixed(1)+' KiB':b+' B');}
+
+function latencySection(c,pods){
+  latState.cluster=c.clusterId;
+  if(!agentAtLeast(c.agentVersion,'0.3.0')){
+    return '<section class="card2"><div class="card2-head"><p class="card2-title">Latency check</p><p class="card2-desc">Restart the agent to turn this on (it fetches the latest version on start):</p></div>'+
+      '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">kubectl -n clusterheart-sre rollout restart deployment/clusterheart-agent</textarea>'+
+      '<div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
+  }
+  var run=(pods||[]).filter(function(p){return p.phase==='Running'&&(p.owner||'').indexOf('Job/')!==0;});
+  run.sort(function(a,b){var sa=LAT_SYSTEM_NS.test(a.namespace),sb=LAT_SYSTEM_NS.test(b.namespace);return (sa-sb)||a.namespace.localeCompare(b.namespace)||a.name.localeCompare(b.name);});
+  latState.pods=run;
+  if(!run.length)return '<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No running pods to check.</p></div></section>';
+  var f=latState.form[c.clusterId]||{},sel=f.pod||(run[0].namespace+'/'+run[0].name);
+  var groups={},order=[];
+  run.forEach(function(p){if(!groups[p.namespace]){groups[p.namespace]=[];order.push(p.namespace);}groups[p.namespace].push(p);});
+  var opts=order.map(function(ns){return '<optgroup label="'+esc(ns)+'">'+groups[ns].map(function(p){var v=p.namespace+'/'+p.name;return '<option value="'+esc(v)+'"'+(v===sel?' selected':'')+'>'+esc(p.namespace+' / '+p.name)+'</option>';}).join('')+'</optgroup>';}).join('');
+  var scheme=f.scheme||'http',n=f.n||5;
+  return '<section class="card2"><div class="card2-head"><p class="card2-title">Latency check</p></div><div class="card2-body">'+
+    '<div class="lat-form">'+
+      '<label class="lat-f lat-pod"><span>Pod</span><select id="lat-pod" class="toolbar-input">'+opts+'</select></label>'+
+      '<label class="lat-f lat-port"><span>Port</span><input id="lat-port" class="toolbar-input" inputmode="numeric" placeholder="auto" value="'+(f.port||'')+'"></label>'+
+      '<label class="lat-f lat-path"><span>Path</span><input id="lat-path" class="toolbar-input" value="'+esc(f.path||'/')+'" spellcheck="false"></label>'+
+      '<div class="lat-f"><span>Protocol</span><div class="seg" id="lat-scheme">'+['http','https'].map(function(s){return '<button class="seg-btn'+(s===scheme?' active':'')+'" data-v="'+s+'">'+s+'</button>';}).join('')+'</div></div>'+
+      '<label class="lat-f lat-n"><span>Requests</span><select id="lat-n" class="toolbar-input">'+[1,3,5,10,20].map(function(k){return '<option'+(k===n?' selected':'')+'>'+k+'</option>';}).join('')+'</select></label>'+
+      '<button class="act approve lat-run" id="lat-run">Measure</button>'+
+    '</div><p class="u-email lat-status" id="lat-status" hidden></p></div></section>'+
+    '<div id="lat-out">'+(latState.results[c.clusterId]?latResultHtml(latState.results[c.clusterId]):'')+'</div>';
+}
+
+function latForm(){
+  var pod=document.getElementById('lat-pod');if(!pod)return null;
+  var s=document.querySelector('#lat-scheme .seg-btn.active');
+  return {pod:pod.value,port:(document.getElementById('lat-port').value||'').trim(),path:(document.getElementById('lat-path').value||'/').trim()||'/',
+    scheme:s?s.dataset.v:'http',n:+document.getElementById('lat-n').value||5};
+}
+
+function latWire(){
+  var run=document.getElementById('lat-run');if(!run)return;
+  document.querySelectorAll('#lat-scheme .seg-btn').forEach(function(b){b.addEventListener('click',function(){
+    document.querySelectorAll('#lat-scheme .seg-btn').forEach(function(x){x.classList.toggle('active',x===b);});
+  });});
+  run.addEventListener('click',latRun);
+  ['lat-port','lat-path'].forEach(function(id){var el=document.getElementById(id);if(el)el.addEventListener('keydown',function(e){if(e.key==='Enter')latRun();});});
+}
+
+function latStatus(text,bad){
+  var el=document.getElementById('lat-status');if(!el)return;
+  el.hidden=!text;el.textContent=text||'';el.style.color=bad?'var(--red)':'';
+}
+
+async function latRun(){
+  if(latState.running)return;
+  var f=latForm(),id=latState.cluster;if(!f||!id)return;
+  var port=0;
+  if(f.port){port=parseInt(f.port,10);if(!(port>=1&&port<=65535)){latStatus('Port must be a number between 1 and 65535, or empty for the pod\'s own port.',true);return;}}
+  if(f.path.charAt(0)!=='/')f.path='/'+f.path;
+  latState.form[id]=f;
+  var parts=f.pod.split('/'),btn=document.getElementById('lat-run');
+  latState.running=true;if(btn){btn.disabled=true;btn.textContent='Measuring…';}
+  latStatus('Waiting for the agent…');
+  var out=document.getElementById('lat-out');if(out)out.classList.add('tl-loading');
+  try{
+    var r=await _post('/api/app/clusters/'+encodeURIComponent(id)+'/probes',{namespace:parts[0],pod:parts.slice(1).join('/'),port:port,scheme:f.scheme,path:f.path,samples:f.n});
+    if(!r.ok||!r.data||!r.data.id){latStatus((r.data&&r.data.error)||'Could not start the check.',true);return;}
+    var deadline=Date.now()+110000,res=null;
+    while(Date.now()<deadline){
+      await new Promise(function(ok){setTimeout(ok,1000);});
+      var pr=await fetch('/api/app/probes/'+encodeURIComponent(r.data.id),{headers:{'Accept':'application/json'},cache:'no-store'});
+      var d=await pr.json().catch(function(){return null;});
+      if(!pr.ok){latStatus((d&&d.error)||'The check expired.',true);return;}
+      if(d&&d.done){res=d;break;}
+      if(d&&d.started)latStatus('Measuring '+f.n+' request'+(f.n===1?'':'s')+' from inside the cluster…');
+    }
+    if(!res){latStatus('The agent didn\'t answer in time.',true);return;}
+    if(res.error){latStatus(res.error,true);return;}
+    if(res.result&&res.result.error){latStatus(res.result.error,true);return;}
+    res.result.pod=f.pod;
+    if(id===latState.cluster){latState.results[id]=res.result;latStatus('');}
+    out=document.getElementById('lat-out');if(out&&id===latState.cluster)out.innerHTML=latResultHtml(res.result);
+  }catch(e){latStatus('Could not run the check.',true);}
+  finally{
+    latState.running=false;
+    btn=document.getElementById('lat-run');if(btn){btn.disabled=false;btn.textContent='Measure';}
+    out=document.getElementById('lat-out');if(out)out.classList.remove('tl-loading');
+  }
+}
+
+// latVerdict names the phase that takes most of the time, in plain words.
+function latVerdict(r){
+  if(!r.okCount)return '';
+  var parts=[['connect',r.connect.avg,'connecting (TCP)'],['tls',r.tls.avg,'the TLS handshake'],['wait',r.wait.avg,'the app working on the request (server wait)'],['transfer',r.transfer.avg,'downloading the response']];
+  parts.sort(function(a,b){return b[1]-a[1];});
+  var total=r.total.avg||1,share=Math.round(parts[0][1]/total*100);
+  return 'Most of the time ('+share+'%) is '+parts[0][2]+'.';
+}
+
+function latResultHtml(r){
+  var ok=r.okCount||0,count=r.count||0;
+  var head='<section class="card2"><div class="card2-head tl-head lat-head"><p class="card2-title">Results</p><p class="tl-sum"><span class="mono-chip">GET '+esc(r.url||'')+'</span> · <b>'+ok+'</b> of '+count+' OK</p></div>';
+  if(!ok){
+    var errs=(r.samples||[]).map(function(s){return s.err;}).filter(Boolean);
+    return head+'<div class="card2-body"><p class="sub" style="margin:0;color:var(--red)">'+esc(errs[0]||'No request succeeded.')+'</p></div></section>';
+  }
+  var tile=function(label,st,sub){return stat(label,latMs(st.avg),(st.min!==st.max?latMs(st.min)+' – '+latMs(st.max):'')+(sub?(st.min!==st.max?' · ':'')+sub:''));};
+  var html=head+'<div class="card2-body">'+
+    '<div class="statgrid lat-stats">'+tile('Connect',r.connect,'TCP')+tile('TLS',r.tls,r.tls.max?'handshake':'none (http)')+tile('Server wait',r.wait,'')+tile('First byte',r.firstByte,'')+tile('Total',r.total,'')+'</div>'+
+    '<p class="lat-verdict">'+esc(latVerdict(r))+'</p>';
+  // One bar per request, split into the four phases, on a shared scale.
+  var maxT=0;(r.samples||[]).forEach(function(s){if(!s.err)maxT=Math.max(maxT,s.totalMs||0);});
+  html+='<div class="lat-legend">'+LAT_PHASES.map(function(p,i){return '<span><i style="background:var(--s'+(i+1)+')"></i>'+p[1]+'</span>';}).join('')+'</div><div class="lat-bars">';
+  (r.samples||[]).forEach(function(s,i){
+    html+='<div class="lat-row"><span class="lat-lbl">#'+(i+1)+(s.status?' · '+s.status:'')+'</span>';
+    if(s.err){html+='<span class="lat-err">'+esc(s.err)+'</span></div>';return;}
+    var segs=LAT_PHASES.map(function(p,k){return [p,k,s[p[0]]||0];}).filter(function(x){return x[2]>0;});
+    html+='<span class="lat-track">'+segs.map(function(x){
+      return '<span class="lat-seg" style="width:'+(maxT?(x[2]/maxT*100):0).toFixed(2)+'%;background:var(--s'+(x[1]+1)+')" title="'+esc(x[0][1]+': '+latMs(x[2]))+'"></span>';}).join('')+
+      '</span><span class="lat-val">'+latMs(s.totalMs)+'</span></div>';
+  });
+  html+='</div></div>';
+  // Every value, for reading exact numbers.
+  html+='<div class="tscroll"><table class="users ptable"><thead><tr><th>#</th><th>Status</th><th>Connect</th><th>TLS</th><th>Server wait</th><th>Download</th><th>First byte</th><th>Total</th><th>Size</th></tr></thead><tbody>'+
+    (r.samples||[]).map(function(s,i){
+      if(s.err)return '<tr><td class="u-time">'+(i+1)+'</td><td colspan="8" class="u-time" style="white-space:normal;color:var(--red)">'+esc(s.err)+'</td></tr>';
+      return '<tr><td class="u-time">'+(i+1)+'</td><td class="u-time">'+s.status+'</td>'+
+        [s.connectMs,s.tlsMs,s.waitMs,s.transferMs,s.firstByteMs,s.totalMs].map(function(v){return '<td class="u-time tl-num">'+latMs(v)+'</td>';}).join('')+
+        '<td class="u-time tl-num">'+latSize(s.bytes)+'</td></tr>';
+    }).join('')+'</tbody></table></div></section>';
+  return html;
+}
+
 // ---------- Rightsizing ----------
 // Per workload (namespace + owner, so history survives pod restarts and
 // rollouts): current requests from the latest snapshot vs the 6h peak from the
@@ -1532,6 +1671,7 @@ async function loadDetail(id){
       '<button class="tab" data-tab="health">Health'+(probs.length+w.length?' <span class="tab-badge">'+(probs.length+w.length)+'</span>':'')+'</button>'+
       '<button class="tab" data-tab="secrets">Secrets'+(secrets.length?' <span class="tab-badge">'+secrets.length+'</span>':'')+'</button>'+
       '<button class="tab" data-tab="rightsizing">Rightsizing</button>'+
+      '<button class="tab" data-tab="latency">Latency</button>'+
       '<button class="tab" data-tab="sre-overview">SRE overview</button>'+
       '<button class="tab" data-tab="incidents">Incidents</button>'+
       '<button class="tab" data-tab="remediation">Remediation</button>'+
@@ -1543,6 +1683,7 @@ async function loadDetail(id){
     '<div class="tabpanel" data-panel="health">'+healthHtml+'</div>'+
     '<div class="tabpanel" data-panel="secrets">'+secretsSection(secrets,c)+'</div>'+
     '<div class="tabpanel" data-panel="rightsizing">'+rightsizingSection(all,c.remediationEnabled===true)+'</div>'+
+    '<div class="tabpanel" data-panel="latency">'+latencySection(c,all)+'</div>'+
     '<div class="tabpanel" data-panel="sre-overview"></div>'+
     '<div class="tabpanel" data-panel="incidents"></div>'+
     '<div class="tabpanel" data-panel="remediation"></div>'+
@@ -1566,6 +1707,7 @@ async function loadDetail(id){
     applyPodFilter();
     sreState.cluster=id;sreState.data=null;rsState.cluster=id;
     aiWire(id);
+    latWire();
     document.querySelectorAll('.tab').forEach(function(t){t.addEventListener('click',function(){
       var name=t.dataset.tab;
       _activeTab=name;
