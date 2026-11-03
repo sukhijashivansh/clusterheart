@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -87,11 +88,20 @@ func TestServerMetricHistory(t *testing.T) {
 		t.Fatalf("negative GPU util not clamped: %+v", h.GPUs[0].Points[1])
 	}
 
-	// Unknown range falls back to 24h; 1h only has the recent samples.
+	// 1h uses 30s buckets, so the two samples 30s apart stay separate points.
 	_, body = do(t, http.MethodGet, ts.URL+"/api/v1/clusters/"+srv.ClusterID+"/metrics?tenantId=acme&range=1h", adminTok, "", nil)
 	_ = json.Unmarshal(body, &h)
-	if h.StepSec != 60 || len(h.Points) != 2 {
+	if h.StepSec != 30 || len(h.Points) != 3 {
 		t.Fatalf("1h: step %d, %d points", h.StepSec, len(h.Points))
+	}
+
+	// A zoomed window (from/to in Unix ms) gets the finest step that fits.
+	zf, zt := now.Add(-35*time.Minute).UnixMilli(), now.Add(-25*time.Minute).UnixMilli()
+	_, body = do(t, http.MethodGet, ts.URL+"/api/v1/clusters/"+srv.ClusterID+"/metrics?tenantId=acme&from="+strconv.FormatInt(zf, 10)+"&to="+strconv.FormatInt(zt, 10), adminTok, "", nil)
+	h = MetricHistory{}
+	_ = json.Unmarshal(body, &h)
+	if h.Range != "custom" || h.StepSec != 30 || len(h.Points) != 1 || h.From.UnixMilli() != zf {
+		t.Fatalf("custom: range %s step %d, %d points, from %v", h.Range, h.StepSec, len(h.Points), h.From)
 	}
 
 	// Deleting the server drops its history.
@@ -173,5 +183,34 @@ func TestMongoMetricHistory(t *testing.T) {
 	}
 	if h, _, _ := ms.HostHistory(ctx, "clu_b", from, to, 5*time.Minute); len(h) != 1 {
 		t.Fatalf("other server's history touched: %d", len(h))
+	}
+}
+
+func TestCustomWindowAndStep(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	ms := func(t time.Time) string { return strconv.FormatInt(t.UnixMilli(), 10) }
+	if _, _, ok := customWindow("x", "1", now); ok {
+		t.Fatal("bad input accepted")
+	}
+	if _, _, ok := customWindow(ms(now), ms(now.Add(-time.Minute)), now); ok {
+		t.Fatal("to before from accepted")
+	}
+	// A 1-minute window widens to 5 minutes, kept inside "now".
+	f, to, ok := customWindow(ms(now.Add(-time.Minute)), ms(now), now)
+	if !ok || to != now || to.Sub(f) != minCustomSpan {
+		t.Fatalf("widen: %v %v %v", f, to, ok)
+	}
+	// Windows reaching past retention or into the future are clamped.
+	f, to, _ = customWindow(ms(now.Add(-30*24*time.Hour)), ms(now.Add(time.Hour)), now)
+	if to != now || f != now.Add(-metricRetention) {
+		t.Fatalf("clamp: %v %v", f, to)
+	}
+	for span, want := range map[time.Duration]time.Duration{
+		10 * time.Minute: 30 * time.Second, 3 * time.Hour: 30 * time.Second, 4 * time.Hour: time.Minute,
+		24 * time.Hour: 5 * time.Minute, 7 * 24 * time.Hour: 30 * time.Minute,
+	} {
+		if got := stepFor(span); got != want {
+			t.Errorf("stepFor(%v) = %v, want %v", span, got, want)
+		}
 	}
 }

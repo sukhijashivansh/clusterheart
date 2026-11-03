@@ -363,6 +363,14 @@ table.users tbody tr:hover{background:var(--hover)}
 .tl-row b{font-weight:650}
 .tl-sn{color:var(--muted)}
 .tl-pk{color:var(--faint)}
+.tl-bar-r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tl-hint,.tl-zoomed{font-size:12px;color:var(--faint)}
+.tl-zoomed{color:var(--muted)}
+.tl-chart{cursor:crosshair;user-select:none;-webkit-user-select:none}
+.tl-chart .tl-sel{fill:var(--focus);fill-opacity:.15;stroke:var(--focus);stroke-opacity:.6;stroke-width:1}
+.tl-pkzoom{font:inherit;font-size:12px;color:var(--accent,var(--muted));background:none;border:none;padding:0;margin-left:4px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.tl-pkzoom:hover{color:var(--text)}
+.tl-pkat{font-size:12px;color:var(--faint);margin-left:4px}
 .tl-key{display:inline-block;width:12px;height:2px;border-radius:1px;vertical-align:middle;margin-right:6px}
 .tl-legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 16px 14px;font-size:12.5px;color:var(--muted)}
 .tl-li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
