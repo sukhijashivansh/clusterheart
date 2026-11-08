@@ -170,7 +170,8 @@ async function load(){
         metrics='<div class="cl-metric"><b>'+(hs?fmtPct(hs.cpuPercent):'—')+'</b><span>CPU</span></div>'+
           '<div class="cl-metric"><b>'+(hs?pctOf(hs.memUsedMi,hs.memTotalMi)+'%':'—')+'</b><span>Memory</span></div>'+
           '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk'+fbadge(hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0)+'</span></div>'+
-          (hs&&(hs.gpus||[]).length?'<div class="cl-metric"><b>'+fmtPct(gpuStats(hs.gpus).avg)+'</b><span>GPU ×'+hs.gpus.length+'</span></div>':'');
+          (hs&&(hs.gpus||[]).length?(function(g){return '<div class="cl-metric"><b>'+fmtPct(g.avg)+'</b><span>GPU ×'+hs.gpus.length+'</span></div>'+
+            (g.memTotal?'<div class="cl-metric" title="'+fmtMem(g.memUsed)+' of '+fmtMem(g.memTotal)+'"><b>'+pctOf(g.memUsed,g.memTotal)+'%</b><span>VRAM</span></div>':'');})(gpuStats(hs.gpus)):'');
       }
       html+='<div class="cl-card" data-id="'+esc(c.clusterId||'')+'">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a><div class="cl-env">'+(c.kind==='server'?'Server':'Kubernetes')+(c.environment?' · '+esc(c.environment):'')+'</div></div>'+
@@ -320,7 +321,12 @@ function pctOf(used,total){return total>0?Math.round(used/total*100):0;}
 // fmtPct shows small usage precisely (0.3%, not 0%): one decimal under 10%,
 // "<0.1%" for a trace, whole numbers above.
 function fmtPct(v){v=+v||0;if(v<=0)return '0%';if(v<0.1)return '<0.1%';return (v<9.95?v.toFixed(1):Math.round(v))+'%';}
-function gpuStats(gs){var n=gs.length||1,avg=gs.reduce(function(a,g){return a+(g.utilPercent||0);},0)/n,peak=gs.reduce(function(a,g){return Math.max(a,g.utilPeakPercent||g.utilPercent||0);},0);return {avg:avg,peak:peak};}
+// gpuStats sums the GPUs: average and peak compute use, and VRAM used/total.
+function gpuStats(gs){
+  var n=gs.length||1,avg=gs.reduce(function(a,g){return a+(g.utilPercent||0);},0)/n,peak=gs.reduce(function(a,g){return Math.max(a,g.utilPeakPercent||g.utilPercent||0);},0);
+  var memUsed=gs.reduce(function(a,g){return a+(g.memUsedMi||0);},0),memTotal=gs.reduce(function(a,g){return a+(g.memTotalMi||0);},0);
+  return {avg:avg,peak:peak,memUsed:memUsed,memTotal:memTotal};
+}
 function fullestDisk(h){var best=null;(h.disks||[]).forEach(function(d){if(!best||d.usedMi/d.totalMi>best.usedMi/best.totalMi)best=d;});return best;}
 
 function stat(label,val,sub){return '<div class="statcard"><div class="stat-label">'+label+'</div><div class="stat-val">'+val+'</div>'+(sub?'<div class="stat-sub">'+sub+'</div>':'')+'</div>';}
@@ -569,6 +575,7 @@ function renderServerDetail(c,html,box){
     stat('Disk',dk?'<span class="pill '+sevClass(dkP,80,90)+'" style="font-size:inherit">'+dkP+'%</span>':'—',dk?diskLabel(dk,(h.disks||[]).length):'no disks reported')+
     stat('Load',(h.load5||0).toFixed(2),perCore.toFixed(2)+' per core (5 min)')+
     (gpus.length?stat('GPU',fmtPct(gs.avg),gpus.length+' × '+esc(gpus[0].name)+' · 30s avg'+(gs.peak>gs.avg?' · peak '+fmtPct(gs.peak):'')):'')+
+    (gs.memTotal?stat('VRAM','<span class="pill '+sevClass(pctOf(gs.memUsed,gs.memTotal),80,90)+'" style="font-size:inherit">'+pctOf(gs.memUsed,gs.memTotal)+'%</span>',fmtMem(gs.memUsed)+' of '+fmtMem(gs.memTotal)):'')+
   '</div>';
   var probs=h.problems||[],secrets=L.secretFindings||[];
   html+='<div class="tabs" role="tablist">'+

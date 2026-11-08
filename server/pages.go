@@ -248,7 +248,7 @@ a.act.approve:hover{color:var(--accent-ink)}
 .cl-status.on{color:var(--green)}
 .cl-status.off{color:var(--amber)}
 .cl-status .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
-.cl-metrics{display:flex;gap:26px}
+.cl-metrics{display:flex;flex-wrap:wrap;gap:12px 24px}
 .cl-metric{display:flex;flex-direction:column;gap:1px}
 .cl-metric b{font-size:18px;font-weight:700;color:var(--text);line-height:1.1}
 .cl-metric span{font-size:10.5px;color:var(--faint);letter-spacing:.03em}
