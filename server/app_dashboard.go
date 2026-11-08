@@ -1689,7 +1689,7 @@ async function loadDetail(id){
     function rowK(x){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
       return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
-        '<td><span class="pill '+(ok?'on':'off')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
+        '<td><span class="pill '+(ok?'on':'off')+(x.phase==='Pending'?' blip':'')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
         '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
         '<td class="u-email">'+esc(x.node||'')+'</td></tr>';
@@ -1700,7 +1700,7 @@ async function loadDetail(id){
       var fin=j.finishedAt?ago(j.finishedAt):(j.startedAt?ago(j.startedAt):'');
       var sub=j.owner?esc(j.owner):esc(j.namespace);
       return '<tr data-ns="'+esc(j.namespace)+'" data-name="'+esc((j.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(j.name)+'">'+esc(j.name)+'</div><div class="u-email">'+sub+'</div></td>'+
-        '<td><span class="pill '+cls+'">'+esc(st)+'</span></td>'+
+        '<td><span class="pill '+cls+(st==='Running'?' blip':'')+'">'+esc(st)+'</span></td>'+
         '<td class="u-time">'+esc(j.completions||'')+'</td>'+
         '<td class="'+(j.failed?'util-val crit':'u-time')+'">'+(j.failed||0)+'</td>'+
         '<td class="u-time">'+fin+'</td>'+

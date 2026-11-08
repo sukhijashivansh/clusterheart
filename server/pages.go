@@ -478,6 +478,10 @@ table.users tbody tr:hover{background:var(--hover)}
 .rs-queued{font-size:12px;font-weight:600;color:var(--green)}
 @media(max-width:640px){.rs-table .pod-name{max-width:150px}}
 .pill .dot{display:none}
+/* in-progress statuses (running jobs, pending pods) pulse, like clusterheart.com */
+@keyframes ch-blip{50%{opacity:.5}}
+.blip{animation:ch-blip .8s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.blip{animation:none}}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .empty{padding:48px 18px;text-align:center;color:var(--muted)}
 
