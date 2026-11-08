@@ -47,7 +47,7 @@
          changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify
          then bump ?v= to the new file's hash (md5 -q styles.css | cut -c1-8): browsers
          cache styles.css for hours, so a stale copy would miss the new classes. -->
-    <link rel="stylesheet" href="styles.css?v=f18244ef">
+    <link rel="stylesheet" href="styles.css?v=a58eed84">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 
@@ -360,7 +360,7 @@
         </div>
     </section>
 
-    <!-- ===== 02 CLUSTERS & SERVERS (animated terminal on laptop, static command on phone) ===== -->
+    <!-- ===== 02 CLUSTERS & SERVERS (terminal: typed on laptop, static on phone) ===== -->
     <section id="clusters" class="py-20 sm:py-24 border-t border-line">
         <div class="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-5 gap-10 lg:gap-14 items-center">
             <div class="lg:col-span-2">
@@ -373,19 +373,13 @@
                 </ol>
             </div>
 
-            <div id="term" class="hidden md:block lg:col-span-3 border border-line2 bg-[#0b0c0d]">
+            <div id="term" class="lg:col-span-3 border border-line2 bg-[#0b0c0d] min-w-0">
                 <div class="flex items-center justify-between px-4 h-10 border-b border-white/10">
                     <span class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-white/15"></span><span class="w-2.5 h-2.5 rounded-full bg-white/15"></span><span class="w-2.5 h-2.5 rounded-full bg-white/15"></span></span>
                     <span class="mono text-[11px] text-white/40">ops@gpu-01 ~</span>
                     <span class="w-10"></span>
                 </div>
-                <pre id="termOut" class="mono text-[12.5px] leading-[1.75] px-6 py-5 text-[#e6e8ea] whitespace-pre overflow-x-auto min-h-[19.5rem]"></pre>
-            </div>
-            <div class="md:hidden border border-line2 bg-[#0b0c0d] p-4 mono text-xs leading-relaxed text-[#e6e8ea] break-words">
-                <p class="text-white/40"># linux server</p>
-                <p><span class="text-accent">$</span> curl -fsSL …/install-host.sh | sudo sh</p>
-                <p class="text-white/40 mt-3"># kubernetes</p>
-                <p><span class="text-accent">$</span> kubectl apply -f …/agent.yaml</p>
+                <pre id="termOut" class="mono text-[11px] sm:text-[12.5px] leading-[1.75] px-4 sm:px-6 py-4 sm:py-5 text-[#e6e8ea] whitespace-pre overflow-x-auto md:min-h-[19.5rem]"></pre>
             </div>
         </div>
     </section>
@@ -747,7 +741,26 @@
             const out = document.getElementById('termOut');
             // ok rows are [name, detail]; names pad to one column so the
             // "connected" and detail columns line up across both blocks.
-            const script = [
+            // Phones get the same commands broken to ~46 columns (still valid
+            // shell: a variable for the host and \\ continuations) so nothing
+            // runs off the edge.
+            const phoneScript = [
+                ['c', '# linux server · systemd · x86_64 / arm64'],
+                ['$', 'H=clusterheart-server.clusterheart.com'],
+                ['$', 'curl -fsSL https://$H/install-host.sh \\'],
+                ['>', '    | sudo sh -s -- --id clu_9c2e41 \\'],
+                ['>', '      --token ••••••••'],
+                ['o', 'Downloading the Clusterheart host agent...'],
+                ['o', 'Clusterheart host agent is running.'],
+                ['ok', ['gpu-01', 'rocky 9 · arm64']],
+                ['', ''],
+                ['c', '# kubernetes · eks · gke · aks · k3s'],
+                ['$', 'kubectl apply -f \\'],
+                ['>', '    https://clusterheart.com/agent.yaml'],
+                ['o', 'deployment.apps/clusterheart-agent created'],
+                ['ok', ['production', '3 nodes · 39 pods']],
+            ];
+            const script = !desktop ? phoneScript : [
                 ['c', '# linux server · any systemd distro · x86_64 / arm64'],
                 ['$', 'curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh \\'],
                 ['>', '    | sudo sh -s -- --id clu_9c2e41 --token ••••••••'],
