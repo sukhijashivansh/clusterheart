@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clusterheart · Every cluster and server, one dashboard</title>
+    <title>Clusterheart · Every cluster. Every server. One heartbeat.</title>
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -17,7 +17,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Clusterheart">
     <meta property="og:url" content="https://clusterheart.com/">
-    <meta property="og:title" content="Clusterheart: Every cluster and server. One dashboard.">
+    <meta property="og:title" content="Clusterheart: Every cluster. Every server. One heartbeat.">
     <meta property="og:description" content="Watch your Kubernetes clusters and Linux servers from one dashboard: health, GPUs, a week of history, leaked secrets and an AI assistant, right in your browser.">
     <meta property="og:image" content="https://clusterheart.com/og.png?v=2">
     <meta property="og:image:width" content="1200">
@@ -26,7 +26,7 @@
 
     <!-- Twitter card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Clusterheart: Every cluster and server. One dashboard.">
+    <meta name="twitter:title" content="Clusterheart: Every cluster. Every server. One heartbeat.">
     <meta name="twitter:description" content="Watch your Kubernetes clusters and Linux servers from one dashboard: health, GPUs, a week of history, leaked secrets and an AI assistant, right in your browser.">
     <meta name="twitter:image" content="https://clusterheart.com/og.png?v=2">
 
@@ -40,7 +40,7 @@
             var t = 'dark', a = 'green';
             try { t = localStorage.getItem('ch-theme') || 'dark'; a = localStorage.getItem('ch-accent') || 'green'; } catch (e) {}
             var c = document.documentElement.classList;
-            if (t === 'dark') { c.add('dark'); if (a === 'blue') c.add('blue'); }
+            if (t === 'dark') { c.add('dark'); if (['blue', 'purple', 'cyan', 'coral'].indexOf(a) > -1) c.add(a); }
         })();
     </script>
     <!-- Prebuilt Tailwind utilities (no runtime compile). Regenerate after class
@@ -49,7 +49,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 
-        /* ===== Three schemes, one set of utilities =====
+        /* ===== Six schemes, one set of utilities =====
            Values are space-separated RGB channels so Tailwind's /opacity works.
            Flat colours only: no gradients anywhere on the page. */
         :root {
@@ -94,6 +94,12 @@
             --c-btn2: 178 216 252;
             --c-btnink: 5 16 30;
         }
+        /* Figma brand accents, same neutrals */
+        .dark.purple { --c-accent: 162 89 255; --c-accent2: 196 150 255; --c-btn: 162 89 255; --c-btn2: 184 128 255; --c-btnink: 255 255 255; }
+        .dark.cyan   { --c-accent: 26 188 254;  --c-accent2: 120 214 255; --c-btn: 26 188 254;  --c-btn2: 90 205 255;  --c-btnink: 2 18 28; }
+        .dark.coral  { --c-accent: 255 114 98;  --c-accent2: 255 165 150; --c-btn: 255 114 98;  --c-btn2: 255 145 130; --c-btnink: 30 8 5; }
+        .swatch { width: 14px; height: 14px; border: 1px solid rgb(var(--c-line2)); cursor: pointer; }
+        .swatch[aria-pressed="true"] { outline: 1px solid rgb(var(--c-ink)); outline-offset: 2px; }
 
         html { scroll-behavior: smooth; }
         body { font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -137,6 +143,18 @@
         .hex:focus-visible { outline: none; background: rgb(var(--c-accent)); }
         @keyframes hexin { from { opacity: .35; transform: translateY(4px); } to { opacity: 1; transform: none; } }
         .hex-swap { animation: hexin .25s ease-out; }
+
+        /* Dashboard tabs + tables */
+        .dtab { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; padding: .8rem .9rem; color: rgb(var(--c-muted)); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+        .dtab:hover { color: rgb(var(--c-ink)); }
+        .dtab[aria-selected="true"] { color: rgb(var(--c-ink)); border-bottom-color: rgb(var(--c-accent)); }
+        .dth { text-align: left; font-weight: 400; padding: .55rem .6rem; white-space: nowrap; }
+        .dth.text-right { text-align: right; }
+        .dtd { padding: .55rem .6rem; white-space: nowrap; }
+        :where(.dtd) { color: rgb(var(--c-muted)); }
+        [hidden] { display: none !important; }
+        #dash button:focus { outline: none; }
+        #dash button:focus-visible { outline: 1px solid rgb(var(--c-accent)); outline-offset: 2px; }
 
         /* Scroll reveal */
         .reveal { opacity: 0; transform: translateY(14px); transition: opacity .55s ease-out, transform .55s ease-out; }
@@ -210,7 +228,7 @@
     <section id="top" class="pt-32 sm:pt-40 pb-16 sm:pb-20">
         <div class="max-w-5xl mx-auto px-5 sm:px-6 text-center">
             <h1 class="text-[clamp(2rem,6vw,3.75rem)] font-extrabold tracking-tight leading-[1.08] mb-8">
-                Every cluster and server.<br><span class="text-accent">One dashboard.</span>
+                Every cluster. Every server.<br><span class="text-accent">One heartbeat.</span>
             </h1>
 
             <ul class="text-[15px] sm:text-lg text-muted w-fit max-w-full mx-auto mb-10 space-y-2.5 text-left">
@@ -226,19 +244,28 @@
         </div>
 
         <!-- Animated sketch of /app: counts settle, an incident lands, the AI explains it -->
-        <div id="dash" class="hidden md:block max-w-5xl mx-auto px-5 sm:px-6 mt-16 sm:mt-20">
+        <div id="dash" class="hidden md:block max-w-6xl mx-auto px-5 sm:px-6 mt-16 sm:mt-20">
             <div class=" border border-line2 bg-panel overflow-hidden" role="region" aria-label="Interactive preview of the Clusterheart dashboard with two clusters and two Linux servers connected, and an incident explained in plain words">
                 <div class="flex items-center gap-3 px-4 h-11 border-b border-line bg-panel2">
                     <span class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-line2"></span><span class="w-2.5 h-2.5 rounded-full bg-line2"></span><span class="w-2.5 h-2.5 rounded-full bg-line2"></span></span>
                     <span class="mono text-[11px] text-faint mx-auto bg-canvas border border-line px-3 py-1">clusterheart.com/app</span>
                 </div>
-                <div class="p-4 sm:p-6 grid md:grid-cols-5 gap-4 text-left">
-                    <div class="md:col-span-3 border border-line bg-canvas">
-                        <div class="flex items-center justify-between px-4 py-3 border-b border-line">
-                            <span class="mono text-[11px] text-faint"><span data-count="4">4</span> connected</span>
-                            <span class="mono text-[11px] text-faint">every 30s</span>
+                <div class="p-4 sm:p-6 grid md:grid-cols-12 gap-4 text-left">
+                    <div class="md:col-span-8 border border-line bg-canvas flex flex-col min-h-[21rem]">
+                        <div class="flex items-center justify-between gap-3 border-b border-line pr-3">
+                            <div class="flex" role="tablist" aria-label="Dashboard views">
+                                <button type="button" class="dtab" role="tab" data-tab="clusters" aria-selected="true">Clusters <span class="text-faint" data-count="4">4</span></button>
+                                <button type="button" class="dtab" role="tab" data-tab="pods" aria-selected="false">Pods <span class="text-faint" id="podCount">6</span></button>
+                                <button type="button" class="dtab" role="tab" data-tab="jobs" aria-selected="false">Jobs <span class="text-faint" id="jobCount">5</span></button>
+                            </div>
+                            <span id="refresh" class="mono text-[11px] text-faint">every 30s</span>
+                            <label id="nsWrap" hidden class="mono text-[11px] text-faint flex items-center gap-1.5">namespace
+                                <span class="relative inline-flex items-center"><select id="nsSel" class="appearance-none bg-canvas border border-line2 text-ink h-6 pl-2 pr-6 leading-none cursor-pointer focus:outline-none focus:border-accent"></select><svg class="pointer-events-none absolute right-2 w-2.5 h-2.5 text-muted" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                            </label>
                         </div>
-                        <div class="divide-y divide-line">
+                        <div id="panePods" hidden class="flex-1 flex flex-col"><div class="overflow-x-auto flex-1"><table class="w-full mono text-[11px]"><thead><tr class="text-faint text-[10px] uppercase tracking-wider"><th class="dth">Namespace</th><th class="dth">Pod</th><th class="dth">Status</th><th class="dth text-right">Ready</th><th class="dth text-right">Restarts</th><th class="dth text-right">CPU</th><th class="dth text-right">Mem</th><th class="dth text-right">Age</th></tr></thead><tbody id="podRows"></tbody></table></div><p id="podSum" class="mono text-[11px] text-faint px-3 py-2.5 border-t border-line"></p></div>
+                        <div id="paneJobs" hidden class="flex-1 flex flex-col"><div class="overflow-x-auto flex-1"><table class="w-full mono text-[11px]"><thead><tr class="text-faint text-[10px] uppercase tracking-wider"><th class="dth">Namespace</th><th class="dth">Job</th><th class="dth">Status</th><th class="dth text-right">Done</th><th class="dth text-right">Duration</th><th class="dth text-right">Finished</th></tr></thead><tbody id="jobRows"></tbody></table></div><p id="jobSum" class="mono text-[11px] text-faint px-3 py-2.5 border-t border-line"></p></div>
+                        <div id="paneClusters" class="divide-y divide-line">
                             <div class="flex items-center justify-between gap-4 px-4 py-3">
                                 <div class="min-w-0">
                                     <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-[#22c55e] beat"></span><span class="font-semibold text-sm truncate">production</span><span class="mono text-[10px] text-faint border border-line px-1.5">k8s</span></div>
@@ -270,7 +297,7 @@
                         </div>
                     </div>
 
-                    <div class="incident md:col-span-2 border border-line bg-canvas p-4 flex flex-col">
+                    <div class="incident md:col-span-4 border border-line bg-canvas p-4 flex flex-col">
                         <div class="flex items-center gap-2 mb-3">
                             <span id="incDot" class="w-1.5 h-1.5 bg-[#ef4444]"></span>
                             <span id="incLabel" class="mono text-[10px] font-semibold uppercase tracking-wider text-[#ef4444]">Incident</span>
@@ -278,7 +305,7 @@
                         </div>
                         <p class="font-semibold text-sm mb-1">payments-api keeps restarting</p>
                         <p id="incMeta" class="mono text-[11px] text-faint mb-4">production · 14 restarts · out of memory</p>
-                        <div class="bg-panel2 p-3 mb-3">
+                        <div class="bg-panel2 p-3 mb-3 flex-1">
                             <p id="paneLabel" class="mono text-[10px] uppercase tracking-wider text-accent mb-1.5">Explained</p>
                             <p id="explain" class="text-xs text-muted leading-relaxed min-h-[5.2em]">It needs about 310 MB but is only allowed 256 MB, so it gets killed. Raise the limit to 384 MB.</p>
                             <pre id="logs" hidden class="mono text-[10.5px] text-muted leading-relaxed whitespace-pre-wrap break-words min-h-[5.2em]"></pre>
@@ -287,14 +314,13 @@
                             <button type="button" id="approve" class="flex-1 text-center bg-btn hover:bg-btn2 text-btnink text-xs font-semibold py-1.5 cursor-pointer">Approve resize</button>
                             <button type="button" id="logsBtn" class="flex-1 text-center border border-line2 hover:border-accent text-xs font-semibold py-1.5 cursor-pointer">View logs</button>
                         </div>
-                        <button type="button" id="replay" hidden class="mt-3 self-start mono text-[11px] text-faint hover:text-accent cursor-pointer">↺ replay</button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- What it runs on -->
-        <div class="max-w-5xl mx-auto px-5 sm:px-6 mt-10 grid sm:grid-cols-2 gap-3 mono text-xs">
+        <div class="max-w-6xl mx-auto px-5 sm:px-6 mt-10 grid sm:grid-cols-2 gap-3 mono text-xs">
             <div class="border border-line px-4 py-3 flex flex-wrap items-baseline content-start gap-x-3 gap-y-1">
                 <span class="text-accent">linux servers</span>
                 <span class="text-muted">ubuntu · debian · rhel · rocky · amazon linux · fedora</span>
@@ -330,8 +356,8 @@
 
     <!-- ===== 02 CLUSTERS & SERVERS (animated terminal on laptop, static command on phone) ===== -->
     <section id="clusters" class="py-20 sm:py-24 border-t border-line">
-        <div class="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
-            <div>
+        <div class="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-5 gap-10 lg:gap-14 items-center">
+            <div class="lg:col-span-2">
                 <p class="mono text-xs font-medium tracking-[0.18em] text-accent uppercase mb-4">02 / Connect</p>
                 <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-8">One command per machine.</h2>
                 <ol class="space-y-3 mono text-sm text-muted">
@@ -341,13 +367,13 @@
                 </ol>
             </div>
 
-            <div id="term" class="hidden md:block border border-line2 bg-[#0b0c0d]">
+            <div id="term" class="hidden md:block lg:col-span-3 border border-line2 bg-[#0b0c0d]">
                 <div class="flex items-center justify-between px-4 h-10 border-b border-white/10">
                     <span class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-white/15"></span><span class="w-2.5 h-2.5 rounded-full bg-white/15"></span><span class="w-2.5 h-2.5 rounded-full bg-white/15"></span></span>
                     <span class="mono text-[11px] text-white/40">ops@gpu-01 ~</span>
                     <span class="w-10"></span>
                 </div>
-                <pre id="termOut" class="mono text-[13px] leading-relaxed p-5 text-[#e6e8ea] whitespace-pre-wrap break-words min-h-[19rem]"></pre>
+                <pre id="termOut" class="mono text-[12.5px] leading-[1.75] px-6 py-5 text-[#e6e8ea] whitespace-pre overflow-x-auto min-h-[19.5rem]"></pre>
             </div>
             <div class="md:hidden border border-line2 bg-[#0b0c0d] p-4 mono text-xs leading-relaxed text-[#e6e8ea] break-words">
                 <p class="text-white/40"># linux server</p>
@@ -389,7 +415,7 @@
             <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-10">Why Clusterheart.</h2>
             <div class="grid md:grid-cols-3 gap-3 reveal">
                 <div class="border border-line bg-panel p-5">
-                    <h3 class="font-bold mb-1.5">All-in-one</h3>
+                    <h3 class="font-bold mb-1.5">All in one</h3>
                     <p class="text-sm text-muted leading-relaxed">Health, history, secrets and AI for every cluster and server.</p>
                 </div>
                 <div class="border border-line bg-panel p-5">
@@ -465,6 +491,14 @@
                 <a href="/signup" class="text-muted hover:text-ink">Sign up</a>
             </div>
             <div class="flex items-center gap-5 text-faint">
+                <span class="flex items-center gap-2" role="group" aria-label="Colour scheme">
+                    <button type="button" class="swatch" data-scheme="green"  title="Green"  aria-label="Green scheme"  style="background:#00e464"></button>
+                    <button type="button" class="swatch" data-scheme="blue"   title="Blue"   aria-label="Blue scheme"   style="background:#8ec6fa"></button>
+                    <button type="button" class="swatch" data-scheme="purple" title="Purple" aria-label="Purple scheme" style="background:#a259ff"></button>
+                    <button type="button" class="swatch" data-scheme="cyan"   title="Cyan"   aria-label="Cyan scheme"   style="background:#1abcfe"></button>
+                    <button type="button" class="swatch" data-scheme="coral"  title="Coral"  aria-label="Coral scheme"  style="background:#ff7262"></button>
+                    <button type="button" class="swatch" data-scheme="white"  title="White"  aria-label="White scheme"  style="background:#ffffff"></button>
+                </span>
                 <span>© 2026 Clusterheart</span>
                 <a href="#" class="hover:text-ink" aria-label="Clusterheart on X"><svg class="w-[1em] h-[1em] inline align-[-0.125em]" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8L200.7 275.5 26.8 48H172.4L272.9 180.9 389.2 48zM364.4 421.8h39.1L151.1 88h-42L364.4 421.8z"/></svg></a>
             </div>
@@ -484,9 +518,24 @@
             }, { threshold }).observe(el);
         };
 
-        // Click the Clusterheart logo: it spins 360° and the scheme cycles
-        // green -> blue -> white. Uses the Web Animations API so it restarts on
-        // every click (the CSS-class reflow trick doesn't work on SVG elements).
+        // Colour schemes: green (default), blue, Figma purple / cyan / coral,
+        // and white. The logo spins and cycles them; footer swatches pick one.
+        const SCHEMES = ['green', 'blue', 'purple', 'cyan', 'coral', 'white'];
+        const ACCENTS = ['blue', 'purple', 'cyan', 'coral'];
+        const root = document.documentElement;
+        const currentScheme = () => !root.classList.contains('dark') ? 'white' : ACCENTS.find(a => root.classList.contains(a)) || 'green';
+        const markSwatches = () => document.querySelectorAll('.swatch').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.scheme === currentScheme())));
+        const setScheme = (name) => {
+            root.classList.toggle('dark', name !== 'white');
+            ACCENTS.forEach(a => root.classList.toggle(a, a === name));
+            try {
+                localStorage.setItem('ch-theme', name === 'white' ? 'light' : 'dark');
+                if (name !== 'white') localStorage.setItem('ch-accent', name);
+            } catch (e) {}
+            markSwatches();
+        };
+        // Uses the Web Animations API so the spin restarts on every click (the
+        // CSS-class reflow trick doesn't work on SVG elements).
         document.querySelectorAll('[data-theme-logo]').forEach(logo => {
             logo.addEventListener('click', () => {
                 const mark = logo.querySelector('.logo-mark');
@@ -496,16 +545,11 @@
                         { duration: 600, easing: 'cubic-bezier(.45,0,.25,1)' }
                     );
                 }
-                const c = document.documentElement.classList;
-                const next = !c.contains('dark') ? 'green' : c.contains('blue') ? 'white' : 'blue';
-                c.toggle('dark', next !== 'white');
-                c.toggle('blue', next === 'blue');
-                try {
-                    localStorage.setItem('ch-theme', next === 'white' ? 'light' : 'dark');
-                    if (next !== 'white') localStorage.setItem('ch-accent', next);
-                } catch (e) {}
+                setScheme(SCHEMES[(SCHEMES.indexOf(currentScheme()) + 1) % SCHEMES.length]);
             });
         });
+        document.querySelectorAll('.swatch').forEach(b => b.addEventListener('click', () => setScheme(b.dataset.scheme)));
+        markSwatches();
 
         // Mobile menu toggle
         const menuBtn = document.getElementById('mobile-menu-btn');
@@ -522,13 +566,14 @@
         // Hero dashboard: counts settle, the incident lands, the explanation
         // types out, the approve button pings. Server numbers drift after.
         // The incident buttons work: View logs flips to the pod's last lines,
-        // Approve resize patches and resolves it, replay puts it back.
+        // Approve resize patches and resolves it. Tabs switch to precise Pods and
+        // Jobs tables, filterable by namespace.
         (() => {
             const $ = (id) => document.getElementById(id);
             const dash = $('dash');
             const incident = dash.querySelector('.incident');
             const explain = $('explain'), logs = $('logs'), paneLabel = $('paneLabel');
-            const approve = $('approve'), logsBtn = $('logsBtn'), replay = $('replay');
+            const approve = $('approve'), logsBtn = $('logsBtn');
             const incDot = $('incDot'), incLabel = $('incLabel'), incMeta = $('incMeta'), prodIssue = $('prodIssue');
             const EXPLAIN = 'It needs about 310 MB but is only allowed 256 MB, so it gets killed. Raise the limit to 384 MB.';
             const RESOLVED = 'Resized. payments-api has been stable since the change, and the old limit is kept so you can undo it.';
@@ -582,21 +627,57 @@
                 setStatus(true);
                 incMeta.textContent = 'production · limit 384 MB · 0 restarts';
                 type(explain, RESOLVED, 12);
-                replay.hidden = false;
+                pods[0] = { ...pods[0], st: 'Running', ready: '1/1', cpu: '61m', mem: '298Mi' };
+                renderPods();
             });
 
-            replay.addEventListener('click', () => {
-                run++;
-                state = 'open';
-                approve.classList.remove('bg-panel2', 'text-ink', 'working');
-                approve.classList.add('bg-btn', 'hover:bg-btn2', 'text-btnink');
-                approve.textContent = 'Approve resize';
-                setStatus(false);
-                incMeta.textContent = 'production · 14 restarts · out of memory';
-                showPane('explain');
-                replay.hidden = true;
-                type(explain, EXPLAIN, 14).then(() => { if (!reduce) approve.classList.add('ping'); });
-            });
+            // ---- Pods / Jobs tables ----
+            const pods = [
+                { ns: 'payments',    name: 'payments-api-7d9f4-x2kq',    st: 'CrashLoopBackOff', ready: '0/1', rs: 14, cpu: '0m',   mem: '256Mi', age: '2h14m' },
+                { ns: 'payments',    name: 'payments-worker-5c8b-9fjt',  st: 'Running',          ready: '1/1', rs: 0,  cpu: '42m',  mem: '128Mi', age: '6d' },
+                { ns: 'web',         name: 'web-frontend-6b7c-llp2',     st: 'Running',          ready: '1/1', rs: 0,  cpu: '18m',  mem: '96Mi',  age: '3d4h' },
+                { ns: 'web',         name: 'web-frontend-6b7c-q8zt',     st: 'Running',          ready: '1/1', rs: 1,  cpu: '21m',  mem: '101Mi', age: '3d4h' },
+                { ns: 'batch',       name: 'nightly-report-29384-7xk2',  st: 'Completed',        ready: '0/1', rs: 0,  cpu: '-',    mem: '-',     age: '14m' },
+                { ns: 'kube-system', name: 'coredns-5d78c-wq4tn',        st: 'Running',          ready: '1/1', rs: 0,  cpu: '4m',   mem: '22Mi',  age: '21d' },
+            ];
+            const jobs = [
+                { ns: 'batch',    name: 'nightly-report-29384', st: 'Succeeded', done: '1/1', dur: 134, fin: '12m ago' },
+                { ns: 'batch',    name: 'invoice-sync-29384',   st: 'Failed',    done: '0/1', dur: 362, fin: '27m ago', why: 'BackoffLimitExceeded' },
+                { ns: 'payments', name: 'settle-ledger-29384',  st: 'Running',   done: '0/1', dur: 91,  fin: '-' },
+                { ns: 'batch',    name: 'db-backup-29383',      st: 'Succeeded', done: '1/1', dur: 48,  fin: '1h03m ago' },
+                { ns: 'web',      name: 'sitemap-build-29382',  st: 'Succeeded', done: '1/1', dur: 19,  fin: '3h11m ago' },
+            ];
+            const tone = { Running: 'text-[#22c55e]', Succeeded: 'text-[#22c55e]', Completed: 'text-faint', Failed: 'text-[#ef4444]', CrashLoopBackOff: 'text-[#ef4444]' };
+            const fmt = (t) => t < 60 ? t + 's' : Math.floor(t / 60) + 'm ' + String(t % 60).padStart(2, '0') + 's';
+            const nsSel = $('nsSel');
+            ['all', ...new Set([...pods, ...jobs].map(x => x.ns))].forEach(n => nsSel.add(new Option(n, n)));
+            const pick = (list) => nsSel.value === 'all' ? list : list.filter(x => x.ns === nsSel.value);
+            const td = (v, cls = '') => `<td class="dtd ${cls}">${v}</td>`;
+            const renderPods = () => {
+                const l = pick(pods);
+                $('podRows').innerHTML = l.map(p => `<tr class="border-t border-line">${td(p.ns, 'text-faint')}${td(p.name, 'text-ink')}${td(p.st, tone[p.st])}${td(p.ready, 'text-right')}${td(p.rs, 'text-right ' + (p.rs > 5 ? 'text-[#ef4444]' : ''))}${td(p.cpu, 'text-right')}${td(p.mem, 'text-right')}${td(p.age, 'text-right text-faint')}</tr>`).join('');
+                const bad = l.filter(p => p.st === 'CrashLoopBackOff').length;
+                $('podSum').innerHTML = `${l.length} pods · <span class="text-[#22c55e]">${l.filter(p => p.st === 'Running').length} running</span> · <span class="${bad ? 'text-[#ef4444]' : ''}">${bad} failing</span> · ${l.filter(p => p.st === 'Completed').length} completed`;
+            };
+            const renderJobs = () => {
+                const l = pick(jobs);
+                $('jobRows').innerHTML = l.map(j => `<tr class="border-t border-line"${j.why ? ` title="${j.why}"` : ''}>${td(j.ns, 'text-faint')}${td(j.name, 'text-ink')}${td(j.st === 'Running' ? '<span class="working">Running</span>' : j.st, tone[j.st])}${td(j.done, 'text-right')}${td(fmt(j.dur), 'text-right tabular-nums')}${td(j.fin, 'text-right text-faint')}</tr>`).join('');
+                const n = (st) => l.filter(j => j.st === st).length;
+                $('jobSum').innerHTML = `${l.length} jobs · <span class="text-[#22c55e]">${n('Succeeded')} passed</span> · <span class="${n('Failed') ? 'text-[#ef4444]' : ''}">${n('Failed')} failed</span>${n('Failed') ? ' (BackoffLimitExceeded)' : ''} · ${n('Running')} running`;
+            };
+            nsSel.addEventListener('change', () => { renderPods(); renderJobs(); });
+            dash.querySelectorAll('.dtab').forEach(t => t.addEventListener('click', () => {
+                const tab = t.dataset.tab;
+                dash.querySelectorAll('.dtab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+                $('paneClusters').hidden = tab !== 'clusters';
+                $('panePods').hidden = tab !== 'pods';
+                $('paneJobs').hidden = tab !== 'jobs';
+                $('nsWrap').hidden = tab === 'clusters';
+                $('refresh').hidden = tab !== 'clusters';
+            }));
+            renderPods(); renderJobs();
+            // The running job's duration ticks in real seconds.
+            if (!reduce) setInterval(() => { jobs.forEach(j => { if (j.st === 'Running') j.dur++; }); renderJobs(); }, 1000);
 
             if (reduce || !desktop) { incident.classList.add('on'); return; }
             const counts = [...dash.querySelectorAll('[data-count]')];
@@ -658,45 +739,47 @@
         // the installer and kubectl print back.
         (() => {
             const out = document.getElementById('termOut');
+            // ok rows are [name, detail]; names pad to one column so the
+            // "connected" and detail columns line up across both blocks.
             const script = [
-                ['c', '# linux server (any systemd distro, x86_64 or arm64)'],
-                ['$', 'curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh | sudo sh -s -- --id clu_9c2e41 --token ••••••••'],
+                ['c', '# linux server · any systemd distro · x86_64 / arm64'],
+                ['$', 'curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh \\'],
+                ['>', '    | sudo sh -s -- --id clu_9c2e41 --token ••••••••'],
                 ['o', 'Downloading the Clusterheart host agent (arm64)...'],
-                ['o', 'Clusterheart host agent is running. This server will show as Connected within a minute.'],
-                ['ok', '● gpu-01  Connected'],
+                ['o', 'Clusterheart host agent is running.'],
+                ['ok', ['gpu-01', 'rocky 9 · arm64 · 2 gpus']],
                 ['', ''],
-                ['c', '# kubernetes cluster'],
+                ['c', '# kubernetes · eks · gke · aks · k3s · kubeadm'],
                 ['$', 'kubectl apply -f https://clusterheart.com/agent.yaml'],
                 ['o', 'deployment.apps/clusterheart-agent created'],
-                ['ok', '● production  Connected'],
+                ['ok', ['production', '3 nodes · 39 pods']],
             ];
-            const cls = { c: 'text-white/40', o: 'text-white/55', ok: 'text-accent', '': '' };
-            const line = (kind) => {
+            const cls = { c: 'text-white/35', o: 'text-white/55', '>': '', '': '' };
+            const span = (cls, text) => { const e = document.createElement('span'); e.className = cls; e.textContent = text; return e; };
+            const line = (kind, s) => {
                 const row = document.createElement('div');
-                if (kind === '$') {
-                    const p = document.createElement('span');
-                    p.className = 'text-accent'; p.textContent = '$ ';
-                    row.appendChild(p);
-                } else row.className = cls[kind];
-                const txt = document.createElement('span');
-                row.appendChild(txt);
+                let txt;
+                if (kind === '$') { row.appendChild(span('text-accent', '$ ')); txt = span('', ''); row.appendChild(txt); }
+                else if (kind === 'ok') {
+                    row.className = 'mt-1';
+                    row.append(span('text-accent', '✓ '), span('text-white', s[0].padEnd(12)), span('text-accent', 'connected'), span('text-white/35', '   ' + s[1]));
+                } else { row.className = cls[kind]; txt = span('', kind === '>' ? '' : (s || ' ')); row.appendChild(txt); }
                 out.appendChild(row);
                 return { row, txt };
             };
             const cursor = document.createElement('span');
             cursor.className = 'cursor';
-            if (reduce || !desktop) { script.forEach(([k, s]) => line(k).txt.textContent = s || ' '); return; }
+            if (reduce || !desktop) { script.forEach(([k, s]) => { const l = line(k, s); if (k === '$' || k === '>') l.txt.textContent = s; }); return; }
             onView(document.getElementById('term'), async () => {
                 for (const [kind, s] of script) {
-                    const { row, txt } = line(kind);
-                    if (kind === '$') {
+                    const { row, txt } = line(kind, s);
+                    if (kind === '$' || kind === '>') {
                         row.appendChild(cursor);
-                        await sleep(300);
-                        for (const ch of s) { txt.textContent += ch; await sleep(12); }
-                        await sleep(350);
+                        await sleep(kind === '$' ? 300 : 60);
+                        for (const ch of s) { txt.textContent += ch; await sleep(11); }
+                        await sleep(kind === '$' && s.endsWith('\\') ? 60 : 350);
                     } else {
-                        txt.textContent = s || ' ';
-                        await sleep(kind === 'o' ? 450 : 150);
+                        await sleep(kind === 'o' ? 420 : 140);
                     }
                 }
                 line('$').row.appendChild(cursor);
