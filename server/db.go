@@ -23,6 +23,7 @@ type store struct {
 	meta   *mongo.Collection
 	usage  *mongo.Collection
 	chats  *mongo.Collection // AI chat history: one doc per user+cluster, last aiChatKeep turns
+	team   *mongo.Collection // team members: one doc per owner+email (see team.go)
 }
 
 var errUserExists = errors.New("user already exists")
@@ -55,12 +56,16 @@ func openStore(ctx context.Context) (*store, error) {
 		meta:   db.Collection("settings"),
 		usage:  db.Collection("usage_samples"),
 		chats:  db.Collection("ai_chats"),
+		team:   db.Collection("team_members"),
 	}
 	if _, err := s.users.Indexes().CreateOne(pctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
 		Options: options.Index().SetUnique(true).SetName("uk_email"),
 	}); err != nil {
 		return nil, fmt.Errorf("ensure email index: %w", err)
+	}
+	if err := ensureTeamIndexes(pctx, s.team); err != nil {
+		return nil, fmt.Errorf("ensure team indexes: %w", err)
 	}
 	// Usage history: a TTL index keeps a rolling window (continuous cleanup), and
 	// a compound index supports the per-user window aggregation.

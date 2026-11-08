@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -15,6 +17,8 @@ type adminRow struct {
 	ClustersOn int
 	Servers    int
 	ServersOn  int
+	TeamSize   int      // people on this user's team
+	MemberOf   []string // owners whose teams this user is on
 }
 
 // adminRows looks up every user's clusters and servers on the control plane,
@@ -60,5 +64,19 @@ func (a *app) adminRows(list []User) []adminRow {
 		}(&rows[i])
 	}
 	wg.Wait()
+	if teams, err := a.store.allTeams(context.Background()); err == nil {
+		idx := map[string]*adminRow{}
+		for i := range rows {
+			idx[strings.ToLower(rows[i].Email)] = &rows[i]
+		}
+		for _, t := range teams {
+			if r := idx[t.Owner]; r != nil {
+				r.TeamSize++
+			}
+			if r := idx[t.Email]; r != nil {
+				r.MemberOf = append(r.MemberOf, t.Owner)
+			}
+		}
+	}
 	return rows
 }

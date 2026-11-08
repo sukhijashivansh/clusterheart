@@ -41,14 +41,15 @@ const usersContent = `
 <div class="adm-totals"><div><b>{{len .Users}}</b><span>Users</span></div><div><b>{{.TotalClusters}}</b><span>Clusters</span></div><div><b>{{.TotalServers}}</b><span>Servers</span></div></div>
 <section class="card2" style="margin-top:16px">
 <table class="users">
-<thead><tr><th>User</th><th>Status</th><th>Clusters</th><th>Servers</th><th>Last seen</th><th></th></tr></thead>
+<thead><tr><th>User</th><th>Status</th><th>Clusters</th><th>Servers</th><th>Team</th><th>Last seen</th><th></th></tr></thead>
 <tbody>
-{{if not .Users}}<tr><td colspan="6" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
+{{if not .Users}}<tr><td colspan="7" class="empty">No sign-ups yet. Share the /signup link.</td></tr>{{end}}
 {{range .Users}}<tr>
   <td class="cell-user"><div class="u-name">{{.Name}}</div><div class="u-email">{{.Email}}</div></td>
   <td data-label="Status">{{if .Approved}}<span class="pill on"><span class="dot"></span>Approved</span>{{else}}<span class="pill off"><span class="dot"></span>Pending</span>{{end}}</td>
   <td data-label="Clusters" class="u-cnt">{{if not .Known}}<span class="u-none">&mdash;</span>{{else if .Clusters}}<b>{{.Clusters}}</b>{{if lt .ClustersOn .Clusters}} <span class="u-off">{{.ClustersOn}} live</span>{{end}}{{else}}<span class="u-none">0</span>{{end}}</td>
   <td data-label="Servers" class="u-cnt">{{if not .Known}}<span class="u-none">&mdash;</span>{{else if .Servers}}<b>{{.Servers}}</b>{{if lt .ServersOn .Servers}} <span class="u-off">{{.ServersOn}} live</span>{{end}}{{else}}<span class="u-none">0</span>{{end}}</td>
+  <td data-label="Team" class="u-cnt">{{if .TeamSize}}<b>{{.TeamSize}}</b> <span class="u-none">{{if eq .TeamSize 1}}person{{else}}people{{end}}</span>{{end}}{{range .MemberOf}}<div class="u-in">in {{.}}</div>{{end}}{{if and (not .TeamSize) (not .MemberOf)}}<span class="u-none">&mdash;</span>{{end}}</td>
   <td data-label="Last seen" class="u-time">{{if .LastSeen.IsZero}}{{if .LastLogin.IsZero}}never{{else}}{{.LastLogin.Format "Jan 2, 15:04"}}{{end}}{{else}}{{.LastSeen.Format "Jan 2, 15:04"}}{{end}}</td>
   <td class="cell-act">{{if .Approved}}<button class="act forceout" data-email="{{.Email}}">Force out</button><button class="act revoke" data-email="{{.Email}}" data-approve="false">Revoke</button>{{else}}<button class="act approve" data-email="{{.Email}}" data-approve="true">Approve</button>{{end}}</td>
 </tr>{{end}}

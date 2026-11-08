@@ -122,6 +122,31 @@ input::placeholder{color:var(--faint)}
 .btn.secondary{margin-top:12px;background:transparent;color:var(--text);border:1px solid var(--border-strong)}
 .btn.secondary:hover{background:var(--hover);border-color:var(--accent)}
 .alt{margin-top:24px;font-size:13.5px;color:var(--muted);text-align:center}
+/* account: workspaces + team */
+.card.acct{max-width:520px}
+.acct-sec{margin-top:30px;padding-top:22px;border-top:1px solid var(--border)}
+.acct-h{margin:0 0 6px;font-size:15px;font-weight:700;color:var(--text)}
+.acct-note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.acct-note b{color:var(--text);font-weight:600}
+.team-add{display:flex;gap:8px}
+.team-add input{flex:1;min-width:0;padding:10px 12px}
+.team-add select,.team-row select{background:var(--input-bg);color:var(--text);border:1px solid var(--border-strong);border-radius:0;font:inherit;font-size:13px;padding:0 8px;height:40px}
+.team-row select{height:32px;font-size:12.5px}
+.team-btn{height:40px;padding:0 16px;font:inherit;font-size:13px;font-weight:600;color:var(--accent-ink);background:var(--accent);border:1px solid var(--accent);cursor:pointer}
+.team-row .team-btn{height:32px;padding:0 12px}
+.team-btn:disabled{opacity:.5}
+.role-help{margin-top:10px}
+.team-list{margin-top:6px}
+.team-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)}
+.team-row:last-child{border-bottom:none}
+.team-who{flex:1;min-width:0}
+.team-name{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-mail{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-st{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:var(--amber)}
+.team-st.on{color:var(--green)}
+.team-x{height:32px;padding:0 10px;font:inherit;font-size:12.5px;color:var(--muted);background:none;border:1px solid var(--border-strong);cursor:pointer}
+.team-x:hover,.team-x.sure{color:var(--red);border-color:var(--red)}
+@media(max-width:480px){.team-add{flex-wrap:wrap}.team-add input{flex-basis:100%}.team-add select{flex:1}}
 .alt a{color:var(--accent);font-weight:600}
 .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
@@ -167,6 +192,10 @@ input::placeholder{color:var(--faint)}
 .tb-brand:hover{color:var(--text)}
 .tb-brand .wordmark{font-size:16px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
 .tb-right{display:flex;align-items:center;gap:12px}
+.tb-ws{margin-right:auto;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--muted);padding:5px 10px;border:1px solid var(--border-strong)}
+.tb-ws.shared{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.menu-label{padding:6px 12px 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.ws-pick.on{color:var(--accent)}.ws-pick.on::after{content:' ✓'}
 .tb-add{padding:9px 16px;font-size:13px;white-space:nowrap}
 .menu{position:relative}
 .menu-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;transition:background .14s,border-color .14s}
@@ -450,6 +479,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
 .u-cnt{font-variant-numeric:tabular-nums;white-space:nowrap}.u-cnt b{font-size:15px;font-weight:650;color:var(--text)}
+.u-in{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 .u-off{font-size:12px;color:var(--amber,var(--muted));margin-left:4px}.u-none{color:var(--faint)}
 .adm-totals{display:flex;gap:0;margin-top:14px;border:1px solid var(--border);background:var(--surface2);width:max-content;max-width:100%}
 .adm-totals>div{display:flex;align-items:baseline;gap:8px;white-space:nowrap;padding:12px 22px;border-right:1px solid var(--border)}.adm-totals>div:last-child{border-right:none}
@@ -981,6 +1011,8 @@ const signupBody = `{{define "body"}}<div class="auth-split"><aside class="auth-
 </div></section></div>{{end}}
 {{define "script"}}<script>
 var nameEl=document.getElementById('name'),email=document.getElementById('email'),pass=document.getElementById('pass'),go=document.getElementById('go'),msg=document.getElementById('msg');
+// A team invite links here with the invited email filled in.
+var _inv=new URLSearchParams(location.search).get('email');if(_inv)email.value=_inv;
 async function submit(){
   go.disabled=true;_mark(msg,'Creating account…','info');
   var res=await _post('/api/signup',{name:nameEl.value.trim(),email:email.value.trim(),password:pass.value});
@@ -1049,7 +1081,7 @@ pass2.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 // --- account -------------------------------------------------------------
 
-const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card">
+const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card acct">
 <div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
 <p class="kicker">Account</p>
 <h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
@@ -1057,6 +1089,14 @@ const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth
   <p><span class="pill on"><span class="dot"></span>Approved</span></p>
   <p class="sub" style="margin-top:14px">You're in. Open your dashboard to add clusters and watch their health from any device.</p>
   <a href="/app" class="btn" style="display:block;text-align:center;text-decoration:none">Open dashboard</a>
+  <div id="spaces" class="acct-sec" hidden><p class="acct-h">Workspaces</p><div id="space-list"></div></div>
+  <div class="acct-sec"><p class="acct-h">Your team</p>
+    <p class="acct-note">People you add see your clusters and servers. They get an email; if they're new, they sign up with that address and skip the approval wait.</p>
+    <div class="team-add"><input id="t-email" type="email" placeholder="teammate@company.com" autocomplete="off"><select id="t-role" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select><button id="t-add" class="team-btn">Add</button></div>
+    <p class="acct-note role-help"><b>Member</b> views everything and uses AI. <b>Admin</b> also adds, renames and removes clusters and servers and acts on fixes.</p>
+    <div id="t-msg" class="msg"></div>
+    <div id="team-list" class="team-list"></div>
+  </div>
 {{else}}
   <p><span class="pill off"><span class="dot"></span>Pending approval</span></p>
   <p class="sub" style="margin-top:14px">Your account is waiting for an admin to approve it. You'll be able to use the app once approved.</p>
@@ -1068,6 +1108,59 @@ const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth
 document.getElementById('logout').addEventListener('click',async function(){
   await _post('/api/logout',{});location.href='/login';
 });
+(function(){
+  var list=document.getElementById('team-list');if(!list)return;
+  function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  var msg=document.getElementById('t-msg'),em=document.getElementById('t-email'),role=document.getElementById('t-role'),add=document.getElementById('t-add');
+  async function api(method,url,body){
+    var r=await fetch(url,{method:method,headers:{'Content-Type':'application/json','Accept':'application/json'},body:body?JSON.stringify(body):undefined});
+    var d=await r.json().catch(function(){return {};});return {ok:r.ok,data:d};
+  }
+  async function load(){
+    var r=await api('GET','/api/team');if(!r.ok){list.innerHTML='<p class="acct-note">Could not load your team.</p>';return;}
+    var t=r.data.team||[],ws=r.data.workspaces||[];
+    list.innerHTML=t.length?t.map(function(m){
+      return '<div class="team-row"><div class="team-who"><div class="team-name">'+esc(m.name||m.email)+'</div>'+(m.name?'<div class="team-mail">'+esc(m.email)+'</div>':'')+
+        '<span class="team-st '+(m.joined?'on':'')+'">'+(m.joined?'Joined':'Invited')+'</span></div>'+
+        '<select class="t-role" data-email="'+esc(m.email)+'" aria-label="Role"><option value="member"'+(m.role==='member'?' selected':'')+'>Member</option><option value="admin"'+(m.role==='admin'?' selected':'')+'>Admin</option></select>'+
+        '<button class="team-x" data-email="'+esc(m.email)+'" aria-label="Remove '+esc(m.email)+'">Remove</button></div>';
+    }).join(''):'<p class="acct-note" style="margin:6px 0 0">No one yet.</p>';
+    var box=document.getElementById('spaces');
+    if(ws.length>1){
+      box.hidden=false;
+      document.getElementById('space-list').innerHTML=ws.map(function(w){
+        return '<div class="team-row"><div class="team-who"><div class="team-name">'+esc(w.name)+'</div><div class="team-mail">'+(w.owner?esc(w.role==='admin'?'Admin':'Member')+' · '+esc(w.owner):'Yours')+'</div></div>'+
+          (w.active?'<span class="team-st on">Current</span>':'<button class="team-btn ws-open" data-owner="'+esc(w.owner)+'">Open</button>')+
+          (w.owner?'<button class="team-x ws-leave" data-owner="'+esc(w.owner)+'">Leave</button>':'')+'</div>';
+      }).join('');
+    }else box.hidden=true;
+  }
+  add.addEventListener('click',async function(){
+    var e=em.value.trim();if(!e){em.focus();return;}
+    add.disabled=true;_mark(msg,'Adding…','info');
+    var r=await api('POST','/api/team',{email:e,role:role.value});
+    add.disabled=false;
+    if(!r.ok){_mark(msg,r.data.error||'Could not add.','err');return;}
+    _mark(msg,(r.data.joined?'Added. They can open your workspace now. We emailed ':'Invited. We emailed ')+e+'.','ok');em.value='';role.value='member';load();
+  });
+  em.addEventListener('keydown',function(e){if(e.key==='Enter')add.click();});
+  document.addEventListener('change',async function(e){
+    var s=e.target.closest&&e.target.closest('.t-role');if(!s)return;
+    s.disabled=true;var r=await api('PATCH','/api/team',{email:s.dataset.email,role:s.value});s.disabled=false;
+    _mark(msg,r.ok?'Role updated.':(r.data.error||'Could not update.'),r.ok?'ok':'err');
+  });
+  // Two-step remove/leave: the first click asks, the second does it.
+  document.addEventListener('click',async function(e){
+    var b=e.target.closest&&e.target.closest('.team-x,.ws-open');if(!b)return;
+    if(b.classList.contains('ws-open')){b.disabled=true;var o=await api('POST','/api/workspace',{owner:b.dataset.owner});if(o.ok)location.href='/app';else b.disabled=false;return;}
+    if(!b.classList.contains('sure')){b.classList.add('sure');b.textContent='Sure?';setTimeout(function(){if(b.isConnected){b.classList.remove('sure');b.textContent=b.classList.contains('ws-leave')?'Leave':'Remove';}},3000);return;}
+    b.disabled=true;
+    var r=b.classList.contains('ws-leave')?await api('POST','/api/workspace',{owner:b.dataset.owner,leave:true}):await api('DELETE','/api/team?email='+encodeURIComponent(b.dataset.email));
+    _mark(msg,r.ok?(b.classList.contains('ws-leave')?'You left that workspace.':'Removed. Their access ended.'):(r.data.error||'Could not do that.'),r.ok?'ok':'err');
+    load();
+  });
+  load();
+})();
 </script>{{end}}`
 
 // --- admin ---------------------------------------------------------------

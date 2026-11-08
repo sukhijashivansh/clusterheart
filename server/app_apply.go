@@ -43,7 +43,7 @@ func handleRemediationManifest(w http.ResponseWriter, _ *http.Request) {
 // POST /api/app/clusters/{id}/remediation. Issuing a new token invalidates the
 // previous one.
 func (a *app) handleAppEnableRemediation(w http.ResponseWriter, r *http.Request) {
-	_, tenant, ok := a.appSREUser(w, r)
+	_, tenant, ok := a.appSREManager(w, r)
 	if !ok {
 		return
 	}
@@ -87,7 +87,7 @@ var k8sNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$`)
 // It creates a SetResources proposal as the user and approves it in one step
 // (the click plus confirmation is the human approval).
 func (a *app) handleAppRightsize(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREUser(w, r)
+	u, tenant, ok := a.appSREManager(w, r)
 	if !ok {
 		return
 	}

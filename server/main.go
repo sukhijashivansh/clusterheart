@@ -42,6 +42,9 @@ type User struct {
 	AppVersion string    `bson:"appVersion,omitempty" json:"appVersion"`
 	// SessionsValidAfter invalidates any token minted before it (force log out).
 	SessionsValidAfter time.Time `bson:"sessionsValidAfter,omitempty" json:"-"`
+	// Workspace is the owner email of the team workspace this user opens;
+	// empty means their own (see team.go).
+	Workspace string `bson:"workspace,omitempty" json:"-"`
 }
 
 type app struct {
@@ -174,13 +177,14 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	err = a.store.insert(ctx, &User{
+	nu := &User{
 		Email:    email,
 		Name:     name,
 		PassHash: string(hash),
 		Approved: autoApprove(),
 		Created:  time.Now(),
-	})
+	}
+	err = a.store.insert(ctx, nu)
 	if err == errUserExists {
 		writeJSON(w, 409, map[string]any{"error": "An account with this email already exists."})
 		return
@@ -189,7 +193,9 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]any{"error": "could not create account"})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true})
+	// Someone a team owner added: approved now, opening the team's workspace.
+	a.joinInvitedTeam(ctx, nu)
+	writeJSON(w, 200, map[string]any{"ok": true, "approved": nu.Approved})
 }
 
 // isHTTPS reports whether the request reached us over TLS, either directly or
@@ -221,6 +227,8 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.store.setLastLogin(ctx, email)
+	// People on an approved owner's team are approved and open that workspace.
+	a.joinInvitedTeam(ctx, u)
 
 	// Auto-approve on login (covers accounts created before the flag was on).
 	if !u.Approved && autoApprove() {
@@ -589,6 +597,8 @@ func main() {
 	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
 	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
 	mux.HandleFunc("/api/sre-bootstrap", a.handleSREBootstrap)
+	mux.HandleFunc("/api/team", a.handleTeam)
+	mux.HandleFunc("POST /api/workspace", post(a.handleWorkspace))
 	mux.HandleFunc("/api/app/clusters", a.handleAppClusters)
 	mux.HandleFunc("POST /api/app/clusters/{id}/connect", a.handleAppClusterConnect)
 	mux.HandleFunc("DELETE /api/app/clusters/{id}", a.handleAppClusterDelete)

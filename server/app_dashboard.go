@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -60,12 +61,11 @@ func (a *app) cpDo(method, path string, body any) (int, []byte, error) {
 
 // handleAppClusters dispatches GET (list my clusters) and POST (register one).
 func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil || !u.Approved {
-		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+	_, ws, ok := a.wsUser(w, r, r.Method != http.MethodGet)
+	if !ok {
 		return
 	}
-	tenant := tenantFor(u.Email)
+	tenant := ws.Tenant
 
 	switch r.Method {
 	case http.MethodGet:
@@ -142,9 +142,8 @@ func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
 // clusters and returns the install snippet. This is how you recover a token you
 // never saved (it is shown only once). Scoped to the user's tenant.
 func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil || !u.Approved {
-		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+	_, ws, ok := a.wsUser(w, r, true)
+	if !ok {
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
@@ -152,7 +151,7 @@ func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": "missing cluster id"})
 		return
 	}
-	tenant := tenantFor(u.Email)
+	tenant := ws.Tenant
 	var in struct {
 		Kind string `json:"kind"`
 	}
@@ -187,9 +186,8 @@ func (a *app) handleAppClusterConnect(w http.ResponseWriter, r *http.Request) {
 
 // handleAppClusterRename changes a cluster's display name (tenant-scoped).
 func (a *app) handleAppClusterRename(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil || !u.Approved {
-		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+	_, ws, ok := a.wsUser(w, r, true)
+	if !ok {
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
@@ -202,7 +200,7 @@ func (a *app) handleAppClusterRename(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": "id and name are required"})
 		return
 	}
-	tenant := tenantFor(u.Email)
+	tenant := ws.Tenant
 	code, _, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(id)+"/rename?tenantId="+url.QueryEscape(tenant), map[string]any{"name": name})
 	if err != nil {
 		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
@@ -221,9 +219,8 @@ func (a *app) handleAppClusterRename(w http.ResponseWriter, r *http.Request) {
 
 // handleAppClusterSetEnv changes a cluster's environment label (tenant-scoped).
 func (a *app) handleAppClusterSetEnv(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil || !u.Approved {
-		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+	_, ws, ok := a.wsUser(w, r, true)
+	if !ok {
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
@@ -236,7 +233,7 @@ func (a *app) handleAppClusterSetEnv(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": "id and environment are required"})
 		return
 	}
-	tenant := tenantFor(u.Email)
+	tenant := ws.Tenant
 	code, _, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(id)+"/environment?tenantId="+url.QueryEscape(tenant), map[string]any{"environment": env})
 	if err != nil {
 		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
@@ -255,9 +252,8 @@ func (a *app) handleAppClusterSetEnv(w http.ResponseWriter, r *http.Request) {
 
 // handleAppClusterDelete removes one of the user's clusters (tenant-scoped).
 func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil || !u.Approved {
-		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
+	_, ws, ok := a.wsUser(w, r, true)
+	if !ok {
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
@@ -265,7 +261,7 @@ func (a *app) handleAppClusterDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]any{"error": "missing cluster id"})
 		return
 	}
-	tenant := tenantFor(u.Email)
+	tenant := ws.Tenant
 	code, _, err := a.cpDo("DELETE", "/api/v1/clusters/"+url.PathEscape(id)+"?tenantId="+url.QueryEscape(tenant), nil)
 	if err != nil {
 		writeJSON(w, 502, map[string]any{"error": "control plane unreachable"})
@@ -325,12 +321,33 @@ func (a *app) handleAppServerMetrics(w http.ResponseWriter, r *http.Request) {
 // appSREUser gates the SRE endpoints the same way as the cluster ones and
 // returns the caller's tenant.
 func (a *app) appSREUser(w http.ResponseWriter, r *http.Request) (*User, string, bool) {
+	u, ws, ok := a.wsUser(w, r, false)
+	return u, ws.Tenant, ok
+}
+
+// appSREManager is appSREUser for actions that change things: only the
+// workspace owner and team admins may take them.
+func (a *app) appSREManager(w http.ResponseWriter, r *http.Request) (*User, string, bool) {
+	u, ws, ok := a.wsUser(w, r, true)
+	return u, ws.Tenant, ok
+}
+
+// wsUser resolves the signed-in, approved user and the workspace they work in.
+// With manage set, team members without the admin role get a 403.
+func (a *app) wsUser(w http.ResponseWriter, r *http.Request, manage bool) (*User, workspace, bool) {
 	u := a.sessionUser(r)
 	if u == nil || !u.Approved {
 		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
-		return nil, "", false
+		return nil, workspace{}, false
 	}
-	return u, tenantFor(u.Email), true
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	ws := a.workspaceFor(ctx, u)
+	if manage && !ws.canManage() {
+		writeJSON(w, 403, map[string]any{"error": "Only the workspace owner or a team admin can do this."})
+		return nil, workspace{}, false
+	}
+	return u, ws, true
 }
 
 // cpRelay passes a control-plane response straight through. Error bodies from
@@ -452,10 +469,12 @@ func (a *app) clusterActivity(tenant, id string, incs, props []map[string]any) [
 // handleAppIncidentAction runs AI diagnosis or turns it into a policy-checked
 // remediation proposal: POST /api/app/incidents/{id}/{diagnose|propose}.
 func (a *app) handleAppIncidentAction(w http.ResponseWriter, r *http.Request) {
-	_, tenant, ok := a.appSREUser(w, r)
+	// Diagnosis only reads; turning it into a fix proposal needs manage rights.
+	_, ws, ok := a.wsUser(w, r, r.PathValue("action") == "propose")
 	if !ok {
 		return
 	}
+	tenant := ws.Tenant
 	action := r.PathValue("action")
 	if action != "diagnose" && action != "propose" {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
@@ -469,7 +488,7 @@ func (a *app) handleAppIncidentAction(w http.ResponseWriter, r *http.Request) {
 // POST /api/app/proposals/{id}/{approve|reject}. The approver is always the
 // logged-in user, never taken from the request.
 func (a *app) handleAppProposalAction(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREUser(w, r)
+	u, tenant, ok := a.appSREManager(w, r)
 	if !ok {
 		return
 	}
@@ -493,7 +512,7 @@ func (a *app) handleAppProposalAction(w http.ResponseWriter, r *http.Request) {
 // handleAppClusterAutomation pauses or resumes automated remediation for one
 // cluster: POST /api/app/clusters/{id}/automation/{pause|resume}.
 func (a *app) handleAppClusterAutomation(w http.ResponseWriter, r *http.Request) {
-	_, tenant, ok := a.appSREUser(w, r)
+	_, tenant, ok := a.appSREManager(w, r)
 	if !ok {
 		return
 	}
@@ -555,8 +574,27 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	ws := a.workspaceFor(ctx, u)
+	// The menu lists every workspace this person can open (theirs + teams).
+	type space struct {
+		Owner, Name string
+		Active      bool
+	}
+	spaces := []space{{"", "My workspace", ws.Owner == strings.ToLower(u.Email)}}
+	if teams, err := a.store.teamsOf(ctx, u.Email); err == nil {
+		for _, t := range teams {
+			name := workspaceName("", t.Owner)
+			if o, err := a.store.find(ctx, t.Owner); err == nil && o != nil {
+				name = workspaceName(o.Name, o.Email)
+			}
+			spaces = append(spaces, space{t.Owner, name, ws.Owner == t.Owner})
+		}
+	}
+	shared := ws.Owner != strings.ToLower(u.Email)
 	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email, "ManifestURL": envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml"),
-		"HostUpdateCmd": hostUpdateSnippet()})
+		"HostUpdateCmd": hostUpdateSnippet(), "Workspace": ws.Name, "Shared": shared, "Role": ws.Role, "CanManage": ws.canManage(), "Spaces": spaces})
 }
 
 var appTmpl = page(appBody)
@@ -566,14 +604,18 @@ const burgerSVG = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" s
 const appBody = `{{define "body"}}<div class="app2">
 <header class="topbar">
   <a class="tb-brand" href="/app">` + logoSVG + `<span class="wordmark">Clusterheart</span></a>
+  {{if gt (len .Spaces) 1}}<span class="tb-ws{{if .Shared}} shared{{end}}" title="You're working in {{.Workspace}}">{{if .Shared}}{{.Workspace}}{{if eq .Role "member"}} · view{{end}}{{else}}My workspace{{end}}</span>{{end}}
   <div class="tb-right">
     <div class="menu" id="menu">
       <button class="menu-btn" id="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">` + burgerSVG + `</button>
       <div class="menu-pop" role="menu">
         <div class="menu-email">{{.Email}}</div>
-        <button class="menu-item accent" role="menuitem" id="add-cluster">+ Add cluster</button>
-        <button class="menu-item accent" role="menuitem" id="add-server">+ Add server</button>
-        <a class="menu-item" role="menuitem" href="/account">Account</a>
+        {{if .CanManage}}<button class="menu-item accent" role="menuitem" id="add-cluster">+ Add cluster</button>
+        <button class="menu-item accent" role="menuitem" id="add-server">+ Add server</button>{{end}}
+        {{if gt (len .Spaces) 1}}<div class="menu-sep"></div><div class="menu-label">Workspace</div>
+        {{range .Spaces}}<button class="menu-item ws-pick{{if .Active}} on{{end}}" role="menuitemradio" aria-checked="{{.Active}}" data-owner="{{.Owner}}">{{.Name}}</button>{{end}}
+        <div class="menu-sep"></div>{{end}}
+        <a class="menu-item" role="menuitem" href="/account">Account &amp; team</a>
         <a class="menu-item" role="menuitem" href="/docs/connect-a-cluster.md" target="_blank" rel="noopener">Help</a>
         <div class="menu-sep"></div>
         <a class="menu-item danger" role="menuitem" href="#" id="logout">Log out</a>
@@ -588,6 +630,14 @@ const appBody = `{{define "body"}}<div class="app2">
 </div>{{end}}
 {{define "script"}}<script>
 var NODE_MANIFEST_URL={{.ManifestURL}};
+// CAN_MANAGE is false for team members with the view role: the server refuses
+// their changes anyway, this just hides the controls.
+var CAN_MANAGE={{.CanManage}};
+document.querySelectorAll('.ws-pick').forEach(function(b){b.addEventListener('click',async function(){
+  if(b.classList.contains('on'))return;
+  b.disabled=true;var r=await _post('/api/workspace',{owner:b.dataset.owner});
+  if(r.ok)location.href='/app';else b.disabled=false;
+});});
 var HOST_UPDATE_CMD={{.HostUpdateCmd}};
 // HOST_AGENT_LATEST is the host agent with GPU and network metrics.
 var HOST_AGENT_LATEST='0.2.3';
@@ -632,6 +682,7 @@ function kebab(c){
   var connected=c.connected===true,id=esc(c.clusterId||'');
   var h='<div class="kebab"><button class="kebab-btn" aria-label="Options" aria-haspopup="true">'+dotsSVG+'</button><div class="kebab-pop">';
   h+='<button class="kebab-item info-btn" data-id="'+id+'" data-env="'+esc(c.environment||'')+'" data-k8s="'+esc(c.k8sVersion||'')+'" data-agent="'+esc(c.agentVersion||'')+'" data-seen="'+esc(c.lastHeartbeat||'')+'" data-conn="'+(connected?'Connected':'Offline')+'">Info</button>';
+  if(!CAN_MANAGE)return h+'</div></div>';
   h+='<button class="kebab-item rename-btn" data-id="'+id+'" data-name="'+esc(c.name||'')+'">Rename</button>';
   h+='<button class="kebab-item env-btn" data-id="'+id+'" data-env="'+esc(c.environment||'')+'">Environment</button>';
   if(!connected){h+='<button class="kebab-item connect-btn" data-id="'+id+'" data-kind="'+esc(c.kind||'kubernetes')+'">Install</button>';}
@@ -669,7 +720,7 @@ async function load(){
     var payload=await r.json();
     var list=(payload&&payload.clusters)||[];
     if(list.length===0){
-      box.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No clusters yet. Click <b>Add cluster</b> to connect your first one.</p></div></section>';
+      box.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">'+(CAN_MANAGE?'No clusters yet. Click <b>Add cluster</b> to connect your first one.':'No clusters or servers in this workspace yet. The owner adds them.')+'</p></div></section>';
       return;
     }
     list=clOrdered(list);
@@ -821,7 +872,7 @@ function showInstall(d){
   cp.addEventListener('click',function(){navigator.clipboard.writeText(d.install);cp.textContent='Copied';});
 }
 
-document.getElementById('add-cluster').addEventListener('click',async function(){
+if(document.getElementById('add-cluster'))document.getElementById('add-cluster').addEventListener('click',async function(){
   if(_menu){_menu.classList.remove('open');if(_mb)_mb.setAttribute('aria-expanded','false');}
   var name=prompt('Name this cluster (e.g. prod-us-east):','my-cluster');
   if(name===null)return;
@@ -832,7 +883,7 @@ document.getElementById('add-cluster').addEventListener('click',async function()
   await load();showInstall(r.data);
 });
 
-document.getElementById('add-server').addEventListener('click',async function(){
+if(document.getElementById('add-server'))document.getElementById('add-server').addEventListener('click',async function(){
   if(_menu){_menu.classList.remove('open');if(_mb)_mb.setAttribute('aria-expanded','false');}
   var name=prompt('Name this server (e.g. web-01):','my-server');
   if(name===null)return;
@@ -2268,4 +2319,3 @@ function route(){
 }
 route();
 </script>{{end}}`
-

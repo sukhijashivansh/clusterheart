@@ -139,6 +139,28 @@ func (a *app) handleReset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// sendMail sends one HTML email over SMTP (Gmail), wrapped in the shared
+// Clusterheart layout. Without SMTP settings it logs instead, so local dev works.
+func sendMail(to, subject, inner string) error {
+	host := envOr("SMTP_HOST", "smtp.gmail.com")
+	port := envOr("SMTP_PORT", "587")
+	user := os.Getenv("SMTP_USER")
+	pass := os.Getenv("SMTP_PASS")
+	from := envOr("SMTP_FROM", user)
+	if user == "" || pass == "" {
+		log.Printf("mail: SMTP not configured - would send %q to %s", subject, to)
+		return nil
+	}
+	htmlBody := `<!DOCTYPE html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#fff;color:#171717;padding:24px">` +
+		inner + `<p style="color:#a3a3a3;font-size:12px;margin-top:26px">Clusterheart</p></body></html>`
+	msg := "From: Clusterheart <" + from + ">\r\n" +
+		"To: " + to + "\r\n" +
+		"Subject: " + strings.NewReplacer("\r", "", "\n", "").Replace(subject) + "\r\n" +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n\r\n" + htmlBody
+	return smtp.SendMail(host+":"+port, smtp.PlainAuth("", user, pass, host), from, []string{to}, []byte(msg))
+}
+
 // sendResetEmail delivers the reset link via SMTP (Gmail). If SMTP isn't
 // configured it logs the link instead so local/dev still works.
 func (a *app) sendResetEmail(to, name, link string) {
