@@ -77,9 +77,9 @@ document.querySelectorAll('.act.forceout').forEach(function(b){
 const broadcastContent = `
 <p class="kicker">Access control</p>
 <h1 style="margin:0 0 7px">Broadcast</h1>
-<p class="sub">Send a short message to every running app. It appears on the app's next check.</p>
+<p class="sub">Show a short message at the top of everyone's dashboard. Clear it to take it down.</p>
 <section class="card2" style="margin-top:24px"><div class="card2-body">
-  <textarea id="notice-text" class="nb" rows="3" placeholder="e.g. A new version is available — please update.">{{.Notice}}</textarea>
+  <textarea id="notice-text" class="nb" rows="3" placeholder="e.g. Scheduled maintenance tonight at 22:00 UTC.">{{.Notice}}</textarea>
   <div class="nb-actions">
     <button class="act approve" id="notice-send">Send to everyone</button>
     <button class="act revoke" id="notice-clear">Clear</button>

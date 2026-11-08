@@ -1,12 +1,15 @@
 # ClusterHeart Autonomous SRE - `sre/` module
 
-One Go module, three binaries:
+One Go module, four binaries:
 
 - `cmd/controlplane` - multi-tenant API: cluster registration, agent heartbeats,
   telemetry ingestion, incident detection, remediation policy/approval/audit,
   operator read-back. Never touches a cluster directly.
 - `cmd/agent` - in-cluster, read-only collector that forwards bounded cluster-health
   snapshots to the control plane.
+- `cmd/hostagent` - read-only Linux server agent (systemd unit installed by
+  `/install-host.sh`): CPU, memory, disks, load, network, processes, error
+  logs, NVIDIA/AMD GPUs, and leaked credentials in the journal or services' Environment= settings (masked, never the value).
 - `cmd/remediation` - in-cluster, narrowly-privileged controller (opt-in, separate
   credential) that pulls already-approved typed actions, executes them (dry-run or
   real per policy), verifies, and reports back. No detection, no AI, no arbitrary

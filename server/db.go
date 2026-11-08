@@ -15,13 +15,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
-// store is the MongoDB-backed user store. One collection: users, keyed by a
-// unique email index.
+// store is the server's MongoDB data: users (unique by email), settings (the
+// broadcast notice), AI chat history and team memberships.
 type store struct {
 	client *mongo.Client
 	users  *mongo.Collection
 	meta   *mongo.Collection
-	usage  *mongo.Collection
 	chats  *mongo.Collection // AI chat history: one doc per user+cluster, last aiChatKeep turns
 	team   *mongo.Collection // team members: one doc per owner+email (see team.go)
 }
@@ -54,7 +53,6 @@ func openStore(ctx context.Context) (*store, error) {
 		client: client,
 		users:  db.Collection("users"),
 		meta:   db.Collection("settings"),
-		usage:  db.Collection("usage_samples"),
 		chats:  db.Collection("ai_chats"),
 		team:   db.Collection("team_members"),
 	}
@@ -67,15 +65,6 @@ func openStore(ctx context.Context) (*store, error) {
 	if err := ensureTeamIndexes(pctx, s.team); err != nil {
 		return nil, fmt.Errorf("ensure team indexes: %w", err)
 	}
-	// Usage history: a TTL index keeps a rolling window (continuous cleanup), and
-	// a compound index supports the per-user window aggregation.
-	_, _ = s.usage.Indexes().CreateOne(pctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "ts", Value: 1}},
-		Options: options.Index().SetExpireAfterSeconds(int32((8 * time.Hour).Seconds())).SetName("ttl_ts"),
-	})
-	_, _ = s.usage.Indexes().CreateOne(pctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "user", Value: 1}, {Key: "ns", Value: 1}, {Key: "workload", Value: 1}, {Key: "ts", Value: 1}},
-	})
 	return s, nil
 }
 
@@ -105,14 +94,9 @@ func (s *store) setLastLogin(ctx context.Context, email string) error {
 	return err
 }
 
-// setSeen refreshes lastSeen (and the reported app version, when provided) for
-// a user on each session heartbeat.
-func (s *store) setSeen(ctx context.Context, email, appVersion string) error {
-	set := bson.M{"lastSeen": time.Now()}
-	if appVersion != "" {
-		set["appVersion"] = appVersion
-	}
-	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)}, bson.M{"$set": set})
+// setSeen records that a user opened the dashboard.
+func (s *store) setSeen(ctx context.Context, email string) error {
+	_, err := s.users.UpdateOne(ctx, bson.M{"email": strings.ToLower(email)}, bson.M{"$set": bson.M{"lastSeen": time.Now()}})
 	return err
 }
 

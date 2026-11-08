@@ -1,12 +1,11 @@
 // Clusterheart account server (MongoDB-backed).
 //
-// Handles sign-up, login, logout and sessions (bcrypt-hashed passwords, signed
-// session tokens) plus an admin panel where the owner approves or revokes who
-// may use the app. Users live in the `users` collection of the MongoDB
-// database named by MONGO_DB (default "clusterheart").
-//
-// The Electron desktop app calls POST /api/login on launch: the response tells
-// it whether this user has been granted permission.
+// Serves the web dashboard (/app) and everything around it: sign-up, login,
+// sessions (bcrypt-hashed passwords, signed session cookies), password reset,
+// teams, and the admin panel where the owner approves or revokes who may use
+// the app. Cluster and server data comes from the SRE control plane (cpDo).
+// Users live in the `users` collection of the MongoDB database named by
+// MONGO_DB (default "clusterheart").
 package main
 
 import (
@@ -18,7 +17,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -36,10 +34,9 @@ type User struct {
 	Approved  bool      `bson:"approved" json:"approved"`
 	Created   time.Time `bson:"created" json:"created"`
 	LastLogin time.Time `bson:"lastLogin" json:"lastLogin"`
-	// LastSeen + AppVersion are refreshed on every session heartbeat, so the
-	// admin can see who's active and which app build they're on.
-	LastSeen   time.Time `bson:"lastSeen,omitempty" json:"lastSeen"`
-	AppVersion string    `bson:"appVersion,omitempty" json:"appVersion"`
+	// LastSeen is refreshed when the dashboard opens (see pageApp), so the
+	// admin can see who's active.
+	LastSeen time.Time `bson:"lastSeen,omitempty" json:"lastSeen"`
 	// SessionsValidAfter invalidates any token minted before it (force log out).
 	SessionsValidAfter time.Time `bson:"sessionsValidAfter,omitempty" json:"-"`
 	// Workspace is the owner email of the team workspace this user opens;
@@ -68,8 +65,8 @@ func autoApprove() bool {
 }
 
 // --- sessions ------------------------------------------------------------
-// A session token is base64url(email|expiryRFC3339).hmac. Stateless: works as
-// a cookie (web) and as a bearer token (Electron).
+// A session token is base64url(email|expiry|issuedAt).hmac, kept in an
+// HttpOnly cookie. Stateless apart from the per-user force-logout stamp.
 
 const sessionCookie = "ch_session"
 const sessionTTL = 30 * 24 * time.Hour
@@ -122,11 +119,6 @@ func (a *app) sessionUser(r *http.Request) *User {
 	token := ""
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		token = c.Value
-	}
-	if token == "" {
-		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-			token = strings.TrimPrefix(h, "Bearer ")
-		}
 	}
 	if token == "" {
 		return nil
@@ -252,51 +244,6 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"name":     u.Name,
 		"email":    u.Email,
 		"admin":    a.isAdmin(email),
-		"token":    token,
-	})
-}
-
-func (a *app) handleSession(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil {
-		writeJSON(w, 200, map[string]any{"valid": false})
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-	defer cancel()
-	// Record activity + the reporting app version (sent by the desktop app).
-	_ = a.store.setSeen(ctx, u.Email, strings.TrimSpace(r.Header.Get("X-App-Version")))
-	n := a.store.getNotice(ctx)
-	resp := map[string]any{
-		"valid":    true,
-		"approved": u.Approved,
-		"name":     u.Name,
-		"email":    u.Email,
-		"admin":    a.isAdmin(u.Email),
-	}
-	if n.Message != "" {
-		resp["notice"] = n
-	}
-	// Latest shipped app version, so the desktop app can nudge users to update.
-	if v := os.Getenv("LATEST_APP_VERSION"); v != "" {
-		resp["latestVersion"] = v
-	}
-	writeJSON(w, 200, resp)
-}
-
-// handleSREBootstrap hands the desktop app the SRE control-plane coordinates.
-// Kept out of the browser: only the Electron main process calls this (with the
-// session bearer) and passes the values into the dashboard process env.
-func (a *app) handleSREBootstrap(w http.ResponseWriter, r *http.Request) {
-	u := a.sessionUser(r)
-	if u == nil || !u.Approved {
-		writeJSON(w, 401, map[string]any{"error": "unauthorized"})
-		return
-	}
-	writeJSON(w, 200, map[string]any{
-		"controlplaneUrl": os.Getenv("SRE_CONTROLPLANE_URL"),
-		"adminToken":      os.Getenv("SRE_ADMIN_TOKEN"),
-		"tenantId":        envOr("SRE_TENANT_ID", "default"),
 	})
 }
 
@@ -510,43 +457,6 @@ func logging(next http.Handler) http.Handler {
 	})
 }
 
-const installScript = `#!/bin/bash
-set -e
-BASE="%s"
-
-arch=$(uname -m)
-if [ "$arch" = "arm64" ]; then
-  FILE="Clusterheart-macOS-AppleSilicon.dmg"
-else
-  FILE="Clusterheart-macOS-Intel.dmg"
-fi
-
-echo "Downloading Clusterheart ($arch)..."
-curl -# -L "$BASE/downloads/$FILE" -o /tmp/clusterheart-install.dmg
-
-echo "Mounting installer..."
-hdiutil attach /tmp/clusterheart-install.dmg -mountpoint /Volumes/ClusterheartInstall -quiet
-
-echo "Preparing app..."
-rm -rf /tmp/Clusterheart-stage.app
-cp -r "/Volumes/ClusterheartInstall/Clusterheart.app" /tmp/Clusterheart-stage.app
-
-hdiutil detach /Volumes/ClusterheartInstall -quiet
-rm /tmp/clusterheart-install.dmg
-
-echo "Signing app before install (prevents Gatekeeper scan on copy)..."
-xattr -dr com.apple.quarantine /tmp/Clusterheart-stage.app 2>/dev/null || true
-codesign --force --sign - /tmp/Clusterheart-stage.app 2>/dev/null || true
-
-echo "Moving to /Applications..."
-rm -rf /Applications/Clusterheart.app
-mv /tmp/Clusterheart-stage.app /Applications/Clusterheart.app
-
-echo ""
-echo "Done! Open Clusterheart from /Applications or Spotlight (Cmd+Space)."
-echo "Sign in at: %s/login"
-`
-
 func main() {
 	loadDotEnv(".env")
 
@@ -568,9 +478,6 @@ func main() {
 		log.Println("WARNING: ADMIN_EMAILS is empty - nobody can reach /admin. Set it in server/.env")
 	}
 
-	// Daily hard-purge of usage history (on top of the 8h TTL).
-	go st.usagePurgeLoop()
-
 	// Per-IP rate limiters for the sensitive auth endpoints.
 	loginRL := newRateLimiter(10, time.Minute)    // login / token exchange
 	signupRL := newRateLimiter(5, 10*time.Minute) // account creation
@@ -588,15 +495,11 @@ func main() {
 	mux.HandleFunc("/api/signup", signupRL.wrap("signup", post(a.handleSignup)))
 	mux.HandleFunc("/api/login", loginRL.wrap("login", post(a.handleLogin)))
 	mux.HandleFunc("/api/logout", post(a.handleLogout))
-	mux.HandleFunc("/api/session", a.handleSession)
 	mux.HandleFunc("/api/forgot", resetRL.wrap("forgot", post(a.handleForgot)))
 	mux.HandleFunc("/api/reset", resetRL.wrap("reset", post(a.handleReset)))
 	mux.HandleFunc("/api/admin/approve", post(a.handleApprove))
 	mux.HandleFunc("/api/admin/forcelogout", post(a.handleForceLogout))
 	mux.HandleFunc("/api/admin/notice", post(a.handleNotice))
-	mux.HandleFunc("/api/usage/ingest", post(a.handleUsageIngest))
-	mux.HandleFunc("/api/usage/aggregate", a.handleUsageAggregate)
-	mux.HandleFunc("/api/sre-bootstrap", a.handleSREBootstrap)
 	mux.HandleFunc("/api/team", a.handleTeam)
 	mux.HandleFunc("POST /api/workspace", post(a.handleWorkspace))
 	mux.HandleFunc("/api/app/clusters", a.handleAppClusters)
@@ -619,33 +522,11 @@ func main() {
 	mux.HandleFunc("POST /api/app/incidents/{id}/{action}", a.handleAppIncidentAction)
 	mux.HandleFunc("POST /api/app/proposals/{id}/{action}", a.handleAppProposalAction)
 
-	// Serve the desktop-app installers straight from this server (no GitHub
-	// release needed - the source stays private). Drop the .dmg/.exe/.AppImage
-	// files into DOWNLOADS_DIR (default: ./downloads next to the binary).
-	downloadsDir := os.Getenv("DOWNLOADS_DIR")
-	if downloadsDir == "" {
-		downloadsDir = "downloads"
-	}
-	mux.Handle("/downloads/", http.StripPrefix("/downloads/",
-		http.FileServer(http.Dir(downloadsDir))))
-
 	mux.HandleFunc("GET /remediation.yaml", handleRemediationManifest)
 	mux.HandleFunc("GET /install-host.sh", handleHostInstallScript)
-	mux.HandleFunc("/install.sh", func(w http.ResponseWriter, r *http.Request) {
-		scheme := "https"
-		if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
-			scheme = p
-		} else if r.TLS == nil {
-			scheme = "http"
-		}
-		base := scheme + "://" + r.Host
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintf(w, installScript, base, base)
-	})
-
 	mux.HandleFunc("/", a.pageHome)
 
-	log.Printf("clusterheart account server on http://%s (downloads: %s)", *addr, downloadsDir)
+	log.Printf("clusterheart account server on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, logging(securityHeaders(mux))))
 }
 

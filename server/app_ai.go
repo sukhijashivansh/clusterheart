@@ -2,8 +2,7 @@ package main
 
 // AI chat for the browser dashboard. Answers questions about one cluster,
 // grounded in the agent's latest snapshot and the cluster's open incidents,
-// using the server's OPENROUTER_API_KEY. Same reply format and free-model
-// fallback as the desktop AI tab.
+// using the server's OPENROUTER_API_KEY, falling back across free models.
 //
 // Free models can take well over a minute, longer than the proxies in front of
 // this server allow for one request. So a question starts a background job and
@@ -28,8 +27,8 @@ import (
 // aiRL caps chat requests per user, since they spend the server's key.
 var aiRL = newRateLimiter(20, 10*time.Minute)
 
-// aiFreeModels are tried in order when no model is pinned (same list as the
-// desktop app); individual free models are often rate-limited or down.
+// aiFreeModels are tried in order when no model is pinned; individual free
+// models are often rate-limited or down.
 var aiFreeModels = []string{
 	"nex-agi/nex-n2.5-pro:free",
 	"nvidia/nemotron-3-super-120b-a12b:free",
@@ -199,8 +198,7 @@ func (a *app) handleAppChatResult(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"done": true, "text": job.text})
 }
 
-// askModels tries each model in turn until one answers. Like the desktop app,
-// it moves on after rate limits or busy providers but stops on key/credit
+// askModels tries each model in turn until one answers. It moves on after rate limits or busy providers but stops on key/credit
 // errors, where another model won't help.
 func askModels(ctx context.Context, key string, models []string, msgs []map[string]string) (string, error) {
 	var lastErr error

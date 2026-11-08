@@ -7,13 +7,7 @@ server/secret.key
 
 # --- build output / binaries ---
 server/clusterheart-server
-app/clusterheart-app
-app/kubepulse-ui
 clusterheart-server
-clusterheart-app
-kubepulse-ui
-electron/dist/
-electron/resources/clusterheart-*
 
 # --- deps ---
 node_modules/
@@ -21,8 +15,5 @@ node_modules/
 # --- os / editor cruft ---
 .DS_Store
 *.log
-
-# --- served installers (built by CI, scp-ed to the server) ---
-server/downloads/
 .vercel
 .env*

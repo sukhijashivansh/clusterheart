@@ -2,6 +2,10 @@
 
 Status: living document. Grounded in the repository as of this branch.
 
+> **Update 2026-11-09:** the desktop app (`electron/`) and the local dashboard
+> engine (`app/`) were retired; the product is now the web app in `server/`
+> backed by this control plane. Rows below that mention them are historical.
+
 ## 1. What exists today
 
 | Component | Location | Role | Notes |

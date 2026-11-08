@@ -1,125 +1,123 @@
 # Clusterheart
 
-A clean, git-free workspace with three parts:
+Web-first monitoring for Kubernetes clusters and Linux servers: one dashboard
+for health, history, incidents and AI help. Live at
+[clusterheart.com](https://www.clusterheart.com).
+
+_Status as of 2026-11-09._
+
+## What's in the repo
 
 ```
 clusterheart/
-├── app/        the dashboard - Go binary that serves the web UI (reads LOCAL kubeconfig/SSO)
-├── electron/   the desktop app - login screen that gates the dashboard
-└── server/     the account server - real auth + your approve/revoke admin panel
+├── index.html, styles.css, …   landing page (static, Vercel)
+├── server/                     web app + accounts (Go): /app, /login, /account, /admin
+├── sre/                        control plane + agents (Go module)
+│   ├── cmd/controlplane          stores clusters, metrics, incidents, fixes (MongoDB)
+│   ├── cmd/agent                 read-only Kubernetes agent (runs in the cluster)
+│   ├── cmd/hostagent             read-only Linux server agent (systemd)
+│   └── cmd/remediation           opt-in fix controller (narrow RBAC)
+├── deploy/                     k8s manifests (agent, remediation) + systemd unit
+└── docs/                       connect-a-cluster guide, SRE design docs
 ```
-
-## Download
-
-The desktop app is served **from the home page itself** - the server hosts the
-installers under `/downloads/` and the landing page's **Download** section links
-to them. The repo stays private; nothing is published to a public GitHub
-release.
-
-- **Where files live:** `DOWNLOADS_DIR` (default `downloads/` next to the server
-  binary; on the VPS: `/root/clusterheart/server/downloads`).
-- **How they get there:** [`.github/workflows/release.yml`](.github/workflows/release.yml)
-  builds macOS/Windows/Linux on a `v*` tag and **scp's the installers to that
-  folder** using the same `DEPLOY_SSH_*` secrets as the server deploy. No GitHub
-  release involved.
-- To cut a build: bump `version` in `electron/package.json`, then
-  `git tag v1.0.1 && git push origin v1.0.1`.
-
-Canonical download URLs the landing page links to:
-`/downloads/Clusterheart-macOS-AppleSilicon.dmg`, `…-macOS-Intel.dmg`,
-`…-Windows.exe`, `…-Linux.AppImage` (browse all at `/downloads/`).
 
 ## How it fits together
 
 ```
-  Desktop app (Electron)                      Account server (Go)
-  ┌────────────────────────┐                  ┌─────────────────────────┐
-  │  login screen          │── POST /api/login ─▶ verify password (bcrypt)│
-  │   email + password     │◀── approved? ─────│ is this user approved?  │
-  │        │               │                  │                         │
-  │   approved → spawn ─────┼─▶ Go binary       │  /admin  ← you approve  │
-  │   Go dashboard (local)  │   reads LOCAL     │          / revoke users │
-  │        │               │   kubeconfig/SSO  └─────────────────────────┘
-  │   not approved → "pending"                   (signup / login / logout,
-  └────────────────────────┘                     signed sessions, JSON store)
+ Browser ── www.clusterheart.com (Vercel) ──┬── landing page (static)
+                                            └── /app /login /account /admin /api/*
+                                                    │ rewrite
+                                                    ▼
+                         clusterheart-server.clusterheart.com (AWS EC2 + Caddy)
+                         ├── server/  web app, accounts, teams      ── MongoDB Atlas
+                         └── /cp  →  sre control plane              ── MongoDB Atlas
+                                          ▲
+              agents push snapshots ──────┘
+              (k8s agent, host agent; read-only, outbound HTTPS only)
 ```
 
-- **The user only ever learns their access status at login**, inside the app.
-  Approved → the dashboard opens. Not approved → a "pending approval" screen.
-- The Go binary does all Kubernetes work **locally** - credentials never leave
-  the machine. The server only handles accounts and approvals.
-- Passwords are bcrypt-hashed; sessions are signed tokens (cookie for the web
-  pages, bearer token for the desktop app).
+- The browser only talks to `server/`. It calls the control plane with an admin
+  token, scoped to the tenant of the workspace the user is in.
+- Agents never receive credentials for anything else; nothing reaches into a
+  cluster or server from outside.
 
----
+## Features (live)
 
-## 1. Run the account server
+**Monitoring**
+- Kubernetes clusters (EKS, GKE, AKS, k3s, kubeadm): nodes, pods, jobs,
+  namespaces, problems and warnings, logs from failing pods, leaked-secret
+  detection.
+- Linux servers (Ubuntu, Debian, RHEL, Rocky, Amazon Linux, Fedora; x86_64 and
+  arm64): CPU, memory, disks, load, network, processes, error logs, NVIDIA and
+  AMD GPUs (sampled every second, average and peak per 30s report).
+- Timeline: up to 7 days of history, ranges from 15 min to 7 days, a custom
+  from/to range, drag-to-zoom, a table view.
 
-Config lives in `server/.env` (copy from `.env.example`): `MONGO_URI`,
-`MONGO_DB=clusterheart`, `ADMIN_EMAILS`.
+**Acting on it**
+- Incidents with AI diagnosis, policy-checked fix proposals, approve/reject,
+  pause/resume automation.
+- Rightsizing (requests vs 6h peak) with one-click apply.
+- Latency check against any running pod.
+- AI assistant per cluster or server (OpenRouter, free-model fallback).
+
+**Accounts and teams**
+- Sign-up with admin approval, password reset by email, force-out and revoke.
+- Teams: a main account adds people in **Account & team** as Member (view + AI)
+  or Admin (also add/remove/rename and act on fixes). They get an email, skip
+  the approval wait, and work in the owner's workspace. A switcher lets people
+  move between their own workspace and teams they're on.
+- Admin panel: users with their clusters, servers and team, and a broadcast
+  message shown at the top of everyone's dashboard.
+
+**Look and feel**
+- Six colour schemes (click the logo), shared by the landing page and the app.
+- Cluster cards and Timeline charts can be dragged into any order (saved per
+  browser).
+
+## Deploys
+
+Every push to `main` deploys the part that changed (GitHub Actions):
+
+| Workflow | Triggers on | Does |
+|---|---|---|
+| `deploy-server.yml` | `server/**` | builds and restarts the account server on EC2 |
+| `deploy-controlplane.yml` | control plane, contract, redact, probe | tests against MongoDB, builds and restarts the control plane |
+| `publish-agent.yml` | k8s agent code | builds the agent binary and uploads it to Vercel Blob |
+| `publish-hostagent.yml` | host agent code | builds `clusterheart-host-agent-linux-{amd64,arm64}` and uploads to Vercel Blob |
+| `publish-remediation.yml` | remediation code | builds the remediation controller and uploads it to Vercel Blob |
+
+The landing page deploys through Vercel on push. After changing Tailwind classes
+in `index.html`, rebuild the CSS and bump its cache-bust hash:
 
 ```bash
-cd server
-go build -o clusterheart-server .
-./clusterheart-server            # reads server/.env
-#  -> http://127.0.0.1:9000
+npx -y tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify
+v=$(md5 -q styles.css | cut -c1-8); sed -i '' -E "s#styles.css\?v=[0-9a-f]+#styles.css?v=$v#" index.html
 ```
 
-- Users are stored in **MongoDB** (`MONGO_DB` database, `users` collection).
-- Anyone can **sign up** at `http://127.0.0.1:9000/signup`.
-- **You** (any email in `ADMIN_EMAILS`) sign up too, then open
-  `http://127.0.0.1:9000/admin` to **Approve / Revoke** users.
-- The session secret is auto-generated to `server/secret.key`
-  (set `SESSION_SECRET` to pin it).
-
-## 2. Build the dashboard binary
+Servers update their agent with:
 
 ```bash
-cd app
-go build -o clusterheart-app .
+curl -fsSL https://clusterheart-server.clusterheart.com/install-host.sh | sudo sh -s -- --update
 ```
 
-(The Electron app spawns this. It needs a working kubeconfig - same as before.)
-
-## 3. Run the desktop app
+## Run locally
 
 ```bash
-cd electron
-CLUSTERHEART_SERVER=http://127.0.0.1:9000 npm start
+# control plane (in-memory store, no MongoDB needed)
+cd sre && CONTROLPLANE_ADMIN_TOKEN=dev-admin ADDR=127.0.0.1:9100 go run ./cmd/controlplane
+
+# web app + accounts (needs MongoDB; copy server/.env.example to server/.env)
+cd server && go run .        # http://127.0.0.1:9000
 ```
 
-- Sign in with an account. If it's **not approved yet**, you'll see the pending
-  screen - approve it at the server's `/admin`, then hit **Check again**.
-- Once approved, the dashboard boots.
-- **Account → Log out** in the menu bar returns to the login screen.
-- The session is remembered, so an approved user skips the login next launch
-  (until the owner revokes them or the 30-day token expires).
+Tests: `go test ./...` in `server/` and `sre/`. The MongoDB-backed tests run
+when `MONGO_TEST_URI` is set (e.g. `mongodb://127.0.0.1:27017`).
 
-## Build installers (later)
+More: [`sre/README.md`](sre/README.md) (agents and control plane),
+[`docs/connect-a-cluster.md`](docs/connect-a-cluster.md),
+[`docs/autonomous-sre/`](docs/autonomous-sre/) (design and threat model).
 
-```bash
-cd electron
-npm run dist:mac   # -> dist/*.dmg
-npm run dist:win   # -> dist/*.exe
-```
+## History
 
-Packaging bundles per-platform binaries from `electron/resources/`. Build those
-from `app/` for each OS (`GOOS=windows GOARCH=amd64 go build ...`) and drop them
-in `electron/resources/` named `clusterheart-<os>-<arch>[.exe]`.
-
-## Going live
-
-- Deploy `server/` (Fly, a VPS) behind HTTPS. Set `ADDR=0.0.0.0:9000`,
-  `ADMIN_EMAILS`, and a fixed `SESSION_SECRET`.
-- Point every app build at it: `CLUSTERHEART_SERVER=https://your-server`.
-
-## Env reference
-
-| Program | Var | Default | Purpose |
-|---------|-----|---------|---------|
-| server  | `MONGO_URI` | *(required)* | MongoDB Atlas connection string |
-| server  | `MONGO_DB` | `clusterheart` | database name (`users` collection) |
-| server  | `ADMIN_EMAILS` | *(empty)* | comma-separated admin emails (can reach /admin) |
-| server  | `ADDR` | `127.0.0.1:9000` | listen address |
-| server  | `SESSION_SECRET` / `SECRET_FILE` | auto | session signing key |
-| electron| `CLUSTERHEART_SERVER` | `http://127.0.0.1:9000` | where to authenticate |
+The desktop app (Electron + a local Go dashboard) was retired on 2026-11-09 in
+favour of the web app. It lives in git history before that date.

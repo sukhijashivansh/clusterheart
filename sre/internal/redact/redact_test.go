@@ -24,8 +24,12 @@ func TestFindNamesEachSecretOnce(t *testing.T) {
 		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N_XgL": {"jwt"},
 	}
 	for in, want := range cases {
-		if got := Find(in); !reflect.DeepEqual(got, want) {
-			t.Errorf("Find(%q) = %v, want %v", in, got, want)
+		var got []string
+		for _, m := range Matches(in) {
+			got = append(got, m.Type)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Matches(%q) types = %v, want %v", in, got, want)
 		}
 	}
 }

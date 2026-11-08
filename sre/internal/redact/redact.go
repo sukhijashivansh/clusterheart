@@ -135,20 +135,10 @@ type Match struct {
 	Length int    // length of the secret value
 }
 
-// Find returns the names of the secret detectors that match s, in detector
-// order, each at most once. PII-only detectors (email) are not reported. A
-// later detector only counts if it still matches after the earlier ones were
-// scrubbed, so one secret is reported under one name.
-func Find(s string) []string {
-	var out []string
-	for _, m := range Matches(s) {
-		out = append(out, m.Type)
-	}
-	return out
-}
-
-// Matches is Find with details: for each detector, its first match's key name
-// and a masked hint of the value.
+// Matches returns, for each secret detector that fires on s, its first
+// match's key name and a masked hint of the value. PII-only detectors (email)
+// are not reported, and a later detector only counts if it still matches after
+// the earlier ones were scrubbed, so one secret is reported under one name.
 func Matches(s string) []Match {
 	var out []Match
 	pf := newPrefilter(s)

@@ -2,28 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
-  "redirects": [
-    {
-      "source": "/downloads/Clusterheart-macOS-AppleSilicon.dmg",
-      "destination": "https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/downloads/Clusterheart-macOS-AppleSilicon.dmg",
-      "permanent": false
-    },
-    {
-      "source": "/downloads/Clusterheart-macOS.dmg",
-      "destination": "https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/downloads/Clusterheart-macOS-AppleSilicon.dmg",
-      "permanent": false
-    },
-    {
-      "source": "/downloads/Clusterheart-Windows.exe",
-      "destination": "https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/downloads/Clusterheart-Windows.exe",
-      "permanent": false
-    },
-    {
-      "source": "/downloads/Clusterheart-Linux.AppImage",
-      "destination": "https://0s9ykblnlp7vbe8p.public.blob.vercel-storage.com/downloads/Clusterheart-Linux.AppImage",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     { "source": "/login", "destination": "https://clusterheart-server.clusterheart.com/login" },
     { "source": "/signup", "destination": "https://clusterheart-server.clusterheart.com/signup" },
