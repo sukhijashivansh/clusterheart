@@ -188,6 +188,10 @@ input::placeholder{color:var(--faint)}
 .cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
 .cl-card{display:flex;flex-direction:column;gap:14px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border);transition:border-color .14s,background .14s}
 .cl-card:hover{border-color:var(--border-strong);background:var(--hover)}
+.cl-grid .cl-card{cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;position:relative}
+.cl-grid.arranging,.cl-grid.arranging *{cursor:grabbing}
+.cl-card.lifted{z-index:20;pointer-events:none;border-color:var(--accent);background:var(--panel);box-shadow:0 22px 50px -18px rgba(0,0,0,.6),0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
+.cl-card.settling{z-index:20;transition:transform .22s cubic-bezier(.2,.7,.2,1)}
 .cl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .cl-name{font-size:16px;font-weight:700;letter-spacing:-.3px;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 .cl-name:hover{color:var(--accent)}

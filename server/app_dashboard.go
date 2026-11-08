@@ -672,6 +672,7 @@ async function load(){
       box.innerHTML='<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No clusters yet. Click <b>Add cluster</b> to connect your first one.</p></div></section>';
       return;
     }
+    list=clOrdered(list);
     var html='<div class="cl-grid">';
     list.forEach(function(c){
       var connected=c.connected===true;
@@ -698,7 +699,7 @@ async function load(){
           '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk'+fbadge(hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0)+'</span></div>'+
           (hs&&(hs.gpus||[]).length?'<div class="cl-metric"><b>'+fmtPct(gpuStats(hs.gpus).avg)+'</b><span>GPU ×'+hs.gpus.length+'</span></div>':'');
       }
-      html+='<div class="cl-card">'+
+      html+='<div class="cl-card" data-id="'+esc(c.clusterId||'')+'">'+
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a><div class="cl-env">'+(c.kind==='server'?'Server':'Kubernetes')+(c.environment?' · '+esc(c.environment):'')+'</div></div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
         '<div class="cl-metrics">'+metrics+'</div>'+
@@ -709,6 +710,88 @@ async function load(){
     box.innerHTML=html;
   }catch(e){box.innerHTML='<p class="sub">Could not load clusters.</p>';}
 }
+
+// Cards can be lifted and rearranged: drag with the mouse, or long-press and
+// drag on touch. The order is kept per browser in localStorage.
+var CL_ORDER_KEY='ch-cl-order';
+function clOrdered(list){
+  var order=[];try{order=JSON.parse(localStorage.getItem(CL_ORDER_KEY)||'[]')||[];}catch(e){}
+  var rank={};order.forEach(function(id,i){rank[id]=i;});
+  return list.map(function(c,i){return {c:c,i:i};}).sort(function(a,b){
+    var ra=rank[a.c.clusterId],rb=rank[b.c.clusterId];
+    if(ra!=null&&rb!=null)return ra-rb;if(ra!=null)return -1;if(rb!=null)return 1;return a.i-b.i;
+  }).map(function(x){return x.c;});
+}
+(function(){
+  var drag=null,suppressClick=false;
+  function cards(g){return Array.prototype.slice.call(g.querySelectorAll('.cl-card'));}
+  // flip slides the other cards from where they were to their new slot.
+  function flip(g,moving,fn){
+    var before=new Map();cards(g).forEach(function(el){if(el!==moving)before.set(el,el.getBoundingClientRect());});
+    fn();
+    before.forEach(function(r,el){
+      var n=el.getBoundingClientRect(),dx=r.left-n.left,dy=r.top-n.top;
+      if(!dx&&!dy)return;
+      el.style.transition='none';el.style.transform='translate('+dx+'px,'+dy+'px)';
+      el.getBoundingClientRect();
+      el.style.transition='transform .22s cubic-bezier(.2,.7,.2,1)';el.style.transform='';
+    });
+  }
+  function place(){
+    var c=drag.card;c.style.transform='';
+    var r=c.getBoundingClientRect();
+    c.style.transform='translate('+(drag.x-drag.ox-r.left)+'px,'+(drag.y-drag.oy-r.top)+'px) scale(1.03)';
+  }
+  function start(){
+    drag.on=true;drag.card.classList.add('lifted');drag.grid.classList.add('arranging');
+    var r=drag.card.getBoundingClientRect();drag.ox=drag.sx-r.left;drag.oy=drag.sy-r.top;
+    if(navigator.vibrate&&drag.touch)try{navigator.vibrate(10);}catch(e){}
+    place();
+  }
+  function move(x,y){
+    drag.x=x;drag.y=y;
+    var over=document.elementFromPoint(x,y),t=over&&over.closest&&over.closest('.cl-card');
+    if(t&&t!==drag.card&&t.parentNode===drag.grid){
+      var all=cards(drag.grid),from=all.indexOf(drag.card),to=all.indexOf(t);
+      flip(drag.grid,drag.card,function(){drag.grid.insertBefore(drag.card,from<to?t.nextSibling:t);});
+    }
+    place();
+  }
+  function end(){
+    if(!drag)return;clearTimeout(drag.timer);
+    var d=drag;drag=null;
+    document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',end);document.removeEventListener('pointercancel',end);
+    if(!d.on)return;
+    suppressClick=true;setTimeout(function(){suppressClick=false;},0);
+    var c=d.card;c.classList.remove('lifted');c.classList.add('settling');c.style.transform='';
+    setTimeout(function(){c.classList.remove('settling');},240);
+    d.grid.classList.remove('arranging');
+    try{localStorage.setItem(CL_ORDER_KEY,JSON.stringify(cards(d.grid).map(function(el){return el.dataset.id;})));}catch(e){}
+  }
+  function onMove(e){
+    if(!drag)return;
+    if(!drag.on){
+      var dist=Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy);
+      if(drag.touch){if(dist>8)end();return;} // moved before the long-press: let it scroll
+      if(dist<6)return;
+      start();
+    }
+    move(e.clientX,e.clientY);
+  }
+  document.addEventListener('pointerdown',function(e){
+    var card=e.target.closest&&e.target.closest('.cl-grid .cl-card');
+    if(!card||e.button>0||e.target.closest('.kebab,button,input,textarea,select'))return;
+    var grid=card.parentNode;if(cards(grid).length<2)return;
+    drag={card:card,grid:grid,sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY,on:false,touch:e.pointerType!=='mouse'};
+    if(drag.touch)drag.timer=setTimeout(function(){if(drag&&!drag.on)start();},350);
+    document.addEventListener('pointermove',onMove);document.addEventListener('pointerup',end);document.addEventListener('pointercancel',end);
+  });
+  // While a card is lifted on touch, stop the page from scrolling under it.
+  document.addEventListener('touchmove',function(e){if(drag&&drag.on){e.preventDefault();move(e.touches[0].clientX,e.touches[0].clientY);}},{passive:false});
+  document.addEventListener('click',function(e){if(suppressClick&&e.target.closest&&e.target.closest('.cl-card')){e.preventDefault();e.stopPropagation();}},true);
+  document.addEventListener('dragstart',function(e){if(e.target.closest&&e.target.closest('.cl-card'))e.preventDefault();});
+  document.addEventListener('contextmenu',function(e){if(drag&&drag.touch)e.preventDefault();});
+})();
 
 function showInstall(d){
   var box=document.getElementById('clusters'),srv=d.kind==='server';
