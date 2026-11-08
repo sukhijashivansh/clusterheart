@@ -590,7 +590,7 @@ const appBody = `{{define "body"}}<div class="app2">
 var NODE_MANIFEST_URL={{.ManifestURL}};
 var HOST_UPDATE_CMD={{.HostUpdateCmd}};
 // HOST_AGENT_LATEST is the host agent with GPU and network metrics.
-var HOST_AGENT_LATEST='0.2.1';
+var HOST_AGENT_LATEST='0.2.3';
 function hostAgentAtLeast(v,want){return agentAtLeast(String(v||'').replace(/^host-/,''),want);}
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
@@ -1253,8 +1253,8 @@ function tlCharts(d){
   if(tlAny(net))out.push({id:'net',title:'Network',fmt:tlRate,axis:tlAxRate,nice:tlNiceRate,series:net});
   if(G.length){
     var gs=function(key,peak){return G.map(function(g){return {name:'GPU '+g.index,full:g.name,pts:tlMap(g.points,key,peak)};});};
-    out.push({id:'gutil',title:'GPU utilization',fmt:tlPct,axis:tlAxPct,max:100,series:gs('util','utilMax')});
-    out.push({id:'gmem',title:'GPU memory',fmt:tlPct,axis:tlAxPct,max:100,series:gs('mem','memMax')});
+    out.push({id:'gutil',title:'GPU utilization',sub:'compute',fmt:tlPct,axis:tlAxPct,max:100,series:gs('util','utilMax')});
+    out.push({id:'gmem',title:'GPU memory',sub:'VRAM in use',fmt:tlPct,axis:tlAxPct,max:100,series:gs('mem','memMax')});
     var temp=gs('temp','tempMax');
     if(tlAny(temp))out.push({id:'gtemp',title:'GPU temperature',fmt:tlTemp,axis:tlAxTemp,series:temp});
   }

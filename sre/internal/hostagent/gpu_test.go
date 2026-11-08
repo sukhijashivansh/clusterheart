@@ -172,7 +172,7 @@ func TestNvidiaStreamKeepsOneProcess(t *testing.T) {
 	if g, _ := r.read(context.Background(), now); len(g) != 1 || g[0].UtilPercent != 5 || oneShots != 1 || fs.starts != 1 {
 		t.Fatalf("first read: %+v oneShots=%d starts=%d", g, oneShots, fs.starts)
 	}
-	if strings.Join(fs.args, " ") != strings.Join(nvidiaQuery, " ")+" -l 5" {
+	if strings.Join(fs.args, " ") != strings.Join(nvidiaQuery, " ")+" -lms 1000" {
 		t.Fatalf("stream args: %v", fs.args)
 	}
 	fs.w.Write([]byte("0, GPU-1, NVIDIA L4, 77, 9000, 23034, 61, 55.5, 72\n"))
@@ -205,7 +205,7 @@ func TestNvidiaStreamSilentFallsBack(t *testing.T) {
 	now := time.Now()
 	r.read(context.Background(), now)
 	// Nothing printed for 3 intervals: stop using the stream for good.
-	if g, _ := r.read(context.Background(), now.Add(3*nvidiaStreamEvery+time.Second)); len(g) != 1 {
+	if g, _ := r.read(context.Background(), now.Add(nvidiaStale+time.Second)); len(g) != 1 {
 		t.Fatalf("no fallback data: %+v", g)
 	}
 	r.read(context.Background(), now.Add(time.Hour))

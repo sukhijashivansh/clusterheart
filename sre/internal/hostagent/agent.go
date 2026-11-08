@@ -14,7 +14,7 @@ import (
 )
 
 // Version is reported in heartbeats.
-const Version = "host-0.2.2"
+const Version = "host-0.2.3"
 
 const (
 	maxJournalLines = 2000 // per cycle

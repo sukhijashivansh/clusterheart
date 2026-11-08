@@ -30,7 +30,11 @@ const (
 var nvidiaQuery = []string{"--query-gpu=index,uuid,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit", "--format=csv,noheader,nounits"}
 
 const (
-	nvidiaStreamEvery = 5 * time.Second  // sample interval of the long-running nvidia-smi (several per snapshot)
+	// nvidia-smi's utilization.gpu covers roughly the last second, so sampling
+	// every second sees nearly all of the time: a short burst between samples
+	// can no longer hide. Each snapshot gets the average and the peak.
+	nvidiaStreamEvery = time.Second      // sample interval of the long-running nvidia-smi
+	nvidiaStale       = 15 * time.Second // no line for this long: the stream is stuck
 	nvidiaRestart     = 5 * time.Minute  // wait before restarting one that exited
 	nvidiaOneShotMax  = 30 * time.Second // nvidia-smi can be slow without persistence mode
 )
@@ -49,7 +53,7 @@ type gpuReader struct {
 	stream    nvidiaStream
 }
 
-// nvidiaStream keeps one "nvidia-smi --query-gpu ... -l 15" running, so the
+// nvidiaStream keeps one "nvidia-smi --query-gpu ... -lms 1000" running, so the
 // driver stays initialised between samples: starting nvidia-smi for every
 // sample can cost seconds of CPU on GPUs without persistence mode. If it
 // exits, or prints nothing (e.g. buffered output), the reader falls back to
@@ -137,7 +141,7 @@ func (g *gpuReader) streamed(ctx context.Context, now time.Time) ([]contract.Hos
 			return nil, false
 		}
 		sctx, cancel := context.WithCancel(ctx)
-		args := append(append([]string(nil), nvidiaQuery...), "-l", strconv.Itoa(int(nvidiaStreamEvery.Seconds())))
+		args := append(append([]string(nil), nvidiaQuery...), "-lms", strconv.Itoa(int(nvidiaStreamEvery.Milliseconds())))
 		r, err := g.start(sctx, g.nvidiaSMI, args...)
 		if err != nil {
 			cancel()
@@ -150,7 +154,7 @@ func (g *gpuReader) streamed(ctx context.Context, now time.Time) ([]contract.Hos
 		go s.consume(r)
 		return nil, false // nothing read yet
 	}
-	stale := 3 * nvidiaStreamEvery
+	stale := nvidiaStale
 	if s.last.IsZero() || now.Sub(s.last) > stale {
 		if now.Sub(s.started) > stale { // silent: output buffered or nvidia-smi hung
 			s.cancel()
@@ -160,7 +164,7 @@ func (g *gpuReader) streamed(ctx context.Context, now time.Time) ([]contract.Hos
 	}
 	var out []contract.HostGPU
 	for idx, at := range s.seen {
-		if now.Sub(at) <= 2*nvidiaStreamEvery {
+		if now.Sub(at) <= nvidiaStale {
 			g := s.gpus[idx]
 			if n := s.utilN[idx]; n > 1 {
 				g.UtilPercent = round1(s.utilSum[idx] / float64(n))
