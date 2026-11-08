@@ -451,7 +451,13 @@ func (a *app) pageAdmin(w http.ResponseWriter, r *http.Request) {
 			pending++
 		}
 	}
-	render(w, adminUsersTmpl, map[string]any{"Users": list, "Me": me.Name, "Pending": pending})
+	rows := a.adminRows(list)
+	totC, totS := 0, 0
+	for _, r := range rows {
+		totC += r.Clusters
+		totS += r.Servers
+	}
+	render(w, adminUsersTmpl, map[string]any{"Users": rows, "Me": me.Name, "Pending": pending, "TotalClusters": totC, "TotalServers": totS})
 }
 
 // pageAdminBroadcast is the Broadcast page (/admin/broadcast).

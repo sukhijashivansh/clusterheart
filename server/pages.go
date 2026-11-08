@@ -449,6 +449,11 @@ table.users tbody tr:hover{background:var(--hover)}
 .u-email{font-family:'Geist Mono',ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted);margin-top:2px}
 .u-time{font-size:13px;color:var(--text);white-space:nowrap}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
+.u-cnt{font-variant-numeric:tabular-nums;white-space:nowrap}.u-cnt b{font-size:15px;font-weight:650;color:var(--text)}
+.u-off{font-size:12px;color:var(--amber,var(--muted));margin-left:4px}.u-none{color:var(--faint)}
+.adm-totals{display:flex;gap:0;margin-top:22px;border:1px solid var(--border);background:var(--surface2);width:max-content;max-width:100%}
+.adm-totals>div{display:flex;flex-direction:column;gap:2px;padding:12px 22px;border-right:1px solid var(--border)}.adm-totals>div:last-child{border-right:none}
+.adm-totals b{font-size:20px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}.adm-totals span{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
 .cell-act{text-align:right;white-space:nowrap}
 .pill{display:inline-flex;align-items:center;padding:0;font-size:13px;font-weight:600;background:none}
 .pill.on{color:var(--green)}
