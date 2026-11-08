@@ -116,8 +116,3 @@ when `MONGO_TEST_URI` is set (e.g. `mongodb://127.0.0.1:27017`).
 More: [`sre/README.md`](sre/README.md) (agents and control plane),
 [`docs/connect-a-cluster.md`](docs/connect-a-cluster.md),
 [`docs/autonomous-sre/`](docs/autonomous-sre/) (design and threat model).
-
-## History
-
-The desktop app (Electron + a local Go dashboard) was retired on 2026-11-09 in
-favour of the web app. It lives in git history before that date.

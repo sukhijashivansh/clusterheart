@@ -96,8 +96,8 @@ Slice C (remaining) - not started:
 - [ ] Load/resilience/tenant-isolation tests; upgrade/rollback runbooks; ops docs.
 
 ## Dashboard UI (spec §14) - slice A (done & tested on this branch)
-Surfaces the SRE control plane in the existing ClusterHeart dashboard (`app/`),
-matching its design system (no new framework).
+Surfaced the SRE control plane in the dashboard of the time. Superseded: the
+web app in `server/` (Incidents, fixes, automation) now does this.
 - [x] **Incident Center**: `incidents` view - severity/type/workload/namespace/count/timeline/status, status filter + search, row → full evidence JSON.
 - [x] **Remediation Center**: `remediation` view - approval queue with approve/reject on `proposed` actions, execution result (ok/failed, dry-run, error) for terminal ones, policy mode + emergency pause/resume (kill switch).
 - [x] Server-side proxy (`app/sre.go`, `/api/sre/*`): keeps the control-plane **admin token server-side** (never in the renderer) and **pins the tenant** (a forged `tenantId` is ignored); unconfigured → explicit "not configured" notice, never fabricated data; upstream status/errors passed through.
