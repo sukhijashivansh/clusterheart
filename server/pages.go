@@ -172,10 +172,10 @@ a.act.approve:hover{color:var(--accent-ink)}
 .an-brand{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
 .an-brand .wordmark{font-size:16px}
 .an-list{display:flex;flex-direction:column;gap:2px}
-.nav-item{display:block;padding:9px 12px;border-radius:0;font-size:14px;font-weight:500;color:var(--muted)}
+.nav-item{display:block;padding:9px 12px;border-radius:0;font-size:14px;font-weight:500;color:var(--muted);text-align:right}
 .nav-item:hover{background:var(--hover);color:var(--text)}
 .nav-item.active{background:var(--active-bg);color:var(--text);font-weight:600;box-shadow:0 0 0 1px var(--border)}
-.an-foot{margin-top:auto;padding:14px 10px 4px;font-size:12.5px;color:var(--muted)}
+.an-foot{margin-top:auto;padding:14px 12px 4px;font-size:12.5px;color:var(--muted);text-align:right}
 .an-me{font-weight:500;color:var(--text);margin-bottom:3px}
 .an-logout{color:var(--muted)}.an-logout:hover{color:var(--accent)}
 .admin-main{flex:1 1 auto;min-width:0;padding:32px 40px;position:relative;transition:padding .28s cubic-bezier(.4,0,.2,1)}
