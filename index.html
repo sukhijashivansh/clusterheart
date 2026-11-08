@@ -44,8 +44,10 @@
         })();
     </script>
     <!-- Prebuilt Tailwind utilities (no runtime compile). Regenerate after class
-         changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify -->
-    <link rel="stylesheet" href="styles.css">
+         changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify
+         then bump ?v= to the new file's hash (md5 -q styles.css | cut -c1-8): browsers
+         cache styles.css for hours, so a stale copy would miss the new classes. -->
+    <link rel="stylesheet" href="styles.css?v=f18244ef">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 
