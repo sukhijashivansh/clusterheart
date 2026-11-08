@@ -130,7 +130,7 @@ input::placeholder{color:var(--faint)}
 /* --- admin (sidebar shell, Apple-style) --- */
 .admin-shell{display:flex;min-height:100vh}
 .admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden;white-space:nowrap;transition:width .28s cubic-bezier(.4,0,.2,1),padding .28s cubic-bezier(.4,0,.2,1),opacity .2s ease}
-.an-brand{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
+.an-brand{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
 .an-brandrow{display:flex;align-items:center;gap:9px;min-width:0}
 .an-brand .wordmark{font-size:16px}
 .an-list{display:flex;flex-direction:column;gap:2px}
