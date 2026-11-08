@@ -359,7 +359,13 @@ func (a *app) pageAccount(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+	initial := "?"
+	for _, r := range strings.TrimSpace(u.Name + u.Email) {
+		initial = strings.ToUpper(string(r))
+		break
+	}
 	render(w, accountTmpl, map[string]any{
+		"Initial":  initial,
 		"Name":     u.Name,
 		"Email":    u.Email,
 		"Approved": u.Approved,

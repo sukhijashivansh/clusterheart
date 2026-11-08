@@ -120,31 +120,33 @@ input::placeholder{color:var(--faint)}
 .btn.secondary{margin-top:12px;background:transparent;color:var(--text);border:1px solid var(--border-strong)}
 .btn.secondary:hover{background:var(--hover);border-color:var(--accent)}
 .alt{margin-top:24px;font-size:13.5px;color:var(--muted);text-align:center}
-/* account: workspaces + team */
-.card.acct{max-width:520px}
-.acct-sec{margin-top:30px;padding-top:22px;border-top:1px solid var(--border)}
-.acct-h{margin:0 0 6px;font-size:15px;font-weight:700;color:var(--text)}
-.acct-note{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:var(--muted)}
-.acct-note b{color:var(--text);font-weight:600}
+/* account page: dashboard shell, profile header, team table */
+.app2-main.acct-main{max-width:960px}
+.tb-btn{display:inline-flex;align-items:center;height:38px;padding:0 16px;text-decoration:none}
+a.act.approve:hover{color:var(--accent-ink)}
+.acct-hero{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 26px}
+.acct-avatar{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex:none;font-size:24px;font-weight:800;text-transform:uppercase;color:var(--accent-ink);background:var(--accent)}
+.acct-id{flex:1;min-width:0}
+.acct-id h1{margin:0;font-size:28px;text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-email{margin:4px 0 0;font-size:13.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.acct-status{display:flex;align-items:center;gap:16px}
+.acct-admin{font-size:13px;color:var(--accent)}
+.acct-pending{margin:0;font-size:14px;line-height:1.6;color:var(--muted)}
 .team-add{display:flex;gap:8px}
-.team-add input{flex:1;min-width:0;padding:10px 12px}
-.team-add select,.team-row select{background:var(--input-bg);color:var(--text);border:1px solid var(--border-strong);border-radius:0;font:inherit;font-size:13px;padding:0 8px;height:40px}
-.team-row select{height:32px;font-size:12.5px}
-.team-btn{height:40px;padding:0 16px;font:inherit;font-size:13px;font-weight:600;color:var(--accent-ink);background:var(--accent);border:1px solid var(--accent);cursor:pointer}
-.team-row .team-btn{height:32px;padding:0 12px}
-.team-btn:disabled{opacity:.5}
-.role-help{margin-top:10px}
-.team-list{margin-top:6px}
-.team-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)}
-.team-row:last-child{border-bottom:none}
-.team-who{flex:1;min-width:0}
-.team-name{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.team-mail{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.team-st{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:var(--amber)}
-.team-st.on{color:var(--green)}
-.team-x{height:32px;padding:0 10px;font:inherit;font-size:12.5px;color:var(--muted);background:none;border:1px solid var(--border-strong);cursor:pointer}
-.team-x:hover,.team-x.sure{color:var(--red);border-color:var(--red)}
-@media(max-width:480px){.team-add{flex-wrap:wrap}.team-add input{flex-basis:100%}.team-add select{flex:1}}
+.team-add .toolbar-input{height:40px}
+.team-add input{flex:1;min-width:0}
+.team-add .act{height:40px;white-space:nowrap}
+.role-help{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.role-help b{color:var(--text);font-weight:600}
+.acct-table .toolbar-input{height:34px}
+.acct-table td{font-size:13.5px;color:var(--muted)}
+.ws-now{margin-right:12px}
+.acct-table .empty{padding:28px 22px;font-size:13.5px}
+.acct-main .card2-body .msg{margin-top:12px;min-height:0}.acct-main .card2-body .msg:empty{display:none}
+.acct-main select.toolbar-input{padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;cursor:pointer}
+.acct-table td.cell-act .act{padding:7px 14px}
+.act.revoke.sure{color:var(--red);border-color:color-mix(in srgb,var(--red) 50%,transparent)}
+@media(max-width:640px){.team-add{flex-wrap:wrap}.team-add input{flex-basis:100%}.team-add select{flex:1}.acct-hero{gap:14px}.acct-avatar{width:46px;height:46px;font-size:20px}.acct-id h1{font-size:23px}.acct-status{width:100%}.tb-btn{height:34px;padding:0 12px}}
 .alt a{color:var(--accent);font-weight:600}
 .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
@@ -731,29 +733,40 @@ pass2.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
 
 // --- account -------------------------------------------------------------
 
-const accountBody = `{{define "body"}}<div class="auth-split"><aside class="auth-left">` + bigLogo + `</aside><section class="auth-right"><div class="card acct">
-<div class="brand">` + logoSVG + `<span class="wordmark">Clusterheart</span></div>
-<p class="kicker">Account</p>
-<h1>Hi, {{.Name}}</h1><p class="sub">{{.Email}}</p>
-{{if .Approved}}
-  <p><span class="pill on"><span class="dot"></span>Approved</span></p>
-  <p class="sub" style="margin-top:14px">You're in. Open your dashboard to add clusters and watch their health from any device.</p>
-  <a href="/app" class="btn" style="display:block;text-align:center;text-decoration:none">Open dashboard</a>
-  <div id="spaces" class="acct-sec" hidden><p class="acct-h">Workspaces</p><div id="space-list"></div></div>
-  <div class="acct-sec"><p class="acct-h">Your team</p>
-    <p class="acct-note">People you add see your clusters and servers. They get an email; if they're new, they sign up with that address and skip the approval wait.</p>
-    <div class="team-add"><input id="t-email" type="email" placeholder="teammate@company.com" autocomplete="off"><select id="t-role" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select><button id="t-add" class="team-btn">Add</button></div>
-    <p class="acct-note role-help"><b>Member</b> views everything and uses AI. <b>Admin</b> also adds, renames and removes clusters and servers and acts on fixes.</p>
-    <div id="t-msg" class="msg"></div>
-    <div id="team-list" class="team-list"></div>
+const accountBody = `{{define "body"}}<div class="app2">
+<header class="topbar">
+  <a class="tb-brand" href="/app">` + logoSVG + `<span class="wordmark">Clusterheart</span></a>
+  <div class="tb-right">
+    {{if .Approved}}<a class="act approve tb-btn" href="/app">Dashboard</a>{{end}}
+    <button class="act revoke tb-btn" id="logout">Log out</button>
   </div>
+</header>
+<main class="app2-main acct-main">
+  <p class="kicker">Account</p>
+  <section class="acct-hero">
+    <div class="acct-avatar" aria-hidden="true">{{.Initial}}</div>
+    <div class="acct-id"><h1>{{.Name}}</h1><p class="acct-email">{{.Email}}</p></div>
+    <div class="acct-status">{{if .Approved}}<span class="pill on">Approved</span>{{else}}<span class="pill off">Pending approval</span>{{end}}{{if .IsAdmin}}<a class="acct-admin" href="/admin">Admin panel &rarr;</a>{{end}}</div>
+  </section>
+{{if .Approved}}
+  <section class="card2" id="spaces" hidden>
+    <div class="card2-head"><p class="card2-title">Workspaces</p><p class="card2-desc">Yours, plus the teams you're on. The one you open is used everywhere in the dashboard.</p></div>
+    <table class="users acct-table"><tbody id="space-list"></tbody></table>
+  </section>
+  <section class="card2">
+    <div class="card2-head"><p class="card2-title">Team</p><p class="card2-desc">People you add see your clusters and servers. They get an email; new people sign up with that address and skip the approval wait.</p></div>
+    <div class="card2-body">
+      <div class="team-add"><input id="t-email" class="toolbar-input" type="email" placeholder="teammate@company.com" autocomplete="off" aria-label="Email"><select id="t-role" class="toolbar-input" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select><button id="t-add" class="act approve">Add to team</button></div>
+      <div class="role-help"><span><b>Member</b> sees everything and uses AI</span><span><b>Admin</b> also adds, renames and removes clusters and servers, and acts on fixes</span></div>
+      <div id="t-msg" class="msg" role="status"></div>
+    </div>
+    <table class="users acct-table"><thead><tr><th>Person</th><th>Status</th><th>Role</th><th></th></tr></thead><tbody id="team-list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
+  </section>
 {{else}}
-  <p><span class="pill off"><span class="dot"></span>Pending approval</span></p>
-  <p class="sub" style="margin-top:14px">Your account is waiting for an admin to approve it. You'll be able to use the app once approved.</p>
+  <section class="card2"><div class="card2-body"><p class="acct-pending">Your account is waiting for an admin to approve it. You'll get in as soon as it's approved. If a teammate added you, sign in with the email they used.</p></div></section>
 {{end}}
-{{if .IsAdmin}}<div class="alt"><a href="/admin">Open admin panel →</a></div>{{end}}
-<button class="btn secondary" id="logout">Log out</button>
-</div></section></div>{{end}}
+</main>
+</div>{{end}}
 {{define "script"}}<script>
 document.getElementById('logout').addEventListener('click',async function(){
   await _post('/api/logout',{});location.href='/login';
@@ -766,22 +779,25 @@ document.getElementById('logout').addEventListener('click',async function(){
     var r=await fetch(url,{method:method,headers:{'Content-Type':'application/json','Accept':'application/json'},body:body?JSON.stringify(body):undefined});
     var d=await r.json().catch(function(){return {};});return {ok:r.ok,data:d};
   }
+  function roleSel(m){return '<select class="toolbar-input t-role" data-email="'+esc(m.email)+'" aria-label="Role for '+esc(m.email)+'"><option value="member"'+(m.role==='member'?' selected':'')+'>Member</option><option value="admin"'+(m.role==='admin'?' selected':'')+'>Admin</option></select>';}
   async function load(){
-    var r=await api('GET','/api/team');if(!r.ok){list.innerHTML='<p class="acct-note">Could not load your team.</p>';return;}
+    var r=await api('GET','/api/team');
+    if(!r.ok){list.innerHTML='<tr><td colspan="4" class="empty">Could not load your team.</td></tr>';return;}
     var t=r.data.team||[],ws=r.data.workspaces||[];
     list.innerHTML=t.length?t.map(function(m){
-      return '<div class="team-row"><div class="team-who"><div class="team-name">'+esc(m.name||m.email)+'</div>'+(m.name?'<div class="team-mail">'+esc(m.email)+'</div>':'')+
-        '<span class="team-st '+(m.joined?'on':'')+'">'+(m.joined?'Joined':'Invited')+'</span></div>'+
-        '<select class="t-role" data-email="'+esc(m.email)+'" aria-label="Role"><option value="member"'+(m.role==='member'?' selected':'')+'>Member</option><option value="admin"'+(m.role==='admin'?' selected':'')+'>Admin</option></select>'+
-        '<button class="team-x" data-email="'+esc(m.email)+'" aria-label="Remove '+esc(m.email)+'">Remove</button></div>';
-    }).join(''):'<p class="acct-note" style="margin:6px 0 0">No one yet.</p>';
+      return '<tr><td class="cell-user"><div class="u-name">'+esc(m.name||m.email.split('@')[0])+'</div><div class="u-email">'+esc(m.email)+'</div></td>'+
+        '<td data-label="Status">'+(m.joined?'<span class="pill on">Joined</span>':'<span class="pill off">Invited</span>')+'</td>'+
+        '<td data-label="Role">'+roleSel(m)+'</td>'+
+        '<td class="cell-act"><button class="act revoke team-x" data-email="'+esc(m.email)+'">Remove</button></td></tr>';
+    }).join(''):'<tr><td colspan="4" class="empty">No one yet. Add a teammate above.</td></tr>';
     var box=document.getElementById('spaces');
     if(ws.length>1){
       box.hidden=false;
       document.getElementById('space-list').innerHTML=ws.map(function(w){
-        return '<div class="team-row"><div class="team-who"><div class="team-name">'+esc(w.name)+'</div><div class="team-mail">'+(w.owner?esc(w.role==='admin'?'Admin':'Member')+' · '+esc(w.owner):'Yours')+'</div></div>'+
-          (w.active?'<span class="team-st on">Current</span>':'<button class="team-btn ws-open" data-owner="'+esc(w.owner)+'">Open</button>')+
-          (w.owner?'<button class="team-x ws-leave" data-owner="'+esc(w.owner)+'">Leave</button>':'')+'</div>';
+        return '<tr><td class="cell-user"><div class="u-name">'+esc(w.name)+'</div><div class="u-email">'+(w.owner?esc(w.owner):'Your own clusters and servers')+'</div></td>'+
+          '<td data-label="Role">'+(w.owner?(w.role==='admin'?'Admin':'Member'):'Owner')+'</td>'+
+          '<td class="cell-act">'+(w.active?'<span class="pill on ws-now">Open now</span>':'<button class="act approve ws-open" data-owner="'+esc(w.owner)+'">Open</button>')+
+          (w.owner?' <button class="act revoke team-x ws-leave" data-owner="'+esc(w.owner)+'">Leave</button>':'')+'</td></tr>';
       }).join('');
     }else box.hidden=true;
   }
@@ -803,10 +819,11 @@ document.getElementById('logout').addEventListener('click',async function(){
   document.addEventListener('click',async function(e){
     var b=e.target.closest&&e.target.closest('.team-x,.ws-open');if(!b)return;
     if(b.classList.contains('ws-open')){b.disabled=true;var o=await api('POST','/api/workspace',{owner:b.dataset.owner});if(o.ok)location.href='/app';else b.disabled=false;return;}
-    if(!b.classList.contains('sure')){b.classList.add('sure');b.textContent='Sure?';setTimeout(function(){if(b.isConnected){b.classList.remove('sure');b.textContent=b.classList.contains('ws-leave')?'Leave':'Remove';}},3000);return;}
+    var label=b.classList.contains('ws-leave')?'Leave':'Remove';
+    if(!b.classList.contains('sure')){b.classList.add('sure');b.textContent='Sure?';setTimeout(function(){if(b.isConnected){b.classList.remove('sure');b.textContent=label;}},3000);return;}
     b.disabled=true;
     var r=b.classList.contains('ws-leave')?await api('POST','/api/workspace',{owner:b.dataset.owner,leave:true}):await api('DELETE','/api/team?email='+encodeURIComponent(b.dataset.email));
-    _mark(msg,r.ok?(b.classList.contains('ws-leave')?'You left that workspace.':'Removed. Their access ended.'):(r.data.error||'Could not do that.'),r.ok?'ok':'err');
+    _mark(msg,r.ok?(label==='Leave'?'You left that workspace.':'Removed. Their access ended.'):(r.data.error||'Could not do that.'),r.ok?'ok':'err');
     load();
   });
   load();
