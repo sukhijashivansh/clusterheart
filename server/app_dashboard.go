@@ -1110,11 +1110,16 @@ function renderServerDetail(c,html,box){
   var upd=hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?'':
     '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent</p><p class="card2-desc">This server runs agent '+esc(c.agentVersion||'unknown')+'. Update it to see GPU and network usage. Run this on the server:</p></div>'+
     '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">'+esc(HOST_UPDATE_CMD)+'</textarea><div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
-  var ovPanes=[['system','System','<div class="card2-body"><div class="sec-grid">'+
-    row('Hostname','<span class="mono-chip">'+esc(h.hostname)+'</span>')+row('OS',esc(h.os||'-'))+row('Kernel',esc(h.kernel||'-'))+
-    row('Architecture',esc(h.arch||'-'))+row('Uptime',fmtUptime(h.uptimeSec))+
-    (h.swapTotalMi?row('Swap',fmtMem(h.swapUsedMi)+' of '+fmtMem(h.swapTotalMi)):'')+
-  '</div></div>']];
+  // Overview is one screen, no sub-tabs: a system strip across the top, then
+  // processes beside the GPUs and disks.
+  var spec=function(k,v){return '<div class="ov-spec"><div class="ov-k">'+k+'</div><div class="ov-v">'+v+'</div></div>';};
+  var sysCard='<section class="card2 ov-sys"><div class="ov-specs">'+
+    spec('Hostname','<span class="mono-chip">'+esc(h.hostname)+'</span>')+spec('OS',esc(h.os||'-'))+spec('Kernel',esc(h.kernel||'-'))+
+    spec('Architecture',esc(h.arch||'-'))+spec('Uptime',fmtUptime(h.uptimeSec))+
+    spec('CPU',h.cpuCores?plural(h.cpuCores,'core'):'-')+
+    (h.swapTotalMi?spec('Swap',fmtMem(h.swapUsedMi)+' of '+fmtMem(h.swapTotalMi)):'')+
+  '</div></section>';
+  var ovPanes=[];
   var gpuErr=(h.problems||[]).filter(function(x){return x.type==='GPUUnavailable';});
   if(!gpus.length&&gpuErr.length){
     ovPanes.push(['gpus','GPU','<div class="card2-body">'+
@@ -1154,7 +1159,10 @@ function renderServerDetail(c,html,box){
       logs.map(function(l){return '<tr><td class="u-email">'+esc(l.unit||'system')+'</td><td class="u-time" style="white-space:normal;font-family:\'Geist Mono\',ui-monospace,monospace;font-size:12px">'+esc(l.message)+'</td><td class="u-time" style="white-space:nowrap" title="'+esc(l.time?new Date(l.time).toLocaleString():'')+'">'+ago(l.time)+'</td></tr>';}).join('')+
       '</tbody></table></div>']);
   }
-  var ov=upd+subTabs('srv-ov',ovPanes);
+  var pane=function(id){for(var i=0;i<ovPanes.length;i++)if(ovPanes[i][0]===id)return ovPanes[i];return null;};
+  var card=function(pn,cls){return pn?'<section class="card2 '+cls+'"><div class="card2-head"><p class="card2-title">'+pn[1]+'</p></div>'+pn[2]+'</section>':'';};
+  var side=card(pane('gpus'),'ov-gpus')+card(pane('disks'),'ov-disks'),procs=card(pane('procs'),'ov-procs');
+  var ov=upd+sysCard+((procs||side)?'<div class="ov-grid'+(procs&&side?'':' one')+'">'+procs+(side?'<div class="ov-side">'+side+'</div>':'')+'</div>':'');
   var he=hePanes.length?subTabs('srv-health',hePanes):'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">Healthy.</span> No problems or errors reported.</p></div></section>';
   html+='<div class="tabpanel active" data-panel="overview">'+ov+'</div>'+
     '<div class="tabpanel" data-panel="timeline"><div id="tl-root"></div></div>'+

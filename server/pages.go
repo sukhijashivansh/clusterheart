@@ -182,7 +182,7 @@ input::placeholder{color:var(--faint)}
 .menu-sep{height:1px;background:var(--border);margin:4px 6px}
 .menu-item.danger{color:var(--red)}
 .menu-item.danger:hover{background:color-mix(in srgb,var(--red) 12%,transparent)}
-.app2-main{flex:1 1 auto;width:100%;max-width:1080px;margin:0 auto;padding:30px 28px 64px}
+.app2-main{flex:1 1 auto;width:100%;max-width:1440px;margin:0 auto;padding:30px 28px 64px}
 @media(max-width:640px){.topbar{padding:12px 16px}.app2-main{padding:22px 16px 48px}.tb-add{padding:8px 13px}}
 /* cluster list: compact responsive card grid (no horizontal scroll) */
 .cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
@@ -349,6 +349,20 @@ table.users tbody tr:hover{background:var(--hover)}
 .lat-seg:last-child{border-radius:0 4px 4px 0}
 .lat-err{grid-column:2/4;font-size:12.5px;color:var(--red)}
 @media (max-width:640px){.lat-row{grid-template-columns:58px minmax(0,1fr) 60px}.lat-port,.lat-n{width:84px}}
+/* Server overview: system strip + processes beside GPUs and disks */
+.ov-sys{margin-bottom:16px}
+.ov-specs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.ov-spec{padding:14px 18px;border-right:1px solid var(--border);min-width:0}
+.ov-spec:last-child{border-right:none}
+.ov-k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.ov-v{font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ov-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+.ov-grid.one{grid-template-columns:minmax(0,1fr)}
+.ov-grid .card2,.ov-side .card2{margin:0}
+.ov-side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ov-procs .health-scroll{max-height:560px}
+@media (max-width:1000px){.ov-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.ov-specs{grid-template-columns:repeat(2,minmax(0,1fr))}.ov-spec{border-right:none;border-bottom:1px solid var(--border)}}
 /* Server timeline */
 .tl-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;flex-wrap:wrap;position:relative}
 .tl-picker{position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:min(440px,calc(100vw - 32px));padding:14px;background:var(--panel);border:1px solid var(--border-strong);box-shadow:0 18px 44px -16px rgba(0,0,0,.55)}
