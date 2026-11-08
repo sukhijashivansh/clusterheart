@@ -366,11 +366,20 @@ func (a *app) pageAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, accountTmpl, map[string]any{
 		"Initial":  initial,
+		"Since":    sinceLabel(u.Created),
 		"Name":     u.Name,
 		"Email":    u.Email,
 		"Approved": u.Approved,
 		"IsAdmin":  a.isAdmin(u.Email),
 	})
+}
+
+// sinceLabel is "Nov 2026" for the account page, or "" when unknown.
+func sinceLabel(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("Jan 2006")
 }
 
 // adminGuard returns the signed-in admin, or redirects and returns nil.

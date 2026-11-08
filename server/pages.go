@@ -120,33 +120,47 @@ input::placeholder{color:var(--faint)}
 .btn.secondary{margin-top:12px;background:transparent;color:var(--text);border:1px solid var(--border-strong)}
 .btn.secondary:hover{background:var(--hover);border-color:var(--accent)}
 .alt{margin-top:24px;font-size:13.5px;color:var(--muted);text-align:center}
-/* account page: dashboard shell, profile header, team table */
-.app2-main.acct-main{max-width:960px}
+/* account page: profile column + team */
+.app2-main.acct-main{display:grid;grid-template-columns:300px minmax(0,1fr);gap:0 20px;align-items:start;align-content:start}
+.acct-side .card2,.acct-body .card2{margin:0 0 20px}
 .tb-btn{display:inline-flex;align-items:center;height:38px;padding:0 16px;text-decoration:none}
 a.act.approve:hover{color:var(--accent-ink)}
-.acct-hero{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 26px}
-.acct-avatar{width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex:none;font-size:24px;font-weight:800;text-transform:uppercase;color:var(--accent-ink);background:var(--accent)}
-.acct-id{flex:1;min-width:0}
-.acct-id h1{margin:0;font-size:28px;text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.acct-email{margin:4px 0 0;font-size:13.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
-.acct-status{display:flex;align-items:center;gap:16px}
-.acct-admin{font-size:13px;color:var(--accent)}
+.acct-card{padding:24px 22px}
+.acct-avatar{width:56px;height:56px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:24px;font-weight:800;text-transform:uppercase;color:var(--accent-ink);background:var(--accent)}
+.acct-card h1{margin:0;font-size:24px;text-transform:capitalize;overflow-wrap:anywhere}
+.acct-email{margin:4px 0 14px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.acct-meta{display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--faint)}
+.acct-admin{display:inline-block;margin-top:14px;font-size:13px;color:var(--accent)}
 .acct-pending{margin:0;font-size:14px;line-height:1.6;color:var(--muted)}
-.team-add{display:flex;gap:8px}
-.team-add .toolbar-input{height:40px}
+.acct-h{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 20px}
+.acct-count{margin-left:6px;font-weight:500;color:var(--faint)}
+.team-add{display:flex;gap:8px;flex:1;max-width:620px}
+.team-add .toolbar-input{height:38px}
 .team-add input{flex:1;min-width:0}
-.team-add .act{height:40px;white-space:nowrap}
-.role-help{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:12px;font-size:12.5px;color:var(--muted)}
-.role-help b{color:var(--text);font-weight:600}
-.acct-table .toolbar-input{height:34px}
-.acct-table td{font-size:13.5px;color:var(--muted)}
-.ws-now{margin-right:12px}
-.acct-table .empty{padding:28px 22px;font-size:13.5px}
-.acct-main .card2-body .msg{margin-top:12px;min-height:0}.acct-main .card2-body .msg:empty{display:none}
-.acct-main select.toolbar-input{padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;cursor:pointer}
-.acct-table td.cell-act .act{padding:7px 14px}
+.team-add .act{height:38px;padding:0 20px}
+.acct-msg{margin:0;padding:0 20px 12px;min-height:0}.acct-msg:empty{display:none}
+.acct-table td{font-size:13.5px;color:var(--muted);padding:13px 20px}
+.acct-table .toolbar-input{height:32px}
+.acct-table td.cell-act .act{padding:6px 14px}
+.acct-table .empty{padding:26px 20px;font-size:13.5px;text-align:left}
 .act.revoke.sure{color:var(--red);border-color:color-mix(in srgb,var(--red) 50%,transparent)}
-@media(max-width:640px){.team-add{flex-wrap:wrap}.team-add input{flex-basis:100%}.team-add select{flex:1}.acct-hero{gap:14px}.acct-avatar{width:46px;height:46px;font-size:20px}.acct-id h1{font-size:23px}.acct-status{width:100%}.tb-btn{height:34px;padding:0 12px}}
+.ws-row{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border)}
+.ws-row:first-child{border-top:none}
+.ws-who{flex:1;min-width:0}.ws-who .u-name{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-role{font-size:12px;color:var(--faint)}
+.ws-row .act{padding:5px 11px;font-size:12.5px}
+.acct-main select.toolbar-input{padding-right:30px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;cursor:pointer}
+@media(max-width:900px){.app2-main.acct-main{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){.team-add{flex-wrap:wrap;max-width:none;flex-basis:100%}.team-add input{flex-basis:100%}.team-add select{flex:1;min-width:0}.tb-btn{height:34px;padding:0 12px}
+  .acct-card{display:grid;grid-template-columns:auto 1fr;column-gap:14px;align-items:center;padding:18px}
+  .acct-card .acct-avatar{grid-row:span 2;width:48px;height:48px;margin:0;font-size:20px}
+  .acct-card h1{font-size:21px}.acct-email{margin:2px 0 0}
+  .acct-card .acct-meta,.acct-card .acct-admin{grid-column:1/-1;margin-top:12px}
+  #clusters table.users.acct-table tr,table.users.acct-table tr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:14px 18px}
+  table.users.acct-table td{display:block;width:auto;padding:0;border:none}
+  table.users.acct-table td.cell-user{flex-basis:100%}
+  table.users.acct-table td::before{display:none!important;content:none!important}
+  table.users.acct-table td.cell-act{margin-left:auto}table.users.acct-table td.cell-act .act{margin:0}}
 .alt a{color:var(--accent);font-weight:600}
 .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
@@ -742,29 +756,33 @@ const accountBody = `{{define "body"}}<div class="app2">
   </div>
 </header>
 <main class="app2-main acct-main">
-  <p class="kicker">Account</p>
-  <section class="acct-hero">
-    <div class="acct-avatar" aria-hidden="true">{{.Initial}}</div>
-    <div class="acct-id"><h1>{{.Name}}</h1><p class="acct-email">{{.Email}}</p></div>
-    <div class="acct-status">{{if .Approved}}<span class="pill on">Approved</span>{{else}}<span class="pill off">Pending approval</span>{{end}}{{if .IsAdmin}}<a class="acct-admin" href="/admin">Admin panel &rarr;</a>{{end}}</div>
-  </section>
+  <aside class="acct-side">
+    <section class="card2 acct-card">
+      <div class="acct-avatar" aria-hidden="true">{{.Initial}}</div>
+      <h1>{{.Name}}</h1>
+      <p class="acct-email">{{.Email}}</p>
+      <div class="acct-meta">{{if .Approved}}<span class="pill on">Approved</span>{{else}}<span class="pill off">Pending approval</span>{{end}}{{if .Since}}<span>Since {{.Since}}</span>{{end}}</div>
+      {{if .IsAdmin}}<a class="acct-admin" href="/admin">Admin panel &rarr;</a>{{end}}
+    </section>
+    {{if .Approved}}<section class="card2" id="spaces" hidden>
+      <div class="card2-head acct-h"><p class="card2-title">Workspaces</p></div>
+      <div id="space-list"></div>
+    </section>{{end}}
+  </aside>
+  <div class="acct-body">
 {{if .Approved}}
-  <section class="card2" id="spaces" hidden>
-    <div class="card2-head"><p class="card2-title">Workspaces</p><p class="card2-desc">Yours, plus the teams you're on. The one you open is used everywhere in the dashboard.</p></div>
-    <table class="users acct-table"><tbody id="space-list"></tbody></table>
-  </section>
   <section class="card2">
-    <div class="card2-head"><p class="card2-title">Team</p><p class="card2-desc">People you add see your clusters and servers. They get an email; new people sign up with that address and skip the approval wait.</p></div>
-    <div class="card2-body">
-      <div class="team-add"><input id="t-email" class="toolbar-input" type="email" placeholder="teammate@company.com" autocomplete="off" aria-label="Email"><select id="t-role" class="toolbar-input" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select><button id="t-add" class="act approve">Add to team</button></div>
-      <div class="role-help"><span><b>Member</b> sees everything and uses AI</span><span><b>Admin</b> also adds, renames and removes clusters and servers, and acts on fixes</span></div>
-      <div id="t-msg" class="msg" role="status"></div>
+    <div class="card2-head acct-h">
+      <p class="card2-title">Team <span class="acct-count" id="t-count"></span></p>
+      <div class="team-add"><input id="t-email" class="toolbar-input" type="email" placeholder="teammate@company.com" autocomplete="off" aria-label="Email"><select id="t-role" class="toolbar-input" aria-label="Role"><option value="member">Member · views and uses AI</option><option value="admin">Admin · can also manage</option></select><button id="t-add" class="act approve">Add</button></div>
     </div>
-    <table class="users acct-table"><thead><tr><th>Person</th><th>Status</th><th>Role</th><th></th></tr></thead><tbody id="team-list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
+    <div id="t-msg" class="msg acct-msg" role="status"></div>
+    <table class="users acct-table"><tbody id="team-list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
   </section>
 {{else}}
-  <section class="card2"><div class="card2-body"><p class="acct-pending">Your account is waiting for an admin to approve it. You'll get in as soon as it's approved. If a teammate added you, sign in with the email they used.</p></div></section>
+  <section class="card2"><div class="card2-body"><p class="acct-pending">Your account is waiting for an admin to approve it. If a teammate added you, sign in with the email they used.</p></div></section>
 {{end}}
+  </div>
 </main>
 </div>{{end}}
 {{define "script"}}<script>
@@ -789,15 +807,15 @@ document.getElementById('logout').addEventListener('click',async function(){
         '<td data-label="Status">'+(m.joined?'<span class="pill on">Joined</span>':'<span class="pill off">Invited</span>')+'</td>'+
         '<td data-label="Role">'+roleSel(m)+'</td>'+
         '<td class="cell-act"><button class="act revoke team-x" data-email="'+esc(m.email)+'">Remove</button></td></tr>';
-    }).join(''):'<tr><td colspan="4" class="empty">No one yet. Add a teammate above.</td></tr>';
+    }).join(''):'<tr><td colspan="4" class="empty">No one yet. People you add see your clusters and servers, and get an email to join.</td></tr>';
+    document.getElementById('t-count').textContent=t.length?t.length:'';
     var box=document.getElementById('spaces');
     if(ws.length>1){
       box.hidden=false;
       document.getElementById('space-list').innerHTML=ws.map(function(w){
-        return '<tr><td class="cell-user"><div class="u-name">'+esc(w.name)+'</div><div class="u-email">'+(w.owner?esc(w.owner):'Your own clusters and servers')+'</div></td>'+
-          '<td data-label="Role">'+(w.owner?(w.role==='admin'?'Admin':'Member'):'Owner')+'</td>'+
-          '<td class="cell-act">'+(w.active?'<span class="pill on ws-now">Open now</span>':'<button class="act approve ws-open" data-owner="'+esc(w.owner)+'">Open</button>')+
-          (w.owner?' <button class="act revoke team-x ws-leave" data-owner="'+esc(w.owner)+'">Leave</button>':'')+'</td></tr>';
+        return '<div class="ws-row"><div class="ws-who"><div class="u-name">'+esc(w.name)+'</div><div class="ws-role">'+(w.owner?(w.role==='admin'?'Admin':'Member'):'Owner')+'</div></div>'+
+          (w.active?'<span class="pill on">Open</span>':'<button class="act approve ws-open" data-owner="'+esc(w.owner)+'">Open</button>')+
+          (w.owner?'<button class="act revoke team-x ws-leave" data-owner="'+esc(w.owner)+'">Leave</button>':'')+'</div>';
       }).join('');
     }else box.hidden=true;
   }
