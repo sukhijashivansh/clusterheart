@@ -713,12 +713,17 @@ async function load(){
 
 // Cards can be lifted and rearranged: drag with the mouse, or long-press and
 // drag on touch. The order is kept per browser in localStorage.
-var CL_ORDER_KEY='ch-cl-order';
-function clOrdered(list){
-  var order=[];try{order=JSON.parse(localStorage.getItem(CL_ORDER_KEY)||'[]')||[];}catch(e){}
+var CL_ORDER_KEY='ch-cl-order',TL_ORDER_KEY='ch-tl-order';
+// ARRANGE lists every grid whose cards can be rearranged: the cluster cards and
+// the Timeline charts. skip names the parts of a card that keep their own drag
+// (a chart's drag-to-zoom).
+var ARRANGE=[{grid:'cl-grid',card:'cl-card',key:CL_ORDER_KEY,skip:''},{grid:'tl-grid',card:'tl-card',key:TL_ORDER_KEY,skip:'.tl-chart'}];
+function clOrdered(list){return arrOrdered(list,CL_ORDER_KEY,function(c){return c.clusterId;});}
+function arrOrdered(list,key,idOf){
+  var order=[];try{order=JSON.parse(localStorage.getItem(key)||'[]')||[];}catch(e){}
   var rank={};order.forEach(function(id,i){rank[id]=i;});
   return list.map(function(c,i){return {c:c,i:i};}).sort(function(a,b){
-    var ra=rank[a.c.clusterId],rb=rank[b.c.clusterId];
+    var ra=rank[idOf(a.c)],rb=rank[idOf(b.c)];
     if(ra!=null&&rb!=null)return ra-rb;if(ra!=null)return -1;if(rb!=null)return 1;return a.i-b.i;
   }).map(function(x){return x.c;});
 }
@@ -727,7 +732,7 @@ function clOrdered(list){
   // after that every card moves by transform only (no layout reads), updates
   // run once per frame, and the DOM is reordered only after the drop lands.
   var drag=null,suppressClick=false,EASE='transform .26s cubic-bezier(.2,.8,.2,1)';
-  function cards(g){return Array.prototype.slice.call(g.querySelectorAll('.cl-card'));}
+  function cards(g){return Array.prototype.slice.call(g.children).filter(function(el){return el.dataset.id;});}
   function T(el,x,y){el.style.transform=(x||y)?'translate3d('+x+'px,'+y+'px,0)':'';}
   function start(){
     var d=drag;d.on=true;
@@ -772,7 +777,7 @@ function clOrdered(list){
       d.grid.getBoundingClientRect();
       d.cards.forEach(function(el){el.style.transition='';});
       c.classList.remove('settling');d.grid.classList.remove('arranging');
-      try{localStorage.setItem(CL_ORDER_KEY,JSON.stringify(order.map(function(el){return el.dataset.id;})));}catch(e){}
+      try{localStorage.setItem(d.conf.key,JSON.stringify(order.map(function(el){return el.dataset.id;})));}catch(e){}
     },270);
   }
   function onMove(e){
@@ -787,17 +792,19 @@ function clOrdered(list){
   }
   document.addEventListener('pointerdown',function(e){
     if(drag)return;
-    var card=e.target.closest&&e.target.closest('.cl-grid .cl-card');
-    if(!card||e.button>0||e.target.closest('.kebab,button,input,textarea,select'))return;
+    if(!e.target.closest)return;
+    var conf=null,card=null;
+    ARRANGE.forEach(function(c){var k=e.target.closest('.'+c.grid+' > .'+c.card);if(k&&!conf){conf=c;card=k;}});
+    if(!card||e.button>0||e.target.closest('.kebab,button,input,textarea,select,a[href]:not(.cl-name)'+(conf.skip?','+conf.skip:'')))return;
     var grid=card.parentNode;if(cards(grid).length<2||grid.classList.contains('arranging'))return;
-    drag={card:card,grid:grid,sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY,on:false,touch:e.pointerType!=='mouse'};
+    drag={conf:conf,card:card,grid:grid,sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY,on:false,touch:e.pointerType!=='mouse'};
     if(drag.touch)drag.timer=setTimeout(function(){if(drag&&!drag.on)start();},320);
     document.addEventListener('pointermove',onMove);document.addEventListener('pointerup',end);document.addEventListener('pointercancel',end);
   });
   // While a card is lifted on touch, stop the page from scrolling under it.
   document.addEventListener('touchmove',function(e){if(drag&&drag.on){e.preventDefault();drag.x=e.touches[0].clientX;drag.y=e.touches[0].clientY;}},{passive:false});
-  document.addEventListener('click',function(e){if(suppressClick&&e.target.closest&&e.target.closest('.cl-card')){e.preventDefault();e.stopPropagation();}},true);
-  document.addEventListener('dragstart',function(e){if(e.target.closest&&e.target.closest('.cl-card'))e.preventDefault();});
+  document.addEventListener('click',function(e){if(suppressClick&&e.target.closest&&e.target.closest('.cl-card,.tl-card')){e.preventDefault();e.stopPropagation();}},true);
+  document.addEventListener('dragstart',function(e){if(e.target.closest&&e.target.closest('.cl-card,.tl-card'))e.preventDefault();});
   document.addEventListener('contextmenu',function(e){if(drag&&drag.touch)e.preventDefault();});
 })();
 
@@ -1336,7 +1343,7 @@ function tlCardHtml(ch,ci,W,from,to,step){
       return '<span class="tl-li" title="'+esc(s.full||s.name)+'"><span class="tl-key" style="background:'+tlColor(i)+'"></span>'+esc(s.name)+(s.full?' <span class="tl-li-sub">'+esc(s.full)+'</span>':'')+(l?' <b>'+esc(ch.fmt(l.v))+'</b>':'')+'</span>';}).join('')+'</div>';
   }
   var label=ch.title+' over '+tlRangeText()+(one&&last?', now '+ch.fmt(last.v)+', peak '+ch.fmt(tlPeak(s0)):'')+'. Use the arrow keys to read values; drag across the chart to zoom in.';
-  return '<section class="card2 tl-card"><div class="card2-head tl-head"><p class="card2-title">'+esc(ch.title)+(ch.sub?' <span class="tl-title-sub">'+esc(ch.sub)+'</span>':'')+'</p>'+sum+'</div>'+
+  return '<section class="card2 tl-card" data-id="'+esc(ch.id)+'"><div class="card2-head tl-head"><p class="card2-title">'+esc(ch.title)+(ch.sub?' <span class="tl-title-sub">'+esc(ch.sub)+'</span>':'')+'</p>'+sum+'</div>'+
     '<div class="tl-chart" data-ci="'+ci+'" tabindex="0" role="img" aria-label="'+esc(label)+'">'+tlSvg(ch,g,step)+'<div class="tl-tip" hidden></div></div>'+legend+'</section>';
 }
 
@@ -1357,10 +1364,12 @@ function tlTableHtml(d,charts){
 function tlRender(){
   var root=document.getElementById('tl-root');
   if(!root)return;
+  if(root.querySelector('.tl-grid.arranging')){clearTimeout(tlRender._t);tlRender._t=setTimeout(tlRender,400);return;}
   var d=tlState.data;
   var bar='<div class="tl-bar"><div class="seg tl-ranges" role="group" aria-label="Time range">'+
     TL_RANGES.map(function(r){var on=!tlState.zoom&&tlState.range===r[0];return '<button class="seg-btn tl-range'+(on?' active':'')+'" data-r="'+r[0]+'" aria-pressed="'+on+'">'+r[1]+'</button>';}).join('')+
-    '</div><div class="tl-bar-r">'+
+    '<button class="seg-btn tl-custom'+(tlState.zoom?' active':'')+'" aria-expanded="false" aria-pressed="'+!!tlState.zoom+'">Custom</button>'+
+    '</div>'+tlPickerHtml()+'<div class="tl-bar-r">'+
     (tlState.zoom?'<span class="tl-zoomed">'+esc(tlRangeText())+(d&&d.stepSec?' · '+(d.stepSec<60?d.stepSec+'s':Math.round(d.stepSec/60)+' min')+' buckets':'')+'</span><button class="tl-view tl-unzoom">Reset zoom</button>':
       (d&&d.stepSec?'<span class="tl-hint">'+(d.stepSec<60?d.stepSec+'s':Math.round(d.stepSec/60)+' min')+' buckets · drag a chart to zoom</span>':''))+
     '<button class="tl-view" aria-pressed="'+tlState.table+'">'+(tlState.table?'Charts':'Table')+'</button></div></div>';
@@ -1370,7 +1379,7 @@ function tlRender(){
     root.innerHTML=bar+'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0">No history yet. It fills in as the agent reports, every 30 seconds, and keeps 7 days.</p></div></section>';
     tlWireBar(root);return;
   }
-  var charts=tlCharts(d);tlState.charts=charts;
+  var charts=arrOrdered(tlCharts(d),TL_ORDER_KEY,function(ch){return ch.id;});tlState.charts=charts;
   var from=new Date(d.from).getTime(),to=new Date(d.to).getTime(),step=(d.stepSec||60)*1000;
   if(tlState.table){root.innerHTML=bar+tlTableHtml(d,charts);tlWireBar(root);return;}
   root.innerHTML=bar+'<div class="tl-grid"></div>';
@@ -1388,7 +1397,36 @@ function tlRender(){
   grid.querySelectorAll('.tl-chart').forEach(function(el){tlWireHover(el,charts[+el.dataset.ci],tlGeom(charts[+el.dataset.ci],W,from,to));});
 }
 
+// tlPickerHtml is the Custom range popover: any window inside the 7 days of
+// history, to the minute. It opens on the current window.
+function tlDT(ms){var d=new Date(ms-new Date(ms).getTimezoneOffset()*60000);return d.toISOString().slice(0,16);}
+function tlPickerHtml(){
+  var now=Date.now(),d=tlState.data,from,to;
+  if(tlState.zoom){from=tlState.zoom.from;to=tlState.zoom.to;}
+  else if(d&&d.from){from=new Date(d.from).getTime();to=new Date(d.to).getTime();}
+  else{to=now;from=now-3600000;}
+  var min=tlDT(now-7*86400000+60000),max=tlDT(now);
+  return '<div class="tl-picker" hidden><div class="tl-pick-row">'+
+    '<label>From<input type="datetime-local" class="toolbar-input tl-from" min="'+min+'" max="'+max+'" value="'+tlDT(from)+'"></label>'+
+    '<label>To<input type="datetime-local" class="toolbar-input tl-to" min="'+min+'" max="'+max+'" value="'+tlDT(to)+'"></label>'+
+    '</div><p class="tl-pick-err" hidden></p><div class="tl-pick-actions"><span class="tl-pick-note">Up to 7 days back</span><button class="tl-view tl-pick-cancel">Cancel</button><button class="act approve tl-pick-apply">Apply</button></div></div>';
+}
 function tlWireBar(root){
+  var cb=root.querySelector('.tl-custom'),pk=root.querySelector('.tl-picker');
+  if(cb&&pk){
+    function close(){pk.hidden=true;cb.setAttribute('aria-expanded','false');}
+    cb.addEventListener('click',function(e){e.stopPropagation();pk.hidden=!pk.hidden;cb.setAttribute('aria-expanded',String(!pk.hidden));if(!pk.hidden)pk.querySelector('.tl-from').focus();});
+    pk.addEventListener('click',function(e){e.stopPropagation();});
+    document.addEventListener('click',function out(e){if(!document.body.contains(pk)){document.removeEventListener('click',out);return;}close();});
+    pk.addEventListener('keydown',function(e){if(e.key==='Escape'){close();cb.focus();}if(e.key==='Enter')pk.querySelector('.tl-pick-apply').click();});
+    pk.querySelector('.tl-pick-cancel').addEventListener('click',close);
+    pk.querySelector('.tl-pick-apply').addEventListener('click',function(){
+      var f=new Date(pk.querySelector('.tl-from').value).getTime(),t=new Date(pk.querySelector('.tl-to').value).getTime(),err=pk.querySelector('.tl-pick-err');
+      var msg=isNaN(f)||isNaN(t)?'Pick both times.':t<=f?'"To" must be after "From".':f>Date.now()?'"From" is in the future.':'';
+      if(msg){err.textContent=msg;err.hidden=false;return;}
+      close();tlZoom(f,Math.min(t,Date.now()));
+    });
+  }
   root.querySelectorAll('.tl-range').forEach(function(b){b.addEventListener('click',function(){
     if(tlState.range===b.dataset.r&&!tlState.zoom)return;
     tlState.range=b.dataset.r;tlState.zoom=null;
