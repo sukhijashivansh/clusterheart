@@ -353,7 +353,7 @@
                     <div class="hex-row hex-off"><button type="button" class="hex" data-k="linux" aria-pressed="false"><span class="hex-in"><span class="hex-label">Linux servers</span></span></button><button type="button" class="hex" data-k="gpu" aria-pressed="false"><span class="hex-in"><span class="hex-label">GPUs</span></span></button><button type="button" class="hex" data-k="hist" aria-pressed="false"><span class="hex-in"><span class="hex-label">History</span></span></button></div>
                     <div class="hex-row"><button type="button" class="hex" data-k="inc" aria-pressed="false"><span class="hex-in"><span class="hex-label">Incidents</span></span></button><button type="button" class="hex" data-k="sec" aria-pressed="false"><span class="hex-in"><span class="hex-label">Leaked secrets</span></span></button><button type="button" class="hex" data-k="chg" aria-pressed="false"><span class="hex-in"><span class="hex-label">Changes</span></span></button></div>
                 </div>
-                <div id="hexInfo" class="border border-line bg-panel p-6 sm:p-8 min-h-[15rem]" aria-live="polite">
+                <div id="hexInfo" class="hidden md:block border border-line bg-panel p-6 sm:p-8 min-h-[15rem]" aria-live="polite">
                     <p id="hexCode" class="mono text-xs text-accent mb-3">$ clusterheart get linux</p>
                     <h3 id="hexTitle" class="text-2xl font-bold mb-2">Linux servers</h3>
                     <p id="hexLine" class="text-muted mb-5">CPU, memory, disks, load and network for every server.</p>
