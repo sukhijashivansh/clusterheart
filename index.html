@@ -47,7 +47,7 @@
          changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify
          then bump ?v= to the new file's hash (md5 -q styles.css | cut -c1-8): browsers
          cache styles.css for hours, so a stale copy would miss the new classes. -->
-    <link rel="stylesheet" href="styles.css?v=b3273db2">
+    <link rel="stylesheet" href="styles.css?v=e4b61f7d">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 
@@ -347,18 +347,7 @@
         <div class="max-w-6xl mx-auto px-5 sm:px-6">
             <p class="mono text-xs font-medium tracking-[0.18em] text-accent uppercase mb-4">01 / What we monitor</p>
             <h2 class="text-[1.6rem] sm:text-4xl font-bold tracking-tight mb-10">Everything that keeps it running.</h2>
-            <ul class="md:hidden border-t border-line">
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Pods</p><p class="text-sm text-muted">Status, restarts, CPU and memory. Crashes flagged with their last log lines.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Jobs</p><p class="text-sm text-muted">Latest result for every job. Failures stand out, repeat runs grouped.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Nodes</p><p class="text-sm text-muted">Capacity vs. usage, readiness and how full each machine is.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Linux servers</p><p class="text-sm text-muted">CPU, memory, disks, load and network. Full disks, failed services and reboots flagged.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">GPUs</p><p class="text-sm text-muted">Use, memory, heat and power. NVIDIA and AMD.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">History</p><p class="text-sm text-muted">A week of charts with average and peak. Gaps show downtime.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Incidents</p><p class="text-sm text-muted">Problems grouped and explained in plain words.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Leaked secrets</p><p class="text-sm text-muted">Passwords and keys in the open, located and masked. Never copied.</p></li>
-                <li class="border-b border-line py-3.5"><p class="font-semibold">Changes</p><p class="text-sm text-muted">Nothing changes until you approve. Every change logged and undoable.</p></li>
-            </ul>
-            <div class="hidden md:grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div class="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
                 <div class="honeycomb mx-auto lg:mx-0" role="group" aria-label="What we monitor">
                     <div class="hex-row"><button type="button" class="hex" data-k="pod" aria-pressed="false"><span class="hex-in"><span class="hex-label">Pods</span></span></button><button type="button" class="hex" data-k="job" aria-pressed="false"><span class="hex-in"><span class="hex-label">Jobs</span></span></button><button type="button" class="hex" data-k="node" aria-pressed="false"><span class="hex-in"><span class="hex-label">Nodes</span></span></button></div>
                     <div class="hex-row hex-off"><button type="button" class="hex" data-k="linux" aria-pressed="false"><span class="hex-in"><span class="hex-label">Linux servers</span></span></button><button type="button" class="hex" data-k="gpu" aria-pressed="false"><span class="hex-in"><span class="hex-label">GPUs</span></span></button><button type="button" class="hex" data-k="hist" aria-pressed="false"><span class="hex-in"><span class="hex-label">History</span></span></button></div>
@@ -415,7 +404,7 @@
                 <h2 class="text-2xl sm:text-3xl font-bold tracking-tight mb-6">Recommend &amp; apply.</h2>
                 <ul class="space-y-4">
                     <li><p class="font-semibold">Real usage</p><p class="text-sm text-muted">Requests compared with six hours of actual use.</p></li>
-                    <li><p class="font-semibold">Clear verdicts</p><p class="text-sm text-muted"><span class="mono text-xs text-ink">UPSIZE · DOWNSIZE · OK</span>, with a suggested size.</p></li>
+                    <li><p class="font-semibold">Clear verdicts</p><p class="text-sm text-muted"><span class="mono text-xs text-ink">UPSIZE · DOWNSIZE · OK</span> with a suggested size.</p></li>
                     <li><p class="font-semibold">One click</p><p class="text-sm text-muted">Apply after you confirm. Old values kept.</p></li>
                 </ul>
             </div>
@@ -743,7 +732,7 @@
                 $('hexLine').textContent = line;
                 $('hexFacts').innerHTML = '';
                 facts.forEach(f => { const li = document.createElement('li'); li.innerHTML = '<span class="text-accent">›</span> '; li.append(f); $('hexFacts').appendChild(li); });
-                if (animate && !reduce) { box.classList.remove('hex-swap'); void box.offsetWidth; box.classList.add('hex-swap'); }
+                if (animate && !reduce && desktop) { box.classList.remove('hex-swap'); void box.offsetWidth; box.classList.add('hex-swap'); }
             };
             cells.forEach(c => c.addEventListener('click', () => show(c.dataset.k, true)));
             show('linux', false);
