@@ -47,7 +47,7 @@
          changes: npx tailwindcss@3 -c tailwind.config.js -i input.css -o styles.css --minify
          then bump ?v= to the new file's hash (md5 -q styles.css | cut -c1-8): browsers
          cache styles.css for hours, so a stale copy would miss the new classes. -->
-    <link rel="stylesheet" href="styles.css?v=a58eed84">
+    <link rel="stylesheet" href="styles.css?v=e4b61f7d">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 
@@ -128,7 +128,7 @@
         .working { animation: working .8s ease-in-out infinite; }
 
         /* Honeycomb: pointy-top hexes via clip-path; a 1px outer hex is the border */
-        .honeycomb { --w: clamp(88px, 24vw, 132px); --g: 6px; width: calc(var(--w) * 3.5 + var(--g) * 2.5); max-width: 100%; }
+        .honeycomb { --w: min(132px, calc((100vw - 40px - 15px) / 3.5)); --g: 6px; width: calc(var(--w) * 3.5 + var(--g) * 2.5); max-width: 100%; }
         .hex-row { display: flex; gap: var(--g); }
         .hex-row + .hex-row { margin-top: calc(var(--w) * -0.2887 + var(--g) * 0.87); }
         .hex-off { padding-left: calc((var(--w) + var(--g)) / 2); }
@@ -233,8 +233,9 @@
     <!-- ===== HERO ===== -->
     <section id="top" class="pt-32 sm:pt-40 pb-16 sm:pb-20">
         <div class="max-w-5xl mx-auto px-5 sm:px-6 text-center">
-            <h1 class="text-[clamp(2.25rem,6vw,3.75rem)] font-extrabold tracking-tight leading-[1.08] mb-8">
-                <span class="block sm:inline">Every cluster.</span> <span class="block sm:inline">Every server.</span><br class="hidden sm:block"><span class="text-accent">One heartbeat.</span>
+            <h1 class="font-extrabold tracking-tight leading-[1.08] mb-8">
+                <span class="block whitespace-nowrap text-[clamp(1.3rem,5.6vw,3.75rem)]">Every cluster. Every server.</span>
+                <span class="block text-accent text-[clamp(2.25rem,10vw,3.75rem)]">One heartbeat.</span>
             </h1>
 
             <ul class="text-[15px] sm:text-lg text-muted w-fit max-w-full mx-auto mb-10 space-y-2.5 text-left">
