@@ -723,71 +723,79 @@ function clOrdered(list){
   }).map(function(x){return x.c;});
 }
 (function(){
-  var drag=null,suppressClick=false;
+  // Smooth by design: slot positions are measured once when a card lifts;
+  // after that every card moves by transform only (no layout reads), updates
+  // run once per frame, and the DOM is reordered only after the drop lands.
+  var drag=null,suppressClick=false,EASE='transform .26s cubic-bezier(.2,.8,.2,1)';
   function cards(g){return Array.prototype.slice.call(g.querySelectorAll('.cl-card'));}
-  // flip slides the other cards from where they were to their new slot.
-  function flip(g,moving,fn){
-    var before=new Map();cards(g).forEach(function(el){if(el!==moving)before.set(el,el.getBoundingClientRect());});
-    fn();
-    before.forEach(function(r,el){
-      var n=el.getBoundingClientRect(),dx=r.left-n.left,dy=r.top-n.top;
-      if(!dx&&!dy)return;
-      el.style.transition='none';el.style.transform='translate('+dx+'px,'+dy+'px)';
-      el.getBoundingClientRect();
-      el.style.transition='transform .22s cubic-bezier(.2,.7,.2,1)';el.style.transform='';
-    });
-  }
-  function place(){
-    var c=drag.card;c.style.transform='';
-    var r=c.getBoundingClientRect();
-    c.style.transform='translate('+(drag.x-drag.ox-r.left)+'px,'+(drag.y-drag.oy-r.top)+'px) scale(1.03)';
-  }
+  function T(el,x,y){el.style.transform=(x||y)?'translate3d('+x+'px,'+y+'px,0)':'';}
   function start(){
-    drag.on=true;drag.card.classList.add('lifted');drag.grid.classList.add('arranging');
-    var r=drag.card.getBoundingClientRect();drag.ox=drag.sx-r.left;drag.oy=drag.sy-r.top;
-    if(navigator.vibrate&&drag.touch)try{navigator.vibrate(10);}catch(e){}
-    place();
+    var d=drag;d.on=true;
+    d.cards=cards(d.grid);d.from=d.cards.indexOf(d.card);d.to=d.from;
+    d.slots=d.cards.map(function(el){var r=el.getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,w:r.width,h:r.height};});
+    var h=d.slots[d.from];d.ox=d.sx+scrollX-h.x;d.oy=d.sy+scrollY-h.y;
+    d.cards.forEach(function(el){if(el!==d.card)el.style.transition=EASE;});
+    d.grid.classList.add('arranging');d.card.classList.add('lifted');
+    if(navigator.vibrate&&d.touch)try{navigator.vibrate(8);}catch(e){}
+    tick();
   }
-  function move(x,y){
-    drag.x=x;drag.y=y;
-    var over=document.elementFromPoint(x,y),t=over&&over.closest&&over.closest('.cl-card');
-    if(t&&t!==drag.card&&t.parentNode===drag.grid){
-      var all=cards(drag.grid),from=all.indexOf(drag.card),to=all.indexOf(t);
-      flip(drag.grid,drag.card,function(){drag.grid.insertBefore(drag.card,from<to?t.nextSibling:t);});
+  function tick(){
+    var d=drag;if(!d||!d.on)return;
+    // nudge the page when the card is held near the top or bottom edge
+    var e=60,v=d.y<e?-(e-d.y)/3:d.y>innerHeight-e?(d.y-innerHeight+e)/3:0;if(v)scrollBy(0,v);
+    var px=d.x+scrollX-d.ox,py=d.y+scrollY-d.oy,h=d.slots[d.from];
+    T(d.card,px-h.x,py-h.y);
+    // the slot whose centre is nearest the lifted card's centre is the target
+    var cx=px+h.w/2,cy=py+h.h/2,best=d.to,bd=Infinity;
+    d.slots.forEach(function(s,k){var dd=Math.pow(s.x+s.w/2-cx,2)+Math.pow(s.y+s.h/2-cy,2);if(dd<bd){bd=dd;best=k;}});
+    if(best!==d.to){
+      d.to=best;
+      var order=d.cards.filter(function(el){return el!==d.card;});order.splice(best,0,d.card);
+      order.forEach(function(el,k){if(el===d.card)return;var o=d.slots[d.cards.indexOf(el)],n=d.slots[k];T(el,n.x-o.x,n.y-o.y);});
+      d.order=order;
     }
-    place();
+    d.raf=requestAnimationFrame(tick);
   }
   function end(){
-    if(!drag)return;clearTimeout(drag.timer);
-    var d=drag;drag=null;
+    if(!drag)return;
+    var d=drag;drag=null;clearTimeout(d.timer);cancelAnimationFrame(d.raf);
     document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',end);document.removeEventListener('pointercancel',end);
     if(!d.on)return;
     suppressClick=true;setTimeout(function(){suppressClick=false;},0);
-    var c=d.card;c.classList.remove('lifted');c.classList.add('settling');c.style.transform='';
-    setTimeout(function(){c.classList.remove('settling');},240);
-    d.grid.classList.remove('arranging');
-    try{localStorage.setItem(CL_ORDER_KEY,JSON.stringify(cards(d.grid).map(function(el){return el.dataset.id;})));}catch(e){}
+    var c=d.card,h=d.slots[d.from],t=d.slots[d.to];
+    c.classList.remove('lifted');c.classList.add('settling');c.style.transition=EASE+',scale .26s cubic-bezier(.2,.8,.2,1),box-shadow .26s';
+    T(c,t.x-h.x,t.y-h.y);
+    setTimeout(function(){
+      var order=d.order||d.cards;
+      d.cards.forEach(function(el){el.style.transition='none';});
+      order.forEach(function(el){d.grid.appendChild(el);T(el,0,0);});
+      d.grid.getBoundingClientRect();
+      d.cards.forEach(function(el){el.style.transition='';});
+      c.classList.remove('settling');d.grid.classList.remove('arranging');
+      try{localStorage.setItem(CL_ORDER_KEY,JSON.stringify(order.map(function(el){return el.dataset.id;})));}catch(e){}
+    },270);
   }
   function onMove(e){
     if(!drag)return;
     if(!drag.on){
       var dist=Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy);
       if(drag.touch){if(dist>8)end();return;} // moved before the long-press: let it scroll
-      if(dist<6)return;
+      if(dist<5)return;
       start();
     }
-    move(e.clientX,e.clientY);
+    drag.x=e.clientX;drag.y=e.clientY;
   }
   document.addEventListener('pointerdown',function(e){
+    if(drag)return;
     var card=e.target.closest&&e.target.closest('.cl-grid .cl-card');
     if(!card||e.button>0||e.target.closest('.kebab,button,input,textarea,select'))return;
-    var grid=card.parentNode;if(cards(grid).length<2)return;
+    var grid=card.parentNode;if(cards(grid).length<2||grid.classList.contains('arranging'))return;
     drag={card:card,grid:grid,sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY,on:false,touch:e.pointerType!=='mouse'};
-    if(drag.touch)drag.timer=setTimeout(function(){if(drag&&!drag.on)start();},350);
+    if(drag.touch)drag.timer=setTimeout(function(){if(drag&&!drag.on)start();},320);
     document.addEventListener('pointermove',onMove);document.addEventListener('pointerup',end);document.addEventListener('pointercancel',end);
   });
   // While a card is lifted on touch, stop the page from scrolling under it.
-  document.addEventListener('touchmove',function(e){if(drag&&drag.on){e.preventDefault();move(e.touches[0].clientX,e.touches[0].clientY);}},{passive:false});
+  document.addEventListener('touchmove',function(e){if(drag&&drag.on){e.preventDefault();drag.x=e.touches[0].clientX;drag.y=e.touches[0].clientY;}},{passive:false});
   document.addEventListener('click',function(e){if(suppressClick&&e.target.closest&&e.target.closest('.cl-card')){e.preventDefault();e.stopPropagation();}},true);
   document.addEventListener('dragstart',function(e){if(e.target.closest&&e.target.closest('.cl-card'))e.preventDefault();});
   document.addEventListener('contextmenu',function(e){if(drag&&drag.touch)e.preventDefault();});
