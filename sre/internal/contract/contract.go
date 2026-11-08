@@ -434,12 +434,15 @@ type HostGPU struct {
 	Vendor      string  `json:"vendor"` // nvidia | amd
 	Name        string  `json:"name"`
 	UUID        string  `json:"uuid,omitempty"`
-	UtilPercent float64 `json:"utilPercent"`
-	MemUsedMi   int64   `json:"memUsedMi"`
-	MemTotalMi  int64   `json:"memTotalMi"`
-	TempC       float64 `json:"tempC,omitempty"`
-	PowerW      float64 `json:"powerW,omitempty"`
-	PowerLimitW float64 `json:"powerLimitW,omitempty"`
+	UtilPercent float64 `json:"utilPercent"` // average over the snapshot window when streamed
+	// UtilPeakPercent is the highest sample in the window, so short bursts
+	// between snapshots still show. Zero when only one sample was taken.
+	UtilPeakPercent float64 `json:"utilPeakPercent,omitempty"`
+	MemUsedMi       int64   `json:"memUsedMi"`
+	MemTotalMi      int64   `json:"memTotalMi"`
+	TempC           float64 `json:"tempC,omitempty"`
+	PowerW          float64 `json:"powerW,omitempty"`
+	PowerLimitW     float64 `json:"powerLimitW,omitempty"`
 }
 
 // HostDisk is one mounted filesystem.

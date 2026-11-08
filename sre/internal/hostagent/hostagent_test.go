@@ -250,3 +250,20 @@ func TestRealHost(t *testing.T) {
 	}
 	t.Logf("real host: %s, %d cores, cpu %.1f%%, mem %d/%d MiB, %d disks, %d procs", h.OS, h.CPUCores, h.CPUPercent, h.MemUsedMi, h.MemTotalMi, len(h.Disks), len(h.Processes))
 }
+
+func TestCPUPercentClampsBackwardsCounters(t *testing.T) {
+	cases := []struct {
+		prev, cur cpuTimes
+		want      float64
+	}{
+		{cpuTimes{1000, 900}, cpuTimes{2600, 2497}, 0.2}, // 16 cores nearly idle: 3 of 1600 ticks busy
+		{cpuTimes{1000, 900}, cpuTimes{2000, 1400}, 50},
+		{cpuTimes{1000, 900}, cpuTimes{2000, 850}, 100}, // iowait went backwards: no wraparound
+		{cpuTimes{1000, 900}, cpuTimes{900, 800}, 0},    // counters reset
+	}
+	for _, c := range cases {
+		if got := cpuPercent(c.prev, c.cur); got != c.want {
+			t.Errorf("cpuPercent(%v, %v) = %v, want %v", c.prev, c.cur, got, c.want)
+		}
+	}
+}

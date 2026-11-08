@@ -30,7 +30,7 @@ const (
 var nvidiaQuery = []string{"--query-gpu=index,uuid,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit", "--format=csv,noheader,nounits"}
 
 const (
-	nvidiaStreamEvery = 15 * time.Second // sample interval of the long-running nvidia-smi
+	nvidiaStreamEvery = 5 * time.Second  // sample interval of the long-running nvidia-smi (several per snapshot)
 	nvidiaRestart     = 5 * time.Minute  // wait before restarting one that exited
 	nvidiaOneShotMax  = 30 * time.Second // nvidia-smi can be slow without persistence mode
 )
@@ -63,7 +63,12 @@ type nvidiaStream struct {
 	last      time.Time // last GPU line
 	gpus      map[int]contract.HostGPU
 	seen      map[int]time.Time
-	cancel    context.CancelFunc
+	// Utilisation samples since the last read, per GPU, so a snapshot reports
+	// the average and peak over its whole window, not one instant.
+	utilSum  map[int]float64
+	utilN    map[int]int
+	utilPeak map[int]float64
+	cancel   context.CancelFunc
 }
 
 func newGPUReader(run runFunc, start startFunc, sysfs string) *gpuReader {
@@ -141,6 +146,7 @@ func (g *gpuReader) streamed(ctx context.Context, now time.Time) ([]contract.Hos
 		}
 		s.running, s.started, s.cancel = true, now, cancel
 		s.last, s.gpus, s.seen = time.Time{}, map[int]contract.HostGPU{}, map[int]time.Time{}
+		s.utilSum, s.utilN, s.utilPeak = map[int]float64{}, map[int]int{}, map[int]float64{}
 		go s.consume(r)
 		return nil, false // nothing read yet
 	}
@@ -155,7 +161,15 @@ func (g *gpuReader) streamed(ctx context.Context, now time.Time) ([]contract.Hos
 	var out []contract.HostGPU
 	for idx, at := range s.seen {
 		if now.Sub(at) <= 2*nvidiaStreamEvery {
-			out = append(out, s.gpus[idx])
+			g := s.gpus[idx]
+			if n := s.utilN[idx]; n > 1 {
+				g.UtilPercent = round1(s.utilSum[idx] / float64(n))
+				g.UtilPeakPercent = s.utilPeak[idx]
+			}
+			delete(s.utilSum, idx)
+			delete(s.utilN, idx)
+			delete(s.utilPeak, idx)
+			out = append(out, g)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
@@ -174,6 +188,11 @@ func (s *nvidiaStream) consume(r io.ReadCloser) {
 		s.mu.Lock()
 		for _, g := range gs {
 			s.gpus[g.Index], s.seen[g.Index] = g, at
+			s.utilSum[g.Index] += g.UtilPercent
+			s.utilN[g.Index]++
+			if g.UtilPercent > s.utilPeak[g.Index] {
+				s.utilPeak[g.Index] = g.UtilPercent
+			}
 		}
 		s.last = at
 		s.mu.Unlock()

@@ -298,6 +298,24 @@ func (s *sys) netTotals() netBytes {
 
 func round1(v float64) float64 { return float64(int64(v*10+0.5)) / 10 }
 
+// cpuPercent is the busy share of all cores between two /proc/stat readings.
+// It works in floats and clamps, because iowait (counted as idle) can go
+// backwards on some kernels and unsigned subtraction would wrap.
+func cpuPercent(prev, cur cpuTimes) float64 {
+	dTotal := float64(cur.total) - float64(prev.total)
+	if dTotal <= 0 {
+		return 0
+	}
+	dIdle := float64(cur.idle) - float64(prev.idle)
+	if dIdle < 0 {
+		dIdle = 0
+	}
+	if dIdle > dTotal {
+		dIdle = dTotal
+	}
+	return round1(100 * (dTotal - dIdle) / dTotal)
+}
+
 // sample fills the machine metrics of a host snapshot. CPU usage is measured
 // against the previous sample, so the first call primes it with a short wait.
 func (s *sys) sample(now time.Time) contract.HostSnapshot {
@@ -311,10 +329,7 @@ func (s *sys) sample(now time.Time) contract.HostSnapshot {
 	}
 	elapsed := now.Sub(s.prevSampleAt).Seconds()
 	cpu := s.cpuTimes()
-	pct := 0.0
-	if dt := cpu.total - s.prevCPU.total; cpu.total > s.prevCPU.total && dt > 0 {
-		pct = round1(100 * float64(dt-(cpu.idle-s.prevCPU.idle)) / float64(dt))
-	}
+	pct := cpuPercent(s.prevCPU, cpu)
 	procs := s.processes(now)
 	net := s.netTotals()
 	var rxKBps, txKBps float64

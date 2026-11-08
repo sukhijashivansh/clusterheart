@@ -172,7 +172,7 @@ func TestNvidiaStreamKeepsOneProcess(t *testing.T) {
 	if g, _ := r.read(context.Background(), now); len(g) != 1 || g[0].UtilPercent != 5 || oneShots != 1 || fs.starts != 1 {
 		t.Fatalf("first read: %+v oneShots=%d starts=%d", g, oneShots, fs.starts)
 	}
-	if strings.Join(fs.args, " ") != strings.Join(nvidiaQuery, " ")+" -l 15" {
+	if strings.Join(fs.args, " ") != strings.Join(nvidiaQuery, " ")+" -l 5" {
 		t.Fatalf("stream args: %v", fs.args)
 	}
 	fs.w.Write([]byte("0, GPU-1, NVIDIA L4, 77, 9000, 23034, 61, 55.5, 72\n"))
@@ -248,4 +248,29 @@ func TestExecStartWithFakeNvidiaSMI(t *testing.T) {
 	}
 	cancel() // agent shutting down
 	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return !r.stream.running })
+}
+
+// A snapshot reports the average and peak of every stream sample in its
+// window, so a burst between snapshots is not lost.
+func TestNvidiaStreamAveragesWindow(t *testing.T) {
+	fs := &fakeStart{}
+	r := &gpuReader{sysfs: t.TempDir(), start: fs.start, lookPath: func(string) (string, error) { return "/usr/bin/nvidia-smi", nil },
+		run: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("0, GPU-1, NVIDIA A40, 0, 100, 46068, 30, 20, 300\n"), nil
+		}}
+	r.read(context.Background(), time.Now())
+	for _, u := range []string{"0", "90", "30"} {
+		fs.w.Write([]byte("0, GPU-1, NVIDIA A40, " + u + ", 4000, 46068, 45, 120, 300\n"))
+	}
+	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return r.stream.utilN[0] == 3 })
+	g, _ := r.read(context.Background(), time.Now())
+	if len(g) != 1 || g[0].UtilPercent != 40 || g[0].UtilPeakPercent != 90 || g[0].MemUsedMi != 4000 {
+		t.Fatalf("want avg 40 peak 90: %+v", g)
+	}
+	// The window resets: one new sample reads as itself, with no peak.
+	fs.w.Write([]byte("0, GPU-1, NVIDIA A40, 12, 4000, 46068, 45, 120, 300\n"))
+	waitFor(t, func() bool { r.stream.mu.Lock(); defer r.stream.mu.Unlock(); return r.stream.utilN[0] == 1 })
+	if g, _ = r.read(context.Background(), time.Now()); g[0].UtilPercent != 12 || g[0].UtilPeakPercent != 0 {
+		t.Fatalf("after reset: %+v", g)
+	}
 }
