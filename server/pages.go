@@ -34,7 +34,7 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clusterheart</title>
 <link rel="icon" href="https://clusterheart.com/favicon.ico" sizes="48x48"><link rel="icon" type="image/svg+xml" href="https://clusterheart.com/favicon.svg"><link rel="apple-touch-icon" href="https://clusterheart.com/apple-touch-icon.png">
-<script>(function(){var t=localStorage.getItem('ch-theme')||'dark';if(t==='dark')document.documentElement.classList.add('dark');})();</script>
+<script>(function(){var t='dark',a='green';try{t=localStorage.getItem('ch-theme')||'dark';a=localStorage.getItem('ch-accent')||'green';}catch(e){}var c=document.documentElement.classList;if(t==='dark'){c.add('dark');if(['blue','purple','cyan','coral'].indexOf(a)>-1)c.add(a);}})();</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..700&display=swap');
 :root{
@@ -48,14 +48,20 @@ const layout = `{{define "layout"}}<!DOCTYPE html><html lang="en"><head>
   --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948;
 }
 .dark{
-  --bg:#000000;--panel:#000000;--surface2:#06090f;--input-bg:#0a0e16;
-  --text:#E6F1FD;--muted:#8294AE;--faint:#5A6880;
-  --border:#1C2A40;--border-strong:#2A3C58;
-  --accent:#8EC6FA;--accent2:#BBDDFC;--accent-ink:#04070F;
-  --active-bg:#0e1726;--hover:rgba(142,198,250,.08);--focus:rgba(142,198,250,.18);
+  --bg:#070809;--panel:#070809;--surface2:#0b0c0d;--input-bg:#101113;
+  --text:#E8EBEE;--muted:#9CA1A8;--faint:#767B82;
+  --border:#222528;--border-strong:#32363A;
+  --accent:#00E464;--accent2:#46F08C;--accent-ink:#03120A;
+  --active-bg:#17191B;--hover:color-mix(in srgb,var(--accent) 8%,transparent);--focus:color-mix(in srgb,var(--accent) 18%,transparent);
   --green:#4ade80;--amber:#fb923c;--red:#f87171;
   --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
 }
+/* accent schemes, same neutrals (match clusterheart.com) */
+.dark.blue{--accent:#8EC6FA;--accent2:#B2D8FC;--accent-ink:#05101E}
+.dark.purple{--accent:#A259FF;--accent2:#B880FF;--accent-ink:#ffffff}
+.dark.cyan{--accent:#1ABCFE;--accent2:#5ACDFF;--accent-ink:#02121C}
+.dark.coral{--accent:#FF7262;--accent2:#FF9182;--accent-ink:#1E0805}
+.logo-mark{color:var(--accent)}
 .logo-mark{transform-box:fill-box;transform-origin:center;cursor:pointer}
 [data-theme-logo]{cursor:pointer}
 body,body *{transition:background-color .3s ease,border-color .3s ease,color .3s ease}
@@ -200,7 +206,7 @@ input::placeholder{color:var(--faint)}
 .cl-foot-actions .act{margin:0;padding:6px 12px;font-size:12.5px}
 /* loading spinner (accent comet ring) */
 .spin-wrap{display:flex;justify-content:center;align-items:center;padding:60px 0}
-.spinner{width:36px;height:36px;border-radius:50%;background:conic-gradient(from 90deg,transparent 0%,var(--accent) 95%);-webkit-mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 0);mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 0);animation:ch-spin .75s linear infinite}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid var(--border-strong);border-top-color:var(--accent);animation:ch-spin .75s linear infinite}
 @keyframes ch-spin{to{transform:rotate(1turn)}}
 /* red "failed" badge shown on Pods/Jobs labels when there are failures */
 .fail-badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red);font-size:10px;font-weight:700;letter-spacing:.01em;vertical-align:middle;white-space:nowrap}
@@ -486,7 +492,7 @@ table.users tbody tr:hover{background:var(--hover)}
   display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;border-radius:9px;
   font-size:13.5px;font-weight:650;cursor:pointer;transition:transform .12s,box-shadow .12s,background .12s;white-space:nowrap;
 }
-.lp-btn.primary{color:#fff;background:linear-gradient(135deg,#0ea5e9,#0284c7);box-shadow:0 8px 22px -10px rgba(14,165,233,.55)}
+.lp-btn.primary{color:var(--accent-ink);background:var(--accent)}
 .lp-btn.primary:hover{transform:translateY(-1px);box-shadow:0 14px 28px -12px rgba(14,165,233,.7);text-decoration:none}
 .lp-btn.ghost{color:var(--text);border:1px solid var(--border-strong);background:rgba(255,255,255,.05)}
 .lp-btn.ghost:hover{background:rgba(255,255,255,.09);text-decoration:none;transform:translateY(-1px)}
@@ -498,17 +504,14 @@ table.users tbody tr:hover{background:var(--hover)}
 .lp-hero-text .eyebrow{
   display:inline-flex;align-items:center;gap:7px;margin-bottom:22px;padding:5px 13px;border-radius:999px;
   font-size:11.5px;font-weight:650;letter-spacing:.3px;color:var(--accent);
-  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.2);
+  background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);
 }
-.lp-hero-text .eyebrow .dot{background:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.2)}
+.lp-hero-text .eyebrow .dot{background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
 .lp-hero h1{
   font-size:clamp(34px,5vw,54px);line-height:1.06;font-weight:830;
   letter-spacing:-1.8px;margin:0 0 20px;color:var(--text);
 }
-.lp-hero h1 .grad{
-  background:linear-gradient(110deg,var(--accent),var(--accent2));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-}
+.lp-hero h1 .grad{color:var(--accent)}
 .lp-hero .lead{font-size:16.5px;line-height:1.7;color:var(--muted);margin:0 0 32px;max-width:460px}
 .lp-cta{display:flex;gap:12px;flex-wrap:wrap}
 .lp-cta .lp-btn{padding:12px 24px;font-size:15px}
@@ -516,9 +519,9 @@ table.users tbody tr:hover{background:var(--hover)}
 
 /* --- terminal preview --- */
 .lp-preview{
-  background:#040d18;border:1px solid rgba(56,189,248,.14);border-radius:14px;
+  background:#040d18;border:1px solid color-mix(in srgb,var(--accent) 14%,transparent);border-radius:14px;
   overflow:hidden;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
-  box-shadow:0 0 0 1px rgba(56,189,248,.06),0 40px 80px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 6%,transparent),0 40px 80px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.04);
 }
 .lp-preview-bar{
   display:flex;align-items:center;gap:7px;padding:10px 16px;
@@ -552,10 +555,10 @@ table.users tbody tr:hover{background:var(--hover)}
   background:var(--border);gap:1px;
 }
 .fcard{background:var(--bg);padding:30px 28px;transition:background .16s}
-.fcard:hover{background:rgba(56,189,248,.03)}
+.fcard:hover{background:color-mix(in srgb,var(--accent) 3%,transparent)}
 .fcard .ic{
   width:36px;height:36px;border-radius:9px;display:grid;place-items:center;margin-bottom:16px;
-  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.14);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);
 }
 .fcard h3{font-size:15px;font-weight:720;margin:0 0 7px;letter-spacing:-.2px;color:var(--text)}
 .fcard p{font-size:13.5px;line-height:1.6;color:var(--muted);margin:0}
@@ -564,7 +567,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .dl-install-rec{
   display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;
   font-size:11px;font-weight:700;letter-spacing:.2px;
-  background:rgba(56,189,248,.1);color:var(--accent);border:1px solid rgba(56,189,248,.2);
+  background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);
 }
 .dl-cmd-row{
   display:flex;align-items:center;background:rgba(4,13,24,.8);
@@ -588,7 +591,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .dl-mac-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .dl-mac-icon{
   width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
-  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.15);color:var(--accent);flex-shrink:0;
+  background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);flex-shrink:0;
 }
 .dl-mac-title{font-size:16px;font-weight:750;letter-spacing:-.3px;color:var(--text)}
 .dl-mac-step{font-size:13.5px;color:var(--muted);margin:0 0 12px;line-height:1.55}
@@ -599,10 +602,10 @@ table.users tbody tr:hover{background:var(--hover)}
   padding:22px 16px;background:var(--panel);border:1px solid var(--border);border-radius:14px;color:var(--text);
   transition:transform .15s,border-color .15s,box-shadow .15s;
 }
-.dl-card:hover{transform:translateY(-3px);text-decoration:none;border-color:rgba(56,189,248,.28);box-shadow:0 16px 36px -16px rgba(56,189,248,.2)}
+.dl-card:hover{transform:translateY(-3px);text-decoration:none;border-color:color-mix(in srgb,var(--accent) 28%,transparent);box-shadow:0 16px 36px -16px color-mix(in srgb,var(--accent) 20%,transparent)}
 .dl-ic{
   width:44px;height:44px;border-radius:12px;display:grid;place-items:center;margin-bottom:5px;color:var(--accent);
-  background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.14);
+  background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 14%,transparent);
 }
 .dl-os{font-size:15px;font-weight:750;letter-spacing:-.2px;color:var(--text)}
 .dl-sub{font-size:12.5px;color:var(--muted)}.dl-sub b{color:var(--text);font-weight:650}
@@ -670,16 +673,22 @@ async function _post(url,payload){
     return {ok:false,status:0,data:{error:m}};
   }
 }
-// Click the logo: spin it 360° and flip the colour scheme (light <-> dark).
-document.querySelectorAll('[data-theme-logo]').forEach(function(el){
-  el.addEventListener('click',function(e){
-    e.preventDefault();
-    var svg=el.matches('svg')?el:el.querySelector('svg');
-    if(svg&&svg.animate){svg.animate([{transform:'rotate(0deg)'},{transform:'rotate(360deg)'}],{duration:600,easing:'cubic-bezier(.45,0,.25,1)'});}
-    var d=document.documentElement.classList.toggle('dark');
-    try{localStorage.setItem('ch-theme',d?'dark':'light');}catch(_){}
+// Click the logo: spin it 360° and cycle the colour scheme, the same six as
+// clusterheart.com: green, blue, purple, cyan, coral, white.
+(function(){
+  var S=['green','blue','purple','cyan','coral','white'],A=['blue','purple','cyan','coral'],c=document.documentElement.classList;
+  function cur(){if(!c.contains('dark'))return 'white';for(var i=0;i<A.length;i++)if(c.contains(A[i]))return A[i];return 'green';}
+  document.querySelectorAll('[data-theme-logo]').forEach(function(el){
+    el.addEventListener('click',function(e){
+      e.preventDefault();
+      var svg=el.matches('svg')?el:el.querySelector('svg');
+      if(svg&&svg.animate){svg.animate([{transform:'rotate(0deg)'},{transform:'rotate(360deg)'}],{duration:600,easing:'cubic-bezier(.45,0,.25,1)'});}
+      var n=S[(S.indexOf(cur())+1)%S.length];
+      c.toggle('dark',n!=='white');A.forEach(function(a){c.toggle(a,a===n);});
+      try{localStorage.setItem('ch-theme',n==='white'?'light':'dark');if(n!=='white')localStorage.setItem('ch-accent',n);}catch(_){}
+    });
   });
-});
+})();
 // Wire every password show/hide toggle on the page.
 document.querySelectorAll('.pw-eye').forEach(function(btn){
   btn.addEventListener('click',function(){
@@ -697,12 +706,12 @@ document.querySelectorAll('.pw-eye').forEach(function(btn){
 // eyeBtn is the reusable show/hide-password control placed inside a .pw-wrap.
 const eyeBtn = `<button type="button" class="pw-eye" aria-label="Show password" tabindex="-1"><svg class="eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>`
 
-const logoSVG = `<svg class="logo-mark" data-theme-logo role="button" aria-label="Switch colour scheme" width="26" height="26" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#8EC6FA"/><circle cx="50" cy="15" r="10.5" fill="#8EC6FA"/><circle cx="80.3" cy="32.5" r="10.5" fill="#8EC6FA"/><circle cx="80.3" cy="67.5" r="10.5" fill="#8EC6FA"/><circle cx="50" cy="85" r="10.5" fill="#8EC6FA"/><circle cx="19.7" cy="67.5" r="10.5" fill="#8EC6FA"/><circle cx="19.7" cy="32.5" r="10.5" fill="#8EC6FA"/></svg>`
+const logoSVG = `<svg class="logo-mark" data-theme-logo role="button" aria-label="Switch colour scheme" width="26" height="26" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="currentColor"/><circle cx="50" cy="15" r="10.5" fill="currentColor"/><circle cx="80.3" cy="32.5" r="10.5" fill="currentColor"/><circle cx="80.3" cy="67.5" r="10.5" fill="currentColor"/><circle cx="50" cy="85" r="10.5" fill="currentColor"/><circle cx="19.7" cy="67.5" r="10.5" fill="currentColor"/><circle cx="19.7" cy="32.5" r="10.5" fill="currentColor"/></svg>`
 
 const lockSVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
 
 // bigLogo is the large brand mark shown in the left panel of the auth pages.
-const bigLogo = `<span class="logo-mark" data-theme-logo role="button" aria-label="Switch colour scheme" style="display:inline-flex"><svg width="132" height="132" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="#8EC6FA"/><circle cx="50" cy="15" r="10.5" fill="#8EC6FA"/><circle cx="80.3" cy="32.5" r="10.5" fill="#8EC6FA"/><circle cx="80.3" cy="67.5" r="10.5" fill="#8EC6FA"/><circle cx="50" cy="85" r="10.5" fill="#8EC6FA"/><circle cx="19.7" cy="67.5" r="10.5" fill="#8EC6FA"/><circle cx="19.7" cy="32.5" r="10.5" fill="#8EC6FA"/></svg></span>`
+const bigLogo = `<span class="logo-mark" data-theme-logo role="button" aria-label="Switch colour scheme" style="display:inline-flex"><svg width="132" height="132" viewBox="0 0 100 100"><circle cx="50" cy="50" r="15" fill="currentColor"/><circle cx="50" cy="15" r="10.5" fill="currentColor"/><circle cx="80.3" cy="32.5" r="10.5" fill="currentColor"/><circle cx="80.3" cy="67.5" r="10.5" fill="currentColor"/><circle cx="50" cy="85" r="10.5" fill="currentColor"/><circle cx="19.7" cy="67.5" r="10.5" fill="currentColor"/><circle cx="19.7" cy="32.5" r="10.5" fill="currentColor"/></svg></span>`
 
 // --- home / landing ------------------------------------------------------
 
