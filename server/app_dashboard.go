@@ -1183,7 +1183,10 @@ function renderServerDetail(c,html,box){
 // thinner line above it, so a spike shorter than a bucket still shows at full
 // height. Drag across a chart (or use "Zoom to peak") to zoom into a window;
 // zoomed windows come back at up to 30s resolution.
-var tlState={cluster:null,range:'7d',zoom:null,data:null,table:false,seq:0,charts:[]};
+// The range opens on the last one picked (1 hour the first time), so the page
+// leads with what is happening now.
+var TL_RANGE_KEY='ch-tl-range';
+var tlState={cluster:null,range:(function(){try{var r=localStorage.getItem(TL_RANGE_KEY);if(/^(15m|1h|6h|24h|7d)$/.test(r||''))return r;}catch(e){}return '1h';})(),zoom:null,data:null,table:false,seq:0,charts:[]};
 var TL_RANGES=[['15m','15 min'],['1h','1 hour'],['6h','6 hours'],['24h','24 hours'],['7d','7 days']];
 var TL_RANGE_NAMES={'15m':'15 minutes','1h':'hour','6h':'6 hours','24h':'24 hours','7d':'7 days'};
 var TL_MAX_SERIES=8;
@@ -1335,8 +1338,10 @@ function tlCardHtml(ch,ci,W,from,to,step){
   // Zooming only helps when the peak sits in a bucket wider than 30s.
   var zoomBtn=cp&&stepMs>30000?' <button class="tl-pkzoom" data-ci="'+ci+'" title="Zoom in around this peak">at '+esc(tlTimeLabel(cp.t))+' &rsaquo;</button>':
     (cp?' <span class="tl-pkat">at '+esc(tlTimeLabel(cp.t))+'</span>':'');
-  var sum=one&&last?'<p class="tl-sum"><b>'+esc(ch.fmt(last.v))+'</b> now · peak <b>'+esc(ch.fmt(tlPeak(s0)))+'</b>'+zoomBtn+'</p>':
-    (cp?'<p class="tl-sum">peak <b>'+esc(ch.fmt(tlPkVal(cp)))+'</b>'+zoomBtn+'</p>':'');
+  // Name the peak's window ("7-day peak") so an old spike never reads as now.
+  var pw=tlState.zoom?'peak':({'15m':'15-min','1h':'1-hour','6h':'6-hour','24h':'24-hour','7d':'7-day'}[tlState.range]||'')+' peak';
+  var sum=one&&last?'<p class="tl-sum"><b>'+esc(ch.fmt(last.v))+'</b> now · '+pw+' <b>'+esc(ch.fmt(tlPeak(s0)))+'</b>'+zoomBtn+'</p>':
+    (cp?'<p class="tl-sum">'+pw+' <b>'+esc(ch.fmt(tlPkVal(cp)))+'</b>'+zoomBtn+'</p>':'');
   var legend='';
   if(!one){
     legend='<div class="tl-legend">'+ch.series.map(function(s,i){var l=tlLast(s);
@@ -1430,6 +1435,7 @@ function tlWireBar(root){
   root.querySelectorAll('.tl-range').forEach(function(b){b.addEventListener('click',function(){
     if(tlState.range===b.dataset.r&&!tlState.zoom)return;
     tlState.range=b.dataset.r;tlState.zoom=null;
+    try{localStorage.setItem(TL_RANGE_KEY,tlState.range);}catch(e){}
     root.querySelectorAll('.tl-range').forEach(function(x){x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',x===b);});
     loadTimeline(tlState.cluster);
   });});
