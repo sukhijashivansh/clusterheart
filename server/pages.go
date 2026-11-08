@@ -75,6 +75,7 @@ body{
   -webkit-font-smoothing:antialiased;line-height:1.5;
 }
 ::selection{background:var(--accent);color:var(--accent-ink)}
+h1,h2,h3{text-wrap:balance}p,li{text-wrap:pretty}
 .mono{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
 a{color:var(--text);text-decoration:none;font-weight:600}
 a:hover{color:var(--accent)}

@@ -156,6 +156,10 @@
         #dash button:focus { outline: none; }
         #dash button:focus-visible { outline: 1px solid rgb(var(--c-accent)); outline-offset: 2px; }
 
+        /* Even line breaks: no lone words on narrow screens */
+        h1, h2, h3 { text-wrap: balance; }
+        p, li { text-wrap: pretty; }
+
         /* Scroll reveal */
         .reveal { opacity: 0; transform: translateY(14px); transition: opacity .55s ease-out, transform .55s ease-out; }
         .reveal.is-visible { opacity: 1; transform: none; }
@@ -227,8 +231,8 @@
     <!-- ===== HERO ===== -->
     <section id="top" class="pt-32 sm:pt-40 pb-16 sm:pb-20">
         <div class="max-w-5xl mx-auto px-5 sm:px-6 text-center">
-            <h1 class="text-[clamp(2rem,6vw,3.75rem)] font-extrabold tracking-tight leading-[1.08] mb-8">
-                Every cluster. Every server.<br><span class="text-accent">One heartbeat.</span>
+            <h1 class="text-[clamp(2.25rem,6vw,3.75rem)] font-extrabold tracking-tight leading-[1.08] mb-8">
+                <span class="block sm:inline">Every cluster.</span> <span class="block sm:inline">Every server.</span><br class="hidden sm:block"><span class="text-accent">One heartbeat.</span>
             </h1>
 
             <ul class="text-[15px] sm:text-lg text-muted w-fit max-w-full mx-auto mb-10 space-y-2.5 text-left">
@@ -337,7 +341,7 @@
     <section id="features" class="py-20 sm:py-24 bg-surface border-t border-line">
         <div class="max-w-6xl mx-auto px-5 sm:px-6">
             <p class="mono text-xs font-medium tracking-[0.18em] text-accent uppercase mb-4">01 / What we monitor</p>
-            <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-10">Everything that keeps it running.</h2>
+            <h2 class="text-[1.6rem] sm:text-4xl font-bold tracking-tight mb-10">Everything that keeps it running.</h2>
             <div class="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
                 <div class="honeycomb mx-auto lg:mx-0" role="group" aria-label="What we monitor">
                     <div class="hex-row"><button type="button" class="hex" data-k="pod" aria-pressed="false"><span class="hex-in"><span class="hex-label">Pods</span></span></button><button type="button" class="hex" data-k="job" aria-pressed="false"><span class="hex-in"><span class="hex-label">Jobs</span></span></button><button type="button" class="hex" data-k="node" aria-pressed="false"><span class="hex-in"><span class="hex-label">Nodes</span></span></button></div>
@@ -359,7 +363,7 @@
         <div class="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-5 gap-10 lg:gap-14 items-center">
             <div class="lg:col-span-2">
                 <p class="mono text-xs font-medium tracking-[0.18em] text-accent uppercase mb-4">02 / Connect</p>
-                <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-8">One command per machine.</h2>
+                <h2 class="text-[1.6rem] sm:text-4xl font-bold tracking-tight mb-8">One command per machine.</h2>
                 <ol class="space-y-3 mono text-sm text-muted">
                     <li><span class="text-accent">01</span>&nbsp; sign up</li>
                     <li><span class="text-accent">02</span>&nbsp; add a cluster or server</li>
@@ -412,7 +416,7 @@
     <section id="why" class="py-20 sm:py-24 border-t border-line">
         <div class="max-w-6xl mx-auto px-5 sm:px-6">
             <p class="mono text-xs font-medium tracking-[0.18em] text-accent uppercase mb-4">05 / Why us</p>
-            <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-10">Why Clusterheart.</h2>
+            <h2 class="text-[1.6rem] sm:text-4xl font-bold tracking-tight mb-10">Why Clusterheart.</h2>
             <div class="grid md:grid-cols-3 gap-3 reveal">
                 <div class="border border-line bg-panel p-5">
                     <h3 class="font-bold mb-1.5">All in one</h3>
@@ -435,7 +439,7 @@
         <div class="max-w-6xl mx-auto px-5 sm:px-6 grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
             <div class="lg:sticky lg:top-28">
                 <p class="mono text-xs font-medium tracking-[0.18em] text-accent uppercase mb-4">06 / FAQ</p>
-                <h2 class="text-3xl sm:text-4xl font-bold tracking-tight leading-[1.1]">Straight answers.</h2>
+                <h2 class="text-[1.6rem] sm:text-4xl font-bold tracking-tight leading-[1.1]">Straight answers.</h2>
             </div>
             <div class="border-t border-line">
                 <details class="border-b border-line">
@@ -465,7 +469,7 @@
     <!-- ===== GET STARTED ===== -->
     <section id="start" class="py-20 sm:py-28 border-t border-line">
         <div class="max-w-3xl mx-auto px-5 sm:px-6 text-center">
-            <h2 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-[1.08] mb-10">Live in <span class="text-accent">one minute.</span></h2>
+            <h2 class="text-[1.75rem] sm:text-5xl font-extrabold tracking-tight leading-[1.08] mb-10">Live in <span class="text-accent">one minute.</span></h2>
             <div class="flex flex-col sm:flex-row justify-center gap-3">
                 <a href="/signup" class="inline-flex items-center justify-center h-12 px-8 bg-btn hover:bg-btn2 text-btnink font-semibold">Get started</a>
                 <a href="https://cal.com/shivansh-sukhija/30min" target="_blank" rel="noopener" class="inline-flex items-center justify-center h-12 px-8 border border-line2 font-semibold hover:border-accent hover:bg-panel2">Let's talk</a>
