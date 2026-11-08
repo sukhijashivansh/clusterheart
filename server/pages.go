@@ -205,7 +205,9 @@ a.act.approve:hover{color:var(--accent-ink)}
 .tb-brand:hover{color:var(--text)}
 .tb-brand .wordmark{font-size:16px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
 .tb-right{display:flex;align-items:center;gap:12px}
-.notice-bar{margin:0 0 20px;padding:12px 16px;font-size:13.5px;color:var(--text);background:color-mix(in srgb,var(--accent) 10%,var(--surface2));border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.notice-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 20px;padding:10px 12px 10px 16px;font-size:13.5px;color:var(--text);background:color-mix(in srgb,var(--accent) 10%,var(--surface2));border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.notice-bar .act{flex:none;padding:6px 16px}
+.notice-bar[hidden]{display:none}
 .tb-ws{margin-right:auto;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--muted);padding:5px 10px;border:1px solid var(--border-strong)}
 .tb-ws.shared{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
 .menu-label{padding:6px 12px 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}

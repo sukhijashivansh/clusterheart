@@ -578,6 +578,7 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	_ = a.store.setSeen(ctx, u.Email)
+	notice := a.store.getNotice(ctx)
 	ws := a.workspaceFor(ctx, u)
 	// The menu lists every workspace this person can open (theirs + teams).
 	type space struct {
@@ -596,5 +597,5 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 	}
 	shared := ws.Owner != strings.ToLower(u.Email)
 	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email, "ManifestURL": envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml"),
-		"HostUpdateCmd": hostUpdateSnippet(), "Notice": a.store.getNotice(ctx).Message, "Workspace": ws.Name, "Shared": shared, "Role": ws.Role, "CanManage": ws.canManage(), "Spaces": spaces})
+		"HostUpdateCmd": hostUpdateSnippet(), "Notice": notice.Message, "NoticeKey": notice.UpdatedAt.UnixMilli(), "Workspace": ws.Name, "Shared": shared, "Role": ws.Role, "CanManage": ws.canManage(), "Spaces": spaces})
 }

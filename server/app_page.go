@@ -33,13 +33,25 @@ const appBody = `{{define "body"}}<div class="app2">
   </div>
 </header>
 <main class="app2-main">
-  {{if .Notice}}<div class="notice-bar" role="status">{{.Notice}}</div>{{end}}
+  {{if .Notice}}<div class="notice-bar" id="notice" data-key="{{.NoticeKey}}" role="status" hidden><span>{{.Notice}}</span><button class="act revoke" id="notice-seen">Seen</button></div>{{end}}
   <div id="list-head"></div>
   <div id="clusters"></div>
 </main>
 </div>{{end}}
 {{define "script"}}<script>
 var NODE_MANIFEST_URL={{.ManifestURL}};
+// Broadcast bar: "Seen" hides this message in this browser; a new or edited
+// broadcast has a new key, so it shows again.
+(function(){
+  var n=document.getElementById('notice');if(!n)return;
+  var k='ch-notice-seen',seen='';try{seen=localStorage.getItem(k)||'';}catch(e){}
+  if(seen===n.dataset.key)return;
+  n.hidden=false;
+  document.getElementById('notice-seen').addEventListener('click',function(){
+    try{localStorage.setItem(k,n.dataset.key);}catch(e){}
+    n.hidden=true;
+  });
+})();
 // CAN_MANAGE is false for team members with the view role: the server refuses
 // their changes anyway, this just hides the controls.
 var CAN_MANAGE={{.CanManage}};
