@@ -37,8 +37,7 @@ if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _
 
 const usersContent = `
 <p class="kicker">Access control</p>
-<h1 style="margin:0 0 7px">Users</h1>
-<p class="sub">{{if .Pending}}<span class="count">{{.Pending}}</span>awaiting approval. Approve to grant access, revoke to cut it off.{{else}}Everyone's reviewed. Approve new sign-ups or revoke access anytime.{{end}}</p>
+{{if .Pending}}<p class="sub"><span class="count">{{.Pending}}</span>awaiting approval. Approve to grant access, revoke to cut it off.</p>{{end}}
 <div class="adm-totals"><div><b>{{len .Users}}</b><span>Users</span></div><div><b>{{.TotalClusters}}</b><span>Clusters</span></div><div><b>{{.TotalServers}}</b><span>Servers</span></div></div>
 <section class="card2" style="margin-top:16px">
 <table class="users">

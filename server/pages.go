@@ -130,7 +130,7 @@ input::placeholder{color:var(--faint)}
 /* --- admin (sidebar shell, Apple-style) --- */
 .admin-shell{display:flex;min-height:100vh}
 .admin-nav{width:238px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden;white-space:nowrap;transition:width .28s cubic-bezier(.4,0,.2,1),padding .28s cubic-bezier(.4,0,.2,1),opacity .2s ease}
-.an-brand{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
+.an-brand{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;padding:2px 14px 14px;margin:0 -14px 12px;border-bottom:1px solid var(--border)}
 .an-brandrow{display:flex;align-items:center;gap:9px;min-width:0}
 .an-brand .wordmark{font-size:16px}
 .an-list{display:flex;flex-direction:column;gap:2px}
@@ -451,8 +451,8 @@ table.users tbody tr:hover{background:var(--hover)}
 .u-ver{font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--muted)}
 .u-cnt{font-variant-numeric:tabular-nums;white-space:nowrap}.u-cnt b{font-size:15px;font-weight:650;color:var(--text)}
 .u-off{font-size:12px;color:var(--amber,var(--muted));margin-left:4px}.u-none{color:var(--faint)}
-.adm-totals{display:flex;gap:0;margin-top:22px;border:1px solid var(--border);background:var(--surface2);width:max-content;max-width:100%}
-.adm-totals>div{display:flex;flex-direction:column;gap:2px;padding:12px 22px;border-right:1px solid var(--border)}.adm-totals>div:last-child{border-right:none}
+.adm-totals{display:flex;gap:0;margin-top:14px;border:1px solid var(--border);background:var(--surface2);width:max-content;max-width:100%}
+.adm-totals>div{display:flex;align-items:baseline;gap:8px;white-space:nowrap;padding:12px 22px;border-right:1px solid var(--border)}.adm-totals>div:last-child{border-right:none}
 .adm-totals b{font-size:20px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}.adm-totals span{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
 .cell-act{text-align:right;white-space:nowrap}
 .pill{display:inline-flex;align-items:center;padding:0;font-size:13px;font-weight:600;background:none}
