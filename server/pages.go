@@ -316,9 +316,10 @@ a.act.approve:hover{color:var(--accent-ink)}
 .lv-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)}
 .lv-bar .toolbar-input{height:34px}
 .lv-bar .lv-find{flex:1 1 200px;min-width:0}
-.lv-bar select.toolbar-input{max-width:220px}
+.lv-bar select.toolbar-input{max-width:220px;padding-right:30px;appearance:none;-webkit-appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
+.lv-bar .toolbar-input,.lv-bar .act{box-sizing:border-box}
 .lv-bar .act{height:34px;padding:0 14px;font-size:12.5px}
-.lv-chk{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;font-size:12.5px;font-weight:600;color:var(--muted);border:1px solid var(--border-strong);cursor:pointer;user-select:none}
+.lv-chk{box-sizing:border-box;display:inline-flex;align-items:center;gap:7px;height:34px;margin:0;padding:0 12px;font-size:12.5px;font-weight:600;color:var(--muted);border:1px solid var(--border-strong);cursor:pointer;user-select:none}
 .lv-chk input{accent-color:var(--accent);margin:0}
 .lv-chk:has(input:checked){color:var(--text)}
 .lv-body{flex:1;min-height:0;overflow:auto;background:var(--input-bg)}
@@ -331,7 +332,7 @@ a.act.approve:hover{color:var(--accent-ink)}
 .lv-ln.lv-err{color:var(--red)}.lv-ln.lv-warn{color:var(--amber)}
 .lv-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;padding:40px 24px;text-align:center;font-size:13.5px;color:var(--muted);line-height:1.6}
 .lv-foot{display:flex;justify-content:space-between;gap:12px;padding:9px 20px;font-size:12px;color:var(--faint);border-top:1px solid var(--border)}
-@media(max-width:640px){.lv-head{padding:14px 16px 12px}.lv-bar{padding:10px 16px}.lv-ln::before{width:38px;padding-right:10px}.lv-bar .lv-find{flex-basis:100%}}
+@media(max-width:640px){.lv-head{padding:14px 16px 12px}.lv-bar{padding:10px 16px}.lv-ln::before{width:38px;padding-right:10px}.lv-bar .lv-find{flex-basis:100%}.lv-bar{gap:6px}.lv-bar>:not(.lv-find){flex:1 1 auto;justify-content:center}.lv-bar .act{padding:0 10px}.lv-chk{padding:0 10px}}
 #pods-body tr,#jobs-body tr{cursor:pointer}
 #pods-body tr:hover td,#jobs-body tr:hover td{background:var(--hover)}
 /* apple-style small modal */
