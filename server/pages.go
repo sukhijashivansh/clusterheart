@@ -142,6 +142,13 @@ a.act.approve:hover{color:var(--accent-ink)}
 .acct-table .toolbar-input{height:32px}
 .acct-table td.cell-act .act{padding:6px 14px}
 .acct-table .empty{padding:26px 20px;font-size:13.5px;text-align:left}
+.perm-set{display:inline-flex;gap:6px;flex-wrap:wrap}
+.perm{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;font:inherit;font-size:12.5px;font-weight:600;color:var(--faint);background:transparent;border:1px solid var(--border-strong);cursor:pointer;transition:color .14s,border-color .14s,background .14s}
+.perm::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--border-strong);transition:background .14s}
+.perm:hover{color:var(--muted)}
+.perm.on{color:var(--text);border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.perm.on::before{background:var(--accent)}
+.perm:disabled{opacity:.5;cursor:default}
 .act.revoke.sure{color:var(--red);border-color:color-mix(in srgb,var(--red) 50%,transparent)}
 .ws-row{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border)}
 .ws-row:first-child{border-top:none}
@@ -159,7 +166,7 @@ a.act.approve:hover{color:var(--accent-ink)}
   table.users.acct-table td{display:block;width:auto;padding:0;border:none}
   table.users.acct-table td.cell-user{flex-basis:100%}
   table.users.acct-table td::before{display:none!important;content:none!important}
-  table.users.acct-table td.cell-act{margin-left:auto}table.users.acct-table td.cell-act .act{margin:0}}
+  table.users.acct-table td.cell-act{margin-left:auto;margin-top:0}table.users.acct-table td.cell-act .act{margin:0}}
 .alt a{color:var(--accent);font-weight:600}
 .trust{margin-top:24px;padding-top:22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--faint)}
 .msg{min-height:20px;margin-top:16px;font-size:13px}
@@ -333,8 +340,8 @@ a.act.approve:hover{color:var(--accent-ink)}
 .lv-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;padding:40px 24px;text-align:center;font-size:13.5px;color:var(--muted);line-height:1.6}
 .lv-foot{display:flex;justify-content:space-between;gap:12px;padding:9px 20px;font-size:12px;color:var(--faint);border-top:1px solid var(--border)}
 @media(max-width:640px){.lv-head{padding:14px 16px 12px}.lv-bar{padding:10px 16px}.lv-ln::before{width:38px;padding-right:10px}.lv-bar .lv-find{flex-basis:100%}.lv-bar{gap:6px}.lv-bar>:not(.lv-find){flex:1 1 auto;justify-content:center}.lv-bar .act{padding:0 10px}.lv-chk{padding:0 10px}}
-#pods-body tr,#jobs-body tr{cursor:pointer}
-#pods-body tr:hover td,#jobs-body tr:hover td{background:var(--hover)}
+tbody.rows-click tr{cursor:pointer}
+tbody.rows-click tr:hover td{background:var(--hover)}
 /* apple-style small modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:mfade .15s ease}
 @keyframes mfade{from{opacity:0}to{opacity:1}}
@@ -823,7 +830,7 @@ const accountBody = `{{define "body"}}<div class="app2">
       <p class="card2-title">Team <span class="acct-count" id="t-count"></span></p>
       <div class="team-add"><input id="t-email" class="toolbar-input" type="email" placeholder="teammate@company.com" autocomplete="off" aria-label="Email"><select id="t-role" class="toolbar-input" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select><button id="t-add" class="act approve">Add</button></div>
     </div>
-    <table class="users acct-table"><tbody id="team-list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
+    <table class="users acct-table"><tbody id="team-list"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody></table>
   </section>
 {{else}}
   <section class="card2"><div class="card2-body"><p class="acct-pending">Your account is waiting for an admin to approve it. If a teammate added you, sign in with the email they used.</p></div></section>
@@ -844,16 +851,26 @@ document.getElementById('logout').addEventListener('click',async function(){
     var d=await r.json().catch(function(){return {};});return {ok:r.ok,data:d};
   }
   function roleSel(m){return '<select class="toolbar-input t-role" data-email="'+esc(m.email)+'" aria-label="Role for '+esc(m.email)+'"><option value="member"'+(m.role==='member'?' selected':'')+'>Member</option><option value="admin"'+(m.role==='admin'?' selected':'')+'>Admin</option></select>';}
+  // Per-person switches: AI assistant, reading logs, applying changes.
+  var PERMS=[['ai','AI','Use the AI assistant and AI diagnosis'],['logs','Logs','Read pod, job and server logs'],['apply','Apply','Apply rightsizing and propose or approve fixes']];
+  function permSet(m){
+    var a=m.access||{};
+    return '<div class="perm-set">'+PERMS.map(function(p){
+      var on=!!a[p[0]];
+      return '<button class="perm'+(on?' on':'')+'" data-email="'+esc(m.email)+'" data-p="'+p[0]+'" aria-pressed="'+on+'" title="'+p[2]+'">'+p[1]+'</button>';
+    }).join('')+'</div>';
+  }
   async function load(){
     var r=await api('GET','/api/team');
-    if(!r.ok){list.innerHTML='<tr><td colspan="4" class="empty">Could not load your team.</td></tr>';return;}
+    if(!r.ok){list.innerHTML='<tr><td colspan="5" class="empty">Could not load your team.</td></tr>';return;}
     var t=r.data.team||[],ws=r.data.workspaces||[];
     list.innerHTML=t.length?t.map(function(m){
       return '<tr><td class="cell-user"><div class="u-name">'+esc(m.name||m.email.split('@')[0])+'</div><div class="u-email">'+esc(m.email)+'</div></td>'+
         '<td data-label="Status">'+(m.joined?'<span class="pill on">Joined</span>':'<span class="pill off">Invited</span>')+'</td>'+
         '<td data-label="Role">'+roleSel(m)+'</td>'+
+        '<td data-label="Access">'+permSet(m)+'</td>'+
         '<td class="cell-act"><button class="act revoke team-x" data-email="'+esc(m.email)+'">Remove</button></td></tr>';
-    }).join(''):'<tr><td colspan="4" class="empty">No one yet. People you add see your clusters and servers, and get an email to join.</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="empty">No one yet. People you add see your clusters and servers, and get an email to join.</td></tr>';
     document.getElementById('t-count').textContent=t.length?t.length:'';
     var box=document.getElementById('spaces');
     if(ws.length>1){
@@ -878,6 +895,15 @@ document.getElementById('logout').addEventListener('click',async function(){
     var s=e.target.closest&&e.target.closest('.t-role');if(!s)return;
     s.disabled=true;var r=await api('PATCH','/api/team',{email:s.dataset.email,role:s.value});s.disabled=false;
     _toast(r.ok?'Role updated':(r.data.error||'Could not update.'),r.ok?'ok':'err');
+    load(); // apply follows the role unless it was set by hand
+  });
+  document.addEventListener('click',async function(e){
+    var b=e.target.closest&&e.target.closest('.perm');if(!b)return;
+    var on=!b.classList.contains('on'),body={email:b.dataset.email};body[b.dataset.p]=on;
+    b.disabled=true;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);
+    var r=await api('PATCH','/api/team',body);b.disabled=false;
+    if(!r.ok){b.classList.toggle('on',!on);b.setAttribute('aria-pressed',!on);_toast(r.data.error||'Could not update.','err');return;}
+    _toast(b.textContent+(on?' on for ':' off for ')+b.dataset.email,'ok');
   });
   // Two-step remove/leave: the first click asks, the second does it.
   document.addEventListener('click',async function(e){

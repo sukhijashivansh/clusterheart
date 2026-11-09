@@ -88,10 +88,11 @@ const aiJobTTL = 10 * time.Minute
 // with {"history":[{"role":"user|assistant","text":"..."}]}. Returns {"jobId"};
 // the answer is collected from GET /api/app/chat/{jobId}.
 func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREUser(w, r)
+	u, ws, ok := a.wsAllowed(w, r, "ai")
 	if !ok {
 		return
 	}
+	tenant := ws.Tenant
 	if !aiRL.allow("ai|" + u.Email) {
 		writeJSON(w, 429, map[string]any{"error": "Too many questions. Please wait a few minutes and try again."})
 		return
@@ -112,7 +113,7 @@ func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctxText, err := a.clusterChatContext(tenant, r.PathValue("id"))
+	ctxText, err := a.clusterChatContext(tenant, r.PathValue("id"), ws.Access.Logs)
 	if err != nil {
 		writeJSON(w, 502, map[string]any{"error": err.Error()})
 		return
@@ -176,7 +177,7 @@ func (a *app) handleAppClusterChat(w http.ResponseWriter, r *http.Request) {
 // {"done":false} while running, then {"done":true,"text":...} or
 // {"done":true,"error":...}.
 func (a *app) handleAppChatResult(w http.ResponseWriter, r *http.Request) {
-	u, _, ok := a.appSREUser(w, r)
+	u, _, ok := a.wsAllowed(w, r, "ai")
 	if !ok {
 		return
 	}
@@ -289,10 +290,16 @@ func openRouterChat(parent context.Context, key, model string, msgs []map[string
 
 // clusterChatContext renders the cluster's latest snapshot and open incidents
 // as compact text for the system prompt.
-func (a *app) clusterChatContext(tenant, id string) (string, error) {
+// clusterChatContext builds the snapshot text the AI sees; without log access
+// it leaves out everything log-derived, so the assistant can't quote logs the
+// person may not read.
+func (a *app) clusterChatContext(tenant, id string, logs bool) (string, error) {
 	code, data, err := a.cpDo("GET", "/api/v1/clusters?tenantId="+url.QueryEscape(tenant), nil)
 	if err != nil || code != 200 {
 		return "", fmt.Errorf("could not load the cluster")
+	}
+	if !logs {
+		data = stripLogs(data)
 	}
 	var list struct {
 		Clusters []struct {

@@ -49,7 +49,7 @@ func (a *app) saveChatTurn(email, clusterID, q, ans string) {
 // handleAppChatHistory returns (GET) or clears (DELETE) the user's saved chat
 // for one cluster: /api/app/clusters/{id}/chat.
 func (a *app) handleAppChatHistory(w http.ResponseWriter, r *http.Request) {
-	u, _, ok := a.appSREUser(w, r)
+	u, _, ok := a.wsAllowed(w, r, "ai")
 	if !ok {
 		return
 	}

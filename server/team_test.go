@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +25,18 @@ func TestWorkspaceName(t *testing.T) {
 		if got := workspaceName(in[0], in[1]); got != want {
 			t.Errorf("workspaceName(%q,%q) = %q, want %q", in[0], in[1], got, want)
 		}
+	}
+	if got := (teamMember{Role: roleMember}).access(); got != (access{AI: true, Logs: true}) {
+		t.Errorf("member access = %+v", got)
+	}
+	yes := true
+	if got := (teamMember{Role: roleMember, NoAI: true, Apply: &yes}).access(); got != (access{Logs: true, Apply: true}) {
+		t.Errorf("toggled member access = %+v", got)
+	}
+	in := `{"clusters":[{"clusterId":"c1","latest":{"nodes":{"total":3},"podLogs":[{"pod":"p"}],"host":{"cpu":1.5,"errorLogs":[{"message":"x"}]},"secretFindings":[{"source":"log","context":"token=..."},{"source":"env","context":"KEY"}]}}]}`
+	out := string(stripLogs([]byte(in)))
+	if strings.Contains(out, "podLogs") || strings.Contains(out, "errorLogs") || strings.Contains(out, "token=") || !strings.Contains(out, `"KEY"`) || !strings.Contains(out, `"total":3`) || !strings.Contains(out, `"cpu":1.5`) {
+		t.Errorf("stripLogs: %s", out)
 	}
 	for role, want := range map[string]bool{roleOwner: true, roleAdmin: true, roleMember: false, "": false} {
 		if got := (workspace{Role: role}).canManage(); got != want {
@@ -112,6 +125,9 @@ func TestTeamFlow(t *testing.T) {
 	if w.Tenant != tenantFor(owner.Email) || w.Role != roleMember || w.canManage() || w.Name != "Shivansh's workspace" {
 		t.Fatalf("member workspace: %+v", w)
 	}
+	if w.Access != (access{AI: true, Logs: true}) {
+		t.Fatalf("member default access: %+v", w.Access)
+	}
 
 	// The role change to admin grants manage rights.
 	if code, _ := call(owner.Email, "PATCH", "/api/team", map[string]string{"email": "new@acme.io", "role": "admin"}); code != 200 {
@@ -119,6 +135,20 @@ func TestTeamFlow(t *testing.T) {
 	}
 	if w := ws("new@acme.io"); !w.canManage() || w.Tenant != tenantFor(owner.Email) {
 		t.Fatalf("admin workspace: %+v", w)
+	}
+	if w := ws("new@acme.io"); w.Access != fullAccess {
+		t.Fatalf("admin default access: %+v", w.Access)
+	}
+
+	// Toggles change only what was sent; the role stays.
+	if code, _ := call(owner.Email, "PATCH", "/api/team", map[string]any{"email": "new@acme.io", "logs": false, "apply": false}); code != 200 {
+		t.Fatalf("toggle: %d", code)
+	}
+	if w := ws("new@acme.io"); w.Role != roleAdmin || w.Access != (access{AI: true}) {
+		t.Fatalf("after toggles: %+v", w)
+	}
+	if code, _ := call(owner.Email, "PATCH", "/api/team", map[string]any{"email": "new@acme.io"}); code != 400 {
+		t.Fatalf("empty patch: %d", code)
 	}
 
 	// An existing, still-pending account is approved and switched on add.

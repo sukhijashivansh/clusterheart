@@ -62,10 +62,11 @@ var logRL = newRateLimiter(120, 10*time.Minute)
 // handleAppStartLog: POST /api/app/clusters/{id}/logs
 // {"namespace","pod"|"job","container","previous","tail"}
 func (a *app) handleAppStartLog(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREUser(w, r)
+	u, ws, ok := a.wsAllowed(w, r, "logs")
 	if !ok {
 		return
 	}
+	tenant := ws.Tenant
 	if !logRL.allow("log|" + u.Email) {
 		writeJSON(w, 429, map[string]any{"error": "Too many log reads. Please wait a few minutes."})
 		return
@@ -88,10 +89,11 @@ func (a *app) handleAppStartLog(w http.ResponseWriter, r *http.Request) {
 
 // handleAppLogResult: GET /api/app/logs/{id}
 func (a *app) handleAppLogResult(w http.ResponseWriter, r *http.Request) {
-	_, tenant, ok := a.appSREUser(w, r)
+	_, ws, ok := a.wsAllowed(w, r, "logs")
 	if !ok {
 		return
 	}
+	tenant := ws.Tenant
 	code, data, err := a.cpDo("GET", "/api/v1/logs/"+url.PathEscape(r.PathValue("id"))+"?tenantId="+url.QueryEscape(tenant), nil)
 	cpRelay(w, code, data, err)
 }

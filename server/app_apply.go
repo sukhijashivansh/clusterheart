@@ -87,10 +87,11 @@ var k8sNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$`)
 // It creates a SetResources proposal as the user and approves it in one step
 // (the click plus confirmation is the human approval).
 func (a *app) handleAppRightsize(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREManager(w, r)
+	u, ws, ok := a.wsAllowed(w, r, "apply")
 	if !ok {
 		return
 	}
+	tenant := ws.Tenant
 	var in struct {
 		Kind      string `json:"kind"`
 		Namespace string `json:"namespace"`

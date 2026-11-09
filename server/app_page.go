@@ -55,6 +55,9 @@ var NODE_MANIFEST_URL={{.ManifestURL}};
 // CAN_MANAGE is false for team members with the view role: the server refuses
 // their changes anyway, this just hides the controls.
 var CAN_MANAGE={{.CanManage}};
+// ACCESS is what the owner lets this person do: {ai, logs, apply}. Same deal:
+// the server enforces it, this hides what they can't use.
+var ACCESS={{.Access}};
 document.querySelectorAll('.ws-pick').forEach(function(b){b.addEventListener('click',async function(){
   if(b.classList.contains('on'))return;
   b.disabled=true;var r=await _post('/api/workspace',{owner:b.dataset.owner});
@@ -585,7 +588,7 @@ function renderServerDetail(c,html,box){
     '<button class="tab" data-tab="timeline">Timeline</button>'+
     '<button class="tab" data-tab="health">Health'+(probs.length?' <span class="tab-badge">'+probs.length+'</span>':'')+'</button>'+
     '<button class="tab" data-tab="secrets">Secrets'+(secrets.length?' <span class="tab-badge">'+secrets.length+'</span>':'')+'</button>'+
-    '<button class="tab" data-tab="ai">AI</button>'+
+    (ACCESS.ai?'<button class="tab" data-tab="ai">AI</button>':'')+
   '</div>';
   // Overview
   var row=function(k,v){return '<div class="sec-k">'+k+'</div><div class="sec-v">'+v+'</div>';};
@@ -650,7 +653,7 @@ function renderServerDetail(c,html,box){
     '<div class="tabpanel" data-panel="timeline"><div id="tl-root"></div></div>'+
     '<div class="tabpanel" data-panel="health">'+he+'</div>'+
     '<div class="tabpanel" data-panel="secrets">'+secretsSection(secrets,c)+'</div>'+
-    '<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>';
+    (ACCESS.ai?'<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>':'');
   box.innerHTML=html;
   sreState.cluster=id;sreState.data=null;rsState.cluster=id;
   aiWire(id);
@@ -1238,7 +1241,7 @@ function renderRightsizing(){
     return '<td class="rs-num"><div>'+top+'</div><div class="rs-sub'+cls+'">'+(p==null?'no request':p+'%')+'</div></td>';
   }
   var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><p class="card2-title">Rightsizing</p>'+
-    (rsState.canApply?'':'<button class="act revoke rs-enable" style="margin-left:auto">Enable Apply</button>')+'</div></div>'+
+    (rsState.canApply||!CAN_MANAGE?'':'<button class="act revoke rs-enable" style="margin-left:auto">Enable Apply</button>')+'</div></div>'+
     '<div id="rs-install"></div>'+
     '<div class="tscroll"><table class="users ptable rs-table"><thead><tr><th>Workload</th><th>Verdict</th><th class="rs-num">CPU <span class="rs-dim">peak / req</span></th><th class="rs-num">Memory <span class="rs-dim">peak / req</span></th><th class="rs-num" title="6-hour peak plus 20% headroom">Suggested request</th><th></th></tr></thead><tbody>';
   rows.forEach(function(r){
@@ -1254,7 +1257,7 @@ function renderRightsizing(){
         copy='<button class="act revoke copy-cmd" data-cmd="'+esc(cmd)+'" title="'+esc(cmd)+'">Copy</button>';
         var key=r.ns+'|'+r.owner;
         if(rsState.applied[key])copy='<span class="rs-queued">'+esc(rsState.applied[key])+'</span>';
-        else if(rsState.canApply)copy+=' <button class="act approve rs-apply" data-kind="'+esc(kind)+'" data-ns="'+esc(r.ns)+'" data-name="'+esc(name)+'" data-cpu="'+(r.sugCpu||0)+'" data-mem="'+(r.sugMem||0)+'" data-cpureq="'+r.cpuReq+'" data-memreq="'+r.memReq+'">Apply</button>';
+        else if(rsState.canApply&&ACCESS.apply)copy+=' <button class="act approve rs-apply" data-kind="'+esc(kind)+'" data-ns="'+esc(r.ns)+'" data-name="'+esc(name)+'" data-cpu="'+(r.sugCpu||0)+'" data-mem="'+(r.sugMem||0)+'" data-cpureq="'+r.cpuReq+'" data-memreq="'+r.memReq+'">Apply</button>';
       }
     }
     html+='<tr><td><div class="u-name pod-name" title="'+esc(r.owner)+'">'+esc(name)+'</div><div class="u-email">'+esc(r.ns)+' · '+esc(kind)+' · '+r.replicas+' pod'+(r.replicas===1?'':'s')+'</div></td>'+
@@ -1313,7 +1316,7 @@ async function loadDetail(id){
     svc.sort(byCpu);
     function rowK(x){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
-      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'" data-pod="'+esc(x.name)+'" title="Open logs"><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'" data-pod="'+esc(x.name)+'"><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
         '<td><span class="pill '+(ok?'on':'off')+(x.phase==='Pending'?' blip':'')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
         '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
@@ -1324,7 +1327,7 @@ async function loadDetail(id){
       var cls=st==='Failed'?'bad':(st==='Pending'?'off':'on');
       var fin=j.finishedAt?ago(j.finishedAt):(j.startedAt?ago(j.startedAt):'');
       var sub=j.owner?esc(j.owner):esc(j.namespace);
-      return '<tr data-ns="'+esc(j.namespace)+'" data-name="'+esc((j.name||'').toLowerCase())+'" data-job="'+esc(j.name)+'" title="Open logs"><td><div class="u-name pod-name">'+esc(j.name)+'</div><div class="u-email">'+sub+'</div></td>'+
+      return '<tr data-ns="'+esc(j.namespace)+'" data-name="'+esc((j.name||'').toLowerCase())+'" data-job="'+esc(j.name)+'"><td><div class="u-name pod-name">'+esc(j.name)+'</div><div class="u-email">'+sub+'</div></td>'+
         '<td><span class="pill '+cls+(st==='Running'?' blip':'')+'">'+esc(st)+'</span></td>'+
         '<td class="u-time">'+esc(j.completions||'')+'</td>'+
         '<td class="'+(j.failed?'util-val crit':'u-time')+'">'+(j.failed||0)+'</td>'+
@@ -1342,11 +1345,11 @@ async function loadDetail(id){
             '<input id="pod-search" class="toolbar-input toolbar-search" placeholder="Search">'+
           '</div>'+
         '</div>'+
-        '<div class="tscroll" id="pods-wrap"><table class="users ptable"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body">'+
+        '<div class="tscroll" id="pods-wrap"><table class="users ptable"><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>CPU</th><th>Mem</th><th>Node</th></tr></thead><tbody id="pods-body"'+(ACCESS.logs?' class="rows-click"':'')+'>'+
         svc.map(rowK).join('')+
         '</tbody></table>'+
         (L.podListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.podListTruncated+' more pods (capped).</p></div>':'')+'</div>'+
-        '<div class="tscroll" id="jobs-wrap" style="display:none"><table class="users ptable"><thead><tr><th>Job</th><th>Status</th><th>Completions</th><th>Failed</th><th>Finished</th><th>Namespace</th></tr></thead><tbody id="jobs-body">'+
+        '<div class="tscroll" id="jobs-wrap" style="display:none"><table class="users ptable"><thead><tr><th>Job</th><th>Status</th><th>Completions</th><th>Failed</th><th>Finished</th><th>Namespace</th></tr></thead><tbody id="jobs-body"'+(ACCESS.logs?' class="rows-click"':'')+'>'+
         jl.map(rowJob).join('')+
         '</tbody></table>'+
         (L.jobListTruncated?'<div class="card2-body"><p class="sub" style="margin:0">+'+L.jobListTruncated+' more jobs (capped).</p></div>':'')+'</div>'+
@@ -1403,7 +1406,7 @@ async function loadDetail(id){
       '<button class="tab" data-tab="incidents">Incidents</button>'+
       '<button class="tab" data-tab="remediation">Remediation</button>'+
       '<button class="tab" data-tab="activity">Activity</button>'+
-      '<button class="tab" data-tab="ai">AI</button>'+
+      (ACCESS.ai?'<button class="tab" data-tab="ai">AI</button>':'')+
     '</div>'+
     '<div class="tabpanel active" data-panel="pods">'+podsHtml+'</div>'+
     (nodesHtml?'<div class="tabpanel" data-panel="nodes">'+nodesHtml+'</div>':'')+
@@ -1415,7 +1418,7 @@ async function loadDetail(id){
     '<div class="tabpanel" data-panel="incidents"></div>'+
     '<div class="tabpanel" data-panel="remediation"></div>'+
     '<div class="tabpanel" data-panel="activity"></div>'+
-    '<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>';
+    (ACCESS.ai?'<div class="tabpanel" data-panel="ai">'+aiPanelHtml()+'</div>':'');
     box.innerHTML=html;
     var ps=document.getElementById('pod-search'),pn=document.getElementById('pod-ns'),seg=document.getElementById('pj-seg'),_kind='pod';
     function applyPodFilter(){
@@ -1431,7 +1434,7 @@ async function loadDetail(id){
     if(ps)ps.addEventListener('input',applyPodFilter);
     if(pn)pn.addEventListener('change',applyPodFilter);
     ['pods-body','jobs-body'].forEach(function(bid){var tb=document.getElementById(bid);if(tb)tb.addEventListener('click',function(e){
-      var tr=e.target.closest('tr');if(!tr||(!tr.dataset.pod&&!tr.dataset.job))return;
+      var tr=e.target.closest('tr');if(!ACCESS.logs||!tr||(!tr.dataset.pod&&!tr.dataset.job))return;
       openLogs(id,{namespace:tr.dataset.ns,pod:tr.dataset.pod||'',job:tr.dataset.job||''});
     });});
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
@@ -1655,7 +1658,7 @@ function renderIncidents(){
     html+='<div class="tscroll"><table class="users ptable"><thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Seen</th><th>Last seen</th><th></th></tr></thead><tbody>';
     list.forEach(function(i){
       var where=(i.namespace?i.namespace+'/':'')+(i.workload||i.node||'');
-      var acts=i.status==='open'?'<button class="act revoke sre-diag" data-id="'+esc(i.id)+'">Diagnose</button> <button class="act approve sre-propose" data-id="'+esc(i.id)+'" title="Turn the recommendation into a policy-checked proposal">Propose fix</button>':'';
+      var acts=i.status==='open'?(ACCESS.ai?'<button class="act revoke sre-diag" data-id="'+esc(i.id)+'">Diagnose</button> ':'')+(ACCESS.apply?'<button class="act approve sre-propose" data-id="'+esc(i.id)+'" title="Turn the recommendation into a policy-checked proposal">Propose fix</button>':''):'';
       html+='<tr><td><div class="u-name pod-name" title="'+esc(i.title||i.type)+'">'+esc(i.title||i.type)+'</div><div class="u-email">'+esc(i.type)+(where?' · '+esc(where):'')+'</div></td>'+
         '<td>'+sevPill(i.severity)+'</td><td><span class="pill '+(i.status==='open'?'bad':'on')+'">'+esc(i.status||'-')+'</span></td>'+
         '<td class="u-time">'+(i.occurrences||0)+'×</td><td class="u-time">'+ago(i.lastSeen)+'</td>'+
@@ -1684,7 +1687,7 @@ function renderRemediation(){
       var res='';
       if(x.execution){var e=x.execution;res='<div class="'+(e.success?'u-time':'util-val crit')+'">'+(e.success?'OK':'Failed')+(e.dryRun?' (dry run)':'')+(e.error?': '+esc(e.error):'')+'</div>';}
       else if(x.decision&&(x.decision.reasons||[]).length&&!x.decision.allowed){res='<div class="u-email">'+esc(x.decision.reasons.join('; '))+'</div>';}
-      var acts=x.status==='proposed'?'<button class="act approve sre-approve" data-id="'+esc(x.id)+'">Approve</button> <button class="act revoke sre-reject" data-id="'+esc(x.id)+'">Reject</button>':'';
+      var acts=x.status==='proposed'&&ACCESS.apply?'<button class="act approve sre-approve" data-id="'+esc(x.id)+'">Approve</button> <button class="act revoke sre-reject" data-id="'+esc(x.id)+'">Reject</button>':'';
       html+='<tr><td><div class="u-name pod-name">'+esc(x.action)+'</div><div class="u-email">'+esc((t.kind||'')+'/'+(t.namespace||'')+'/'+(t.name||''))+'</div></td>'+
         '<td>'+propPill(x.status)+'</td><td>'+sevPill(x.riskClass)+'</td>'+
         '<td><div class="u-time" title="'+esc(x.rationale||'')+'" style="max-width:340px;white-space:normal">'+esc(x.rationale||'-')+'</div>'+res+'</td>'+

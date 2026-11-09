@@ -79,6 +79,9 @@ func (a *app) handleAppClusters(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 502, map[string]any{"error": "could not list clusters"})
 			return
 		}
+		if !ws.Access.Logs {
+			data = stripLogs(data)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		_, _ = w.Write(data)
@@ -333,6 +336,64 @@ func (a *app) appSREManager(w http.ResponseWriter, r *http.Request) (*User, stri
 	return u, ws.Tenant, ok
 }
 
+// wsAllowed is wsUser for features the owner can switch off per person:
+// "ai", "logs" or "apply".
+func (a *app) wsAllowed(w http.ResponseWriter, r *http.Request, feature string) (*User, workspace, bool) {
+	u, ws, ok := a.wsUser(w, r, false)
+	if !ok {
+		return nil, ws, false
+	}
+	allowed, what := false, ""
+	switch feature {
+	case "ai":
+		allowed, what = ws.Access.AI, "use the AI assistant"
+	case "logs":
+		allowed, what = ws.Access.Logs, "read logs"
+	case "apply":
+		allowed, what = ws.Access.Apply, "apply changes"
+	}
+	if !allowed {
+		writeJSON(w, 403, map[string]any{"error": "You can't " + what + " in this workspace. Ask the owner to turn it on."})
+		return nil, workspace{}, false
+	}
+	return u, ws, true
+}
+
+// stripLogs removes everything log-derived from a control-plane cluster list,
+// for people without log access: failing-pod log tails, host error logs, and
+// the log line a secret finding was seen in.
+func stripLogs(data []byte) []byte {
+	var doc map[string]any
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if dec.Decode(&doc) != nil {
+		return data
+	}
+	list, _ := doc["clusters"].([]any)
+	for _, c := range list {
+		cm, _ := c.(map[string]any)
+		latest, _ := cm["latest"].(map[string]any)
+		if latest == nil {
+			continue
+		}
+		delete(latest, "podLogs")
+		if h, ok := latest["host"].(map[string]any); ok {
+			delete(h, "errorLogs")
+		}
+		fs, _ := latest["secretFindings"].([]any)
+		for _, f := range fs {
+			if fm, ok := f.(map[string]any); ok && fm["source"] == "log" {
+				delete(fm, "context")
+			}
+		}
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return data
+	}
+	return out
+}
+
 // wsUser resolves the signed-in, approved user and the workspace they work in.
 // With manage set, team members without the admin role get a 403.
 func (a *app) wsUser(w http.ResponseWriter, r *http.Request, manage bool) (*User, workspace, bool) {
@@ -470,8 +531,12 @@ func (a *app) clusterActivity(tenant, id string, incs, props []map[string]any) [
 // handleAppIncidentAction runs AI diagnosis or turns it into a policy-checked
 // remediation proposal: POST /api/app/incidents/{id}/{diagnose|propose}.
 func (a *app) handleAppIncidentAction(w http.ResponseWriter, r *http.Request) {
-	// Diagnosis only reads; turning it into a fix proposal needs manage rights.
-	_, ws, ok := a.wsUser(w, r, r.PathValue("action") == "propose")
+	// Diagnosis is AI; turning it into a fix proposal needs apply access.
+	feature := "ai"
+	if r.PathValue("action") == "propose" {
+		feature = "apply"
+	}
+	_, ws, ok := a.wsAllowed(w, r, feature)
 	if !ok {
 		return
 	}
@@ -489,10 +554,11 @@ func (a *app) handleAppIncidentAction(w http.ResponseWriter, r *http.Request) {
 // POST /api/app/proposals/{id}/{approve|reject}. The approver is always the
 // logged-in user, never taken from the request.
 func (a *app) handleAppProposalAction(w http.ResponseWriter, r *http.Request) {
-	u, tenant, ok := a.appSREManager(w, r)
+	u, ws, ok := a.wsAllowed(w, r, "apply")
 	if !ok {
 		return
 	}
+	tenant := ws.Tenant
 	action := r.PathValue("action")
 	if action != "approve" && action != "reject" {
 		writeJSON(w, 404, map[string]any{"error": "not found"})
@@ -597,5 +663,5 @@ func (a *app) pageApp(w http.ResponseWriter, r *http.Request) {
 	}
 	shared := ws.Owner != strings.ToLower(u.Email)
 	render(w, appTmpl, map[string]any{"Name": u.Name, "Email": u.Email, "ManifestURL": envOr("AGENT_MANIFEST_URL", "https://clusterheart.com/agent.yaml"),
-		"HostUpdateCmd": hostUpdateSnippet(), "Notice": notice.Message, "NoticeKey": notice.UpdatedAt.UnixMilli(), "Workspace": ws.Name, "Shared": shared, "Role": ws.Role, "CanManage": ws.canManage(), "Spaces": spaces})
+		"HostUpdateCmd": hostUpdateSnippet(), "Notice": notice.Message, "NoticeKey": notice.UpdatedAt.UnixMilli(), "Workspace": ws.Name, "Shared": shared, "Role": ws.Role, "CanManage": ws.canManage(), "Access": ws.Access, "Spaces": spaces})
 }

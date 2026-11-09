@@ -5,9 +5,13 @@ package main
 // owner's clusters and servers. A workspace is just an owner's tenant, so the
 // control plane does not change: we only pick which tenant a request reads.
 //
-// Roles: "member" can view everything and use AI, latency checks and
-// rightsizing advice; "admin" can also add, rename and delete clusters and
-// servers and act on incidents and fixes. Only the owner manages the team.
+// Roles: "member" can view everything; "admin" can also add, rename and
+// delete clusters and servers, set up remediation and pause automation. Only
+// the owner manages the team.
+//
+// On top of the role, the owner toggles three things per person (see access):
+// using the AI assistant, reading logs, and applying changes to workloads
+// (rightsizing, proposing and approving fixes).
 
 import (
 	"context"
@@ -41,6 +45,29 @@ type teamMember struct {
 	Email string    `bson:"email" json:"email"`
 	Role  string    `bson:"role" json:"role"`
 	Added time.Time `bson:"added" json:"added"`
+	// Per-person toggles, stored as overrides so older records keep working:
+	// AI and logs are on unless turned off; apply follows the role (admins
+	// only) unless set.
+	NoAI   bool  `bson:"noAI,omitempty" json:"-"`
+	NoLogs bool  `bson:"noLogs,omitempty" json:"-"`
+	Apply  *bool `bson:"apply,omitempty" json:"-"`
+}
+
+// access is what someone may do in a workspace beyond viewing it.
+type access struct {
+	AI    bool `json:"ai"`
+	Logs  bool `json:"logs"`
+	Apply bool `json:"apply"`
+}
+
+var fullAccess = access{AI: true, Logs: true, Apply: true}
+
+func (m teamMember) access() access {
+	apply := m.Role == roleAdmin
+	if m.Apply != nil {
+		apply = *m.Apply
+	}
+	return access{AI: !m.NoAI, Logs: !m.NoLogs, Apply: apply}
 }
 
 // workspace is the tenant a request works in, and the caller's role there.
@@ -49,6 +76,7 @@ type workspace struct {
 	Name   string // "Shivansh's workspace"
 	Role   string
 	Tenant string
+	Access access
 }
 
 func (w workspace) canManage() bool { return w.Role == roleOwner || w.Role == roleAdmin }
@@ -104,8 +132,9 @@ func (s *store) addMember(ctx context.Context, m teamMember) error {
 	return err
 }
 
-func (s *store) setMemberRole(ctx context.Context, owner, email, role string) (bool, error) {
-	r, err := s.team.UpdateOne(ctx, bson.M{"owner": strings.ToLower(owner), "email": strings.ToLower(email)}, bson.M{"$set": bson.M{"role": role}})
+// updateMember applies a role or access change (set fields only).
+func (s *store) updateMember(ctx context.Context, owner, email string, set bson.M) (bool, error) {
+	r, err := s.team.UpdateOne(ctx, bson.M{"owner": strings.ToLower(owner), "email": strings.ToLower(email)}, bson.M{"$set": set})
 	if err != nil {
 		return false, err
 	}
@@ -149,7 +178,7 @@ func workspaceName(ownerName, ownerEmail string) string {
 }
 
 func ownWorkspace(u *User) workspace {
-	return workspace{Owner: strings.ToLower(u.Email), Name: workspaceName(u.Name, u.Email), Role: roleOwner, Tenant: tenantFor(u.Email)}
+	return workspace{Owner: strings.ToLower(u.Email), Name: workspaceName(u.Name, u.Email), Role: roleOwner, Tenant: tenantFor(u.Email), Access: fullAccess}
 }
 
 // workspaceFor resolves the workspace a user is working in. The stored choice
@@ -163,7 +192,7 @@ func (a *app) workspaceFor(ctx context.Context, u *User) workspace {
 	if err != nil || m == nil {
 		return ownWorkspace(u)
 	}
-	ws := workspace{Owner: m.Owner, Role: m.Role, Tenant: tenantFor(m.Owner)}
+	ws := workspace{Owner: m.Owner, Role: m.Role, Tenant: tenantFor(m.Owner), Access: m.access()}
 	ws.Name = workspaceName("", m.Owner)
 	if o, err := a.store.find(ctx, m.Owner); err == nil && o != nil {
 		ws.Name = workspaceName(o.Name, o.Email)
@@ -213,6 +242,7 @@ type teamView struct {
 	Role   string    `json:"role"`
 	Joined bool      `json:"joined"`
 	Added  time.Time `json:"added"`
+	Access access    `json:"access"`
 }
 
 type workspaceView struct {
@@ -243,7 +273,7 @@ func (a *app) handleTeam(w http.ResponseWriter, r *http.Request) {
 		}
 		team := make([]teamView, 0, len(members))
 		for _, m := range members {
-			v := teamView{Email: m.Email, Role: m.Role, Added: m.Added}
+			v := teamView{Email: m.Email, Role: m.Role, Added: m.Added, Access: m.access()}
 			if p, err := a.store.find(ctx, m.Email); err == nil && p != nil {
 				v.Name, v.Joined = p.Name, true
 			}
@@ -266,6 +296,9 @@ func (a *app) handleTeam(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Email string `json:"email"`
 			Role  string `json:"role"`
+			AI    *bool  `json:"ai"`
+			Logs  *bool  `json:"logs"`
+			Apply *bool  `json:"apply"`
 		}
 		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
 		email := strings.ToLower(strings.TrimSpace(in.Email))
@@ -274,7 +307,25 @@ func (a *app) handleTeam(w http.ResponseWriter, r *http.Request) {
 			role = roleMember
 		}
 		if r.Method == http.MethodPatch {
-			ok, err := a.store.setMemberRole(ctx, owner, email, role)
+			// Only what was sent changes: a role, or one or more toggles.
+			set := bson.M{}
+			if in.Role != "" {
+				set["role"] = role
+			}
+			if in.AI != nil {
+				set["noAI"] = !*in.AI
+			}
+			if in.Logs != nil {
+				set["noLogs"] = !*in.Logs
+			}
+			if in.Apply != nil {
+				set["apply"] = *in.Apply
+			}
+			if len(set) == 0 {
+				writeJSON(w, 400, map[string]any{"error": "nothing to change"})
+				return
+			}
+			ok, err := a.store.updateMember(ctx, owner, email, set)
 			if err != nil {
 				writeJSON(w, 503, map[string]any{"error": "could not update"})
 				return
