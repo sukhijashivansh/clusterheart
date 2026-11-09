@@ -52,3 +52,46 @@ func (a *app) handleAppProbeResult(w http.ResponseWriter, r *http.Request) {
 	code, data, err := a.cpDo("GET", "/api/v1/probes/"+url.PathEscape(r.PathValue("id"))+"?tenantId="+url.QueryEscape(tenant), nil)
 	cpRelay(w, code, data, err)
 }
+
+// Pod and job logs follow the same path: the agent reads the tail (redacted)
+// and the page polls for it.
+
+// logRL caps how often one person can open logs.
+var logRL = newRateLimiter(120, 10*time.Minute)
+
+// handleAppStartLog: POST /api/app/clusters/{id}/logs
+// {"namespace","pod"|"job","container","previous","tail"}
+func (a *app) handleAppStartLog(w http.ResponseWriter, r *http.Request) {
+	u, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	if !logRL.allow("log|" + u.Email) {
+		writeJSON(w, 429, map[string]any{"error": "Too many log reads. Please wait a few minutes."})
+		return
+	}
+	var in struct {
+		Namespace string `json:"namespace"`
+		Pod       string `json:"pod,omitempty"`
+		Job       string `json:"job,omitempty"`
+		Container string `json:"container,omitempty"`
+		Previous  bool   `json:"previous,omitempty"`
+		Tail      int    `json:"tail"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in); err != nil {
+		writeJSON(w, 400, map[string]any{"error": "invalid request"})
+		return
+	}
+	code, data, err := a.cpDo("POST", "/api/v1/clusters/"+url.PathEscape(r.PathValue("id"))+"/logs?tenantId="+url.QueryEscape(tenant), in)
+	cpRelay(w, code, data, err)
+}
+
+// handleAppLogResult: GET /api/app/logs/{id}
+func (a *app) handleAppLogResult(w http.ResponseWriter, r *http.Request) {
+	_, tenant, ok := a.appSREUser(w, r)
+	if !ok {
+		return
+	}
+	code, data, err := a.cpDo("GET", "/api/v1/logs/"+url.PathEscape(r.PathValue("id"))+"?tenantId="+url.QueryEscape(tenant), nil)
+	cpRelay(w, code, data, err)
+}

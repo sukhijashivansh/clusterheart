@@ -65,8 +65,9 @@ func (c *Collector) RunProbe(ctx context.Context, t contract.ProbeTarget) contra
 	return res
 }
 
-// probeLoop runs latency checks people start in the dashboard. Only GET
-// requests are sent, and only timings, status and sizes are reported back.
+// probeLoop runs latency checks and log reads people start in the dashboard.
+// Only GET requests are sent to pods, and only timings, status and sizes are
+// reported back; log lines are redacted before they leave the cluster.
 func (r *Runner) probeLoop(ctx context.Context) {
 	every := r.ProbeEvery
 	if every <= 0 {
@@ -96,6 +97,17 @@ func (r *Runner) probeLoop(ctx context.Context) {
 				cancel()
 				if err := r.Client.post(ctx, "/api/v1/agents/probes/"+url.PathEscape(req.ID), res); err != nil {
 					logger(r.Log).Warn("could not send latency check result", "id", req.ID, "err", err)
+				}
+			}()
+		}
+		for _, req := range q.Logs {
+			req := req
+			go func() {
+				lctx, cancel := context.WithTimeout(ctx, viewTimeout)
+				res := r.Collector.ReadLog(lctx, req.Target)
+				cancel()
+				if err := r.Client.post(ctx, "/api/v1/agents/logs/"+url.PathEscape(req.ID), res); err != nil {
+					logger(r.Log).Warn("could not send log", "id", req.ID, "err", err)
 				}
 			}()
 		}

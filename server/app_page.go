@@ -297,8 +297,9 @@ function showInstall(d){
 
 if(document.getElementById('add-cluster'))document.getElementById('add-cluster').addEventListener('click',async function(){
   if(_menu){_menu.classList.remove('open');if(_mb)_mb.setAttribute('aria-expanded','false');}
-  var name=prompt('Name this cluster (e.g. prod-us-east):','my-cluster');
+  var name=await chModal({title:'Add a cluster',input:'',placeholder:'prod-us-east',confirm:'Create'});
   if(name===null)return;
+  name=name||'prod-us-east';
   var btn=this;btn.disabled=true;btn.textContent='Creating…';
   var r=await _post('/api/app/clusters',{name:name});
   btn.disabled=false;btn.textContent='+ Add cluster';
@@ -308,8 +309,9 @@ if(document.getElementById('add-cluster'))document.getElementById('add-cluster')
 
 if(document.getElementById('add-server'))document.getElementById('add-server').addEventListener('click',async function(){
   if(_menu){_menu.classList.remove('open');if(_mb)_mb.setAttribute('aria-expanded','false');}
-  var name=prompt('Name this server (e.g. web-01):','my-server');
+  var name=await chModal({title:'Add a server',input:'',placeholder:'web-01',confirm:'Create'});
   if(name===null)return;
+  name=name||'web-01';
   var r=await _post('/api/app/clusters',{name:name,kind:'server'});
   if(!r.ok){alert((r.data&&r.data.error)||'Failed to add server');return;}
   r.data.kind='server';
@@ -1235,10 +1237,10 @@ function renderRightsizing(){
     var cls=p==null?'':(p>=90?' rs-bad':(p<40?' rs-low':''));
     return '<td class="rs-num"><div>'+top+'</div><div class="rs-sub'+cls+'">'+(p==null?'no request':p+'%')+'</div></td>';
   }
-  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><div><p class="card2-title">Rightsizing</p><p class="card2-desc">Requests vs 6h peak. Suggested = peak + 20%.</p></div>'+
+  var html='<section class="card2"><div class="card2-head"><div class="toolbar-row"><p class="card2-title">Rightsizing</p>'+
     (rsState.canApply?'':'<button class="act revoke rs-enable" style="margin-left:auto">Enable Apply</button>')+'</div></div>'+
     '<div id="rs-install"></div>'+
-    '<div class="tscroll"><table class="users ptable rs-table"><thead><tr><th>Workload</th><th>Verdict</th><th class="rs-num">CPU <span class="rs-dim">peak / req</span></th><th class="rs-num">Memory <span class="rs-dim">peak / req</span></th><th class="rs-num">Suggested request</th><th></th></tr></thead><tbody>';
+    '<div class="tscroll"><table class="users ptable rs-table"><thead><tr><th>Workload</th><th>Verdict</th><th class="rs-num">CPU <span class="rs-dim">peak / req</span></th><th class="rs-num">Memory <span class="rs-dim">peak / req</span></th><th class="rs-num" title="6-hour peak plus 20% headroom">Suggested request</th><th></th></tr></thead><tbody>';
   rows.forEach(function(r){
     var parts=r.owner.split('/'),kind=parts[0],name=parts.slice(1).join('/');
     var sug='<span class="rs-dim">-</span>',copy='';
@@ -1311,7 +1313,7 @@ async function loadDetail(id){
     svc.sort(byCpu);
     function rowK(x){
       var ok=(x.phase==='Running'||x.phase==='Succeeded');
-      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(x.name)+'">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
+      return '<tr data-ns="'+esc(x.namespace)+'" data-name="'+esc((x.name||'').toLowerCase())+'" data-pod="'+esc(x.name)+'" title="Open logs"><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">'+esc(x.namespace)+'</div></td>'+
         '<td><span class="pill '+(ok?'on':'off')+(x.phase==='Pending'?' blip':'')+'"><span class="dot"></span>'+esc(x.phase||'')+'</span></td>'+
         '<td class="u-time">'+esc(x.ready||'')+'</td><td class="u-time">'+(x.restarts||0)+'</td>'+
         '<td class="u-time">'+(x.cpuMilli?x.cpuMilli+'m':'-')+'</td><td class="u-time">'+(x.memMi?x.memMi+'Mi':'-')+'</td>'+
@@ -1322,7 +1324,7 @@ async function loadDetail(id){
       var cls=st==='Failed'?'bad':(st==='Pending'?'off':'on');
       var fin=j.finishedAt?ago(j.finishedAt):(j.startedAt?ago(j.startedAt):'');
       var sub=j.owner?esc(j.owner):esc(j.namespace);
-      return '<tr data-ns="'+esc(j.namespace)+'" data-name="'+esc((j.name||'').toLowerCase())+'"><td><div class="u-name pod-name" title="'+esc(j.name)+'">'+esc(j.name)+'</div><div class="u-email">'+sub+'</div></td>'+
+      return '<tr data-ns="'+esc(j.namespace)+'" data-name="'+esc((j.name||'').toLowerCase())+'" data-job="'+esc(j.name)+'" title="Open logs"><td><div class="u-name pod-name">'+esc(j.name)+'</div><div class="u-email">'+sub+'</div></td>'+
         '<td><span class="pill '+cls+(st==='Running'?' blip':'')+'">'+esc(st)+'</span></td>'+
         '<td class="u-time">'+esc(j.completions||'')+'</td>'+
         '<td class="'+(j.failed?'util-val crit':'u-time')+'">'+(j.failed||0)+'</td>'+
@@ -1428,6 +1430,10 @@ async function loadDetail(id){
     }
     if(ps)ps.addEventListener('input',applyPodFilter);
     if(pn)pn.addEventListener('change',applyPodFilter);
+    ['pods-body','jobs-body'].forEach(function(bid){var tb=document.getElementById(bid);if(tb)tb.addEventListener('click',function(e){
+      var tr=e.target.closest('tr');if(!tr||(!tr.dataset.pod&&!tr.dataset.job))return;
+      openLogs(id,{namespace:tr.dataset.ns,pod:tr.dataset.pod||'',job:tr.dataset.job||''});
+    });});
     if(seg)seg.querySelectorAll('.seg-btn').forEach(function(b){b.addEventListener('click',function(){seg.querySelectorAll('.seg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');_kind=b.dataset.kind;applyPodFilter();});});
     applyPodFilter();
     sreState.cluster=id;sreState.data=null;rsState.cluster=id;
@@ -1446,6 +1452,92 @@ async function loadDetail(id){
     if(_keep&&_activeTab!=='pods')_keep.click();
     document.querySelectorAll('.copy-setup').forEach(function(btn){btn.addEventListener('click',function(){var ta=btn.closest('.card2').querySelector('textarea');if(ta){navigator.clipboard.writeText(ta.value);btn.textContent='Copied';}});});
   }catch(e){box.innerHTML='<a href="/app" style="color:var(--muted)">All clusters</a><p class="sub" style="margin-top:14px">Could not load cluster.</p>';}
+}
+
+// ---------- Logs: a drawer for one pod or job ----------
+// The agent reads the tail on request (redacted) and the page polls for it,
+// the same path as latency checks.
+var _lv=null;
+function closeLogs(){if(!_lv)return;_lv.closed=true;_lv.bg.remove();_lv.el.remove();document.removeEventListener('keydown',_lv.key);_lv=null;}
+function openLogs(clusterId,t){
+  closeLogs();
+  var bg=document.createElement('div');bg.className='lv-bg';
+  var el=document.createElement('aside');el.className='lv';el.setAttribute('role','dialog');el.setAttribute('aria-label','Logs');
+  el.innerHTML='<div class="lv-head"><div class="lv-title"><h3>'+esc(t.pod||t.job)+'</h3><p>'+esc(t.namespace)+(t.job?' · job':' · pod')+'</p></div><button class="lv-x" aria-label="Close">&times;</button></div>'+
+    '<div class="lv-bar"><input class="toolbar-input lv-find" placeholder="Filter lines" aria-label="Filter lines">'+
+    '<select class="toolbar-input lv-ct" aria-label="Container" hidden></select>'+
+    '<select class="toolbar-input lv-tail" aria-label="Lines"><option value="100">100 lines</option><option value="200" selected>200 lines</option><option value="500">500 lines</option></select>'+
+    '<label class="lv-chk" title="The container before its last restart"><input type="checkbox" class="lv-prev"> Previous</label>'+
+    '<button class="act revoke lv-copy">Copy</button><button class="act approve lv-refresh">Refresh</button></div>'+
+    '<div class="lv-body"></div><div class="lv-foot"><span class="lv-meta"></span><span>Secrets are masked</span></div>';
+  document.body.appendChild(bg);document.body.appendChild(el);
+  var st={bg:bg,el:el,t:t,cluster:clusterId,container:'',lines:[],seq:0};
+  st.key=function(e){if(e.key==='Escape')closeLogs();};
+  document.addEventListener('keydown',st.key);
+  _lv=st;
+  bg.addEventListener('click',closeLogs);
+  el.querySelector('.lv-x').addEventListener('click',closeLogs);
+  var find=el.querySelector('.lv-find'),ct=el.querySelector('.lv-ct'),tail=el.querySelector('.lv-tail'),prev=el.querySelector('.lv-prev');
+  find.addEventListener('input',function(){lvFilter(st);});
+  ct.addEventListener('change',function(){st.container=ct.value;lvLoad(st);});
+  tail.addEventListener('change',function(){lvLoad(st);});
+  prev.addEventListener('change',function(){lvLoad(st);});
+  el.querySelector('.lv-refresh').addEventListener('click',function(){lvLoad(st);});
+  el.querySelector('.lv-copy').addEventListener('click',function(){navigator.clipboard.writeText(st.lines.join('\n'));_toast('Copied '+st.lines.length+' lines','ok');});
+  lvLoad(st);
+}
+function lvState(st,html){st.el.querySelector('.lv-body').innerHTML='<div class="lv-state">'+html+'</div>';}
+async function lvLoad(st){
+  var seq=++st.seq,el=st.el;
+  var btn=el.querySelector('.lv-refresh');btn.disabled=true;
+  el.querySelector('.lv-meta').textContent='';
+  lvState(st,'<div class="spinner"></div><span>Reading the log from the cluster…</span>');
+  function stale(){return st.closed||seq!==st.seq;}
+  function fail(m){if(stale())return;btn.disabled=false;lvState(st,esc(m));}
+  var body={namespace:st.t.namespace,container:st.container,previous:el.querySelector('.lv-prev').checked,tail:+el.querySelector('.lv-tail').value};
+  if(st.t.job)body.job=st.t.job;else body.pod=st.t.pod;
+  var r=await _post('/api/app/clusters/'+encodeURIComponent(st.cluster)+'/logs',body);
+  if(stale())return;
+  if(!r.ok)return fail((r.data&&r.data.error)||'Could not ask the agent for logs.');
+  var lid=r.data.id,start=Date.now();
+  while(!stale()){
+    await new Promise(function(res){setTimeout(res,900);});
+    if(stale())return;
+    var d;
+    try{var g=await fetch('/api/app/logs/'+encodeURIComponent(lid),{headers:{'Accept':'application/json'}});d=await g.json().catch(function(){return {};});if(!g.ok)return fail(d.error||'Could not read the log.');}
+    catch(e){if(Date.now()-start>60000)return fail('Lost the connection. Try again.');continue;}
+    if(!d.done)continue;
+    if(stale())return;
+    btn.disabled=false;
+    var res=d.result||{};
+    if(d.error||!d.result)return lvState(st,esc(d.error||'No log came back.'));
+    var ct=el.querySelector('.lv-ct'),cs=res.containers||[];
+    if(cs.length>1){ct.hidden=false;ct.innerHTML=cs.map(function(c){return '<option'+(c===res.container?' selected':'')+'>'+esc(c)+'</option>';}).join('');}
+    else ct.hidden=true;
+    st.container=res.container||st.container;
+    if(st.t.job&&res.pod)el.querySelector('.lv-title p').textContent=st.t.namespace+' · job · pod '+res.pod;
+    if(res.error)return lvState(st,esc(res.error));
+    st.lines=res.lines||[];
+    el.querySelector('.lv-meta').textContent=(res.container?res.container+' · ':'')+st.lines.length+' line'+(st.lines.length===1?'':'s')+(res.previous?' · previous instance':'')+' · '+new Date().toLocaleTimeString();
+    if(!st.lines.length)return lvState(st,'The log is empty.');
+    el.querySelector('.lv-body').innerHTML='<pre class="lv-pre">'+st.lines.map(function(l,i){
+      var c=/\b(error|fatal|panic|exception|fail(ed|ure)?)\b/i.test(l)?' lv-err':(/\bwarn(ing)?\b/i.test(l)?' lv-warn':'');
+      return '<div class="lv-ln'+c+'" data-n="'+(i+1)+'">'+(esc(l)||' ')+'</div>';
+    }).join('')+'</pre>';
+    lvFilter(st);
+    var b=el.querySelector('.lv-body');b.scrollTop=b.scrollHeight;
+    return;
+  }
+}
+function lvFilter(st){
+  var q=st.el.querySelector('.lv-find').value.trim().toLowerCase();
+  st.el.querySelectorAll('.lv-ln').forEach(function(d,i){
+    var raw=st.lines[i]||'';
+    if(!q){d.classList.remove('hide');if(d.dataset.m){d.innerHTML=esc(raw)||' ';delete d.dataset.m;}return;}
+    var at=raw.toLowerCase().indexOf(q);
+    d.classList.toggle('hide',at<0);
+    if(at>=0){d.innerHTML=esc(raw.slice(0,at))+'<mark>'+esc(raw.slice(at,at+q.length))+'</mark>'+esc(raw.slice(at+q.length));d.dataset.m='1';}
+  });
 }
 
 // ---------- SRE: overview / incidents / remediation ----------

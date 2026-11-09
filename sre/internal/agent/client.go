@@ -15,7 +15,7 @@ import (
 )
 
 // Version is the agent build version, reported in heartbeats for compatibility.
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // maxBuffer bounds how many snapshots the agent holds during a control-plane
 // outage. Oldest snapshots are dropped first (bounded telemetry, no unbounded

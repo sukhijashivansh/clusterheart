@@ -118,6 +118,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/probes/{id}", s.requireAdmin(s.handleGetProbe))
 	mux.HandleFunc("GET /api/v1/agents/probes", s.requireAgent(s.handleAgentProbes))
 	mux.HandleFunc("POST /api/v1/agents/probes/{id}", s.requireAgent(s.handleAgentProbeResult))
+	mux.HandleFunc("POST /api/v1/clusters/{id}/logs", s.requireAdmin(s.handleCreateLog))
+	mux.HandleFunc("GET /api/v1/logs/{id}", s.requireAdmin(s.handleGetLog))
+	mux.HandleFunc("POST /api/v1/agents/logs/{id}", s.requireAgent(s.handleAgentLogResult))
 	mux.HandleFunc("POST /api/v1/agents/heartbeat", s.requireAgent(s.handleHeartbeat))
 	mux.HandleFunc("POST /api/v1/telemetry", s.requireAgent(s.handleTelemetry))
 	// Health.

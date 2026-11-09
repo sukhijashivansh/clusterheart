@@ -145,9 +145,39 @@ type ProbeRequest struct {
 	Target ProbeTarget `json:"target"`
 }
 
-// ProbeRequestsResponse is the agent's queue of latency checks to run.
+// ProbeRequestsResponse is the agent's queue of on-demand work: latency checks
+// to run and logs to read (agents before 0.4.0 ignore Logs).
 type ProbeRequestsResponse struct {
 	Requests []ProbeRequest `json:"requests"`
+	Logs     []LogRequest   `json:"logs,omitempty"`
+}
+
+// LogTarget is a pod, or a Job by name (its newest pod), whose log a person
+// asked to see. Container empty: the pod's first container.
+type LogTarget struct {
+	Namespace string `json:"namespace"`
+	Pod       string `json:"pod,omitempty"`
+	Job       string `json:"job,omitempty"`
+	Container string `json:"container,omitempty"`
+	Previous  bool   `json:"previous,omitempty"` // the last terminated instance
+	Tail      int    `json:"tail"`
+}
+
+// LogRequest is one log read a person started in the dashboard.
+type LogRequest struct {
+	ID     string    `json:"id"`
+	Target LogTarget `json:"target"`
+}
+
+// LogResult is the agent's answer to a log read: redacted lines, plus the
+// pod and containers it found so the page can switch between them.
+type LogResult struct {
+	Pod        string   `json:"pod,omitempty"`
+	Container  string   `json:"container,omitempty"`
+	Containers []string `json:"containers,omitempty"`
+	Previous   bool     `json:"previous,omitempty"`
+	Lines      []string `json:"lines"`
+	Error      string   `json:"error,omitempty"`
 }
 
 // ProbeSample is one timed request, split into the phases curl -w reports.

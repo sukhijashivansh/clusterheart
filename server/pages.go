@@ -138,7 +138,6 @@ a.act.approve:hover{color:var(--accent-ink)}
 .team-add .toolbar-input{height:38px}
 .team-add input{flex:1;min-width:0}
 .team-add .act{height:38px;padding:0 20px}
-.acct-msg{margin:0;padding:0 20px 12px;min-height:0}.acct-msg:empty{display:none}
 .acct-table td{font-size:13.5px;color:var(--muted);padding:13px 20px}
 .acct-table .toolbar-input{height:32px}
 .acct-table td.cell-act .act{padding:6px 14px}
@@ -297,6 +296,44 @@ a.act.approve:hover{color:var(--accent-ink)}
 .rename-name:hover{text-decoration:underline;text-decoration-color:var(--border-strong);text-decoration-thickness:1px;text-underline-offset:4px}
 .actbar{display:flex;gap:6px;flex-wrap:wrap}
 .actbar .act{padding:6px 12px;font-size:12.5px}
+/* toast: short confirmations, bottom centre, fades on its own */
+.toast-wrap{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;width:max-content;max-width:calc(100vw - 32px)}
+.toast{display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:13.5px;color:var(--text);background:var(--surface2);border:1px solid var(--border-strong);box-shadow:0 18px 48px -16px rgba(0,0,0,.7);pointer-events:auto;animation:tin .18s ease}
+.toast::before{content:"";width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--green)}
+.toast.err::before{background:var(--red)}.toast.info::before{background:var(--muted)}
+.toast.out{opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* log viewer: right-hand drawer */
+.lv-bg{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.5);animation:mfade .15s ease}
+.lv{position:fixed;top:0;right:0;bottom:0;z-index:211;width:min(1000px,100vw);display:flex;flex-direction:column;background:var(--bg);border-left:1px solid var(--border-strong);box-shadow:-24px 0 64px -24px rgba(0,0,0,.8);animation:lvin .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes lvin{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+.lv-head{display:flex;align-items:flex-start;gap:14px;padding:18px 20px 14px;border-bottom:1px solid var(--border)}
+.lv-title{flex:1;min-width:0}
+.lv-title h3{margin:0;font-size:15.5px;font-weight:650;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-title p{margin:3px 0 0;font-size:12.5px;color:var(--muted);font-family:'Geist Mono',ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-x{width:34px;height:34px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:18px;line-height:1}
+.lv-x:hover{color:var(--text);border-color:var(--border-strong)}
+.lv-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)}
+.lv-bar .toolbar-input{height:34px}
+.lv-bar .lv-find{flex:1 1 200px;min-width:0}
+.lv-bar select.toolbar-input{max-width:220px}
+.lv-bar .act{height:34px;padding:0 14px;font-size:12.5px}
+.lv-chk{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;font-size:12.5px;font-weight:600;color:var(--muted);border:1px solid var(--border-strong);cursor:pointer;user-select:none}
+.lv-chk input{accent-color:var(--accent);margin:0}
+.lv-chk:has(input:checked){color:var(--text)}
+.lv-body{flex:1;min-height:0;overflow:auto;background:var(--input-bg)}
+.lv-pre{margin:0;padding:12px 0;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;line-height:1.6;color:var(--text)}
+.lv-ln{display:flex;padding:0 20px 0 0;white-space:pre-wrap;word-break:break-word}
+.lv-ln:hover{background:var(--hover)}
+.lv-ln::before{content:attr(data-n);flex-shrink:0;width:52px;padding-right:14px;text-align:right;color:var(--faint);user-select:none}
+.lv-ln.hide{display:none}
+.lv-ln mark{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
+.lv-ln.lv-err{color:var(--red)}.lv-ln.lv-warn{color:var(--amber)}
+.lv-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;padding:40px 24px;text-align:center;font-size:13.5px;color:var(--muted);line-height:1.6}
+.lv-foot{display:flex;justify-content:space-between;gap:12px;padding:9px 20px;font-size:12px;color:var(--faint);border-top:1px solid var(--border)}
+@media(max-width:640px){.lv-head{padding:14px 16px 12px}.lv-bar{padding:10px 16px}.lv-ln::before{width:38px;padding-right:10px}.lv-bar .lv-find{flex-basis:100%}}
+#pods-body tr,#jobs-body tr{cursor:pointer}
+#pods-body tr:hover td,#jobs-body tr:hover td{background:var(--hover)}
 /* apple-style small modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:mfade .15s ease}
 @keyframes mfade{from{opacity:0}to{opacity:1}}
@@ -472,7 +509,7 @@ table.users tbody tr:hover{background:var(--hover)}
 .ai-warn{color:var(--amber)}.ai-warn:before{background:var(--amber)}
 .ai-line code{font-size:12.5px;padding:1px 5px;background:var(--active-bg);border:1px solid var(--border)}
 .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;border-radius:9px;background:rgba(248,113,113,.16);color:var(--red)}
-.tab{flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
+.tab{flex:1 0 auto;justify-content:center;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;padding:9px 15px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;font-family:inherit;transition:color .14s}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--accent)}
 .tabpanel{display:none}
@@ -580,6 +617,13 @@ table.users tbody tr:hover{background:var(--hover)}
 </style></head><body>{{template "body" .}}
 <script>
 function _mark(el,t,k){el.textContent=t;el.className='msg '+(k||'info');}
+// _toast shows a short confirmation at the bottom of the screen; k: ok|err|info.
+function _toast(t,k){
+  var w=document.querySelector('.toast-wrap');
+  if(!w){w=document.createElement('div');w.className='toast-wrap';w.setAttribute('role','status');document.body.appendChild(w);}
+  var el=document.createElement('div');el.className='toast '+(k||'ok');el.textContent=t;w.appendChild(el);
+  setTimeout(function(){el.classList.add('out');setTimeout(function(){el.remove();},220);},k==='err'?5000:3200);
+}
 async function _post(url,payload){
   try{
     const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(12000)});
@@ -776,9 +820,8 @@ const accountBody = `{{define "body"}}<div class="app2">
   <section class="card2">
     <div class="card2-head acct-h">
       <p class="card2-title">Team <span class="acct-count" id="t-count"></span></p>
-      <div class="team-add"><input id="t-email" class="toolbar-input" type="email" placeholder="teammate@company.com" autocomplete="off" aria-label="Email"><select id="t-role" class="toolbar-input" aria-label="Role"><option value="member">Member · views and uses AI</option><option value="admin">Admin · can also manage</option></select><button id="t-add" class="act approve">Add</button></div>
+      <div class="team-add"><input id="t-email" class="toolbar-input" type="email" placeholder="teammate@company.com" autocomplete="off" aria-label="Email"><select id="t-role" class="toolbar-input" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select><button id="t-add" class="act approve">Add</button></div>
     </div>
-    <div id="t-msg" class="msg acct-msg" role="status"></div>
     <table class="users acct-table"><tbody id="team-list"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
   </section>
 {{else}}
@@ -794,7 +837,7 @@ document.getElementById('logout').addEventListener('click',async function(){
 (function(){
   var list=document.getElementById('team-list');if(!list)return;
   function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-  var msg=document.getElementById('t-msg'),em=document.getElementById('t-email'),role=document.getElementById('t-role'),add=document.getElementById('t-add');
+  var em=document.getElementById('t-email'),role=document.getElementById('t-role'),add=document.getElementById('t-add');
   async function api(method,url,body){
     var r=await fetch(url,{method:method,headers:{'Content-Type':'application/json','Accept':'application/json'},body:body?JSON.stringify(body):undefined});
     var d=await r.json().catch(function(){return {};});return {ok:r.ok,data:d};
@@ -823,17 +866,17 @@ document.getElementById('logout').addEventListener('click',async function(){
   }
   add.addEventListener('click',async function(){
     var e=em.value.trim();if(!e){em.focus();return;}
-    add.disabled=true;_mark(msg,'Adding…','info');
+    add.disabled=true;add.textContent='Adding…';
     var r=await api('POST','/api/team',{email:e,role:role.value});
-    add.disabled=false;
-    if(!r.ok){_mark(msg,r.data.error||'Could not add.','err');return;}
-    _mark(msg,(r.data.joined?'Added. They can open your workspace now. We emailed ':'Invited. We emailed ')+e+'.','ok');em.value='';role.value='member';load();
+    add.disabled=false;add.textContent='Add';
+    if(!r.ok){_toast(r.data.error||'Could not add.','err');return;}
+    _toast((r.data.joined?'Added ':'Invited ')+e,'ok');em.value='';role.value='member';load();
   });
   em.addEventListener('keydown',function(e){if(e.key==='Enter')add.click();});
   document.addEventListener('change',async function(e){
     var s=e.target.closest&&e.target.closest('.t-role');if(!s)return;
     s.disabled=true;var r=await api('PATCH','/api/team',{email:s.dataset.email,role:s.value});s.disabled=false;
-    _mark(msg,r.ok?'Role updated.':(r.data.error||'Could not update.'),r.ok?'ok':'err');
+    _toast(r.ok?'Role updated':(r.data.error||'Could not update.'),r.ok?'ok':'err');
   });
   // Two-step remove/leave: the first click asks, the second does it.
   document.addEventListener('click',async function(e){
@@ -843,7 +886,7 @@ document.getElementById('logout').addEventListener('click',async function(){
     if(!b.classList.contains('sure')){b.classList.add('sure');b.textContent='Sure?';setTimeout(function(){if(b.isConnected){b.classList.remove('sure');b.textContent=label;}},3000);return;}
     b.disabled=true;
     var r=b.classList.contains('ws-leave')?await api('POST','/api/workspace',{owner:b.dataset.owner,leave:true}):await api('DELETE','/api/team?email='+encodeURIComponent(b.dataset.email));
-    _mark(msg,r.ok?(label==='Leave'?'You left that workspace.':'Removed. Their access ended.'):(r.data.error||'Could not do that.'),r.ok?'ok':'err');
+    _toast(r.ok?(label==='Leave'?'You left that workspace':'Removed '+b.dataset.email):(r.data.error||'Could not do that.'),r.ok?'ok':'err');
     load();
   });
   load();

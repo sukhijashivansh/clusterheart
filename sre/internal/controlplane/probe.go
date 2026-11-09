@@ -31,12 +31,17 @@ type probeEntry struct {
 	err                 string
 }
 
+// probeStore holds both kinds of on-demand agent work: latency checks (m) and
+// log reads (logs, see logs.go). One lock, one agent poll.
 type probeStore struct {
-	mu sync.Mutex
-	m  map[string]*probeEntry
+	mu   sync.Mutex
+	m    map[string]*probeEntry
+	logs map[string]*logEntry
 }
 
-func newProbeStore() *probeStore { return &probeStore{m: map[string]*probeEntry{}} }
+func newProbeStore() *probeStore {
+	return &probeStore{m: map[string]*probeEntry{}, logs: map[string]*logEntry{}}
+}
 
 // expire fails checks the agent never picked up or never answered, and drops
 // old results. Callers hold mu.
@@ -51,6 +56,7 @@ func (ps *probeStore) expire(now time.Time) {
 			e.done, e.doneAt, e.err = true, now, "The agent started the check but didn't answer in time."
 		}
 	}
+	ps.expireLogs(now)
 }
 
 // k8sName is a DNS-1123 name (namespaces and pod names).
@@ -162,7 +168,7 @@ func (s *Server) handleAgentProbes(w http.ResponseWriter, r *http.Request) {
 			out = append(out, contract.ProbeRequest{ID: e.id, Target: e.target})
 		}
 	}
-	writeJSON(w, http.StatusOK, contract.ProbeRequestsResponse{Requests: out})
+	writeJSON(w, http.StatusOK, contract.ProbeRequestsResponse{Requests: out, Logs: ps.takeLogs(c.ID, now)})
 }
 
 // handleAgentProbeResult takes the agent's timings for one of its own checks:

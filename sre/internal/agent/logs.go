@@ -10,6 +10,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"clusterheart/sre/internal/contract"
 )
@@ -165,6 +166,102 @@ func cleanLogLines(raw []byte) []string {
 	}
 	if len(out) > logTailLines {
 		out = out[len(out)-logTailLines:]
+	}
+	return out
+}
+
+// On-demand log reads (a person clicked a pod or job in the dashboard): a
+// longer tail and longer lines than the failing-pod tails, still redacted.
+const (
+	viewMaxTail    = 500
+	viewMaxLineLen = 2000
+	viewTimeout    = 15 * time.Second
+)
+
+// jobPod finds a Job's newest pod. Kubernetes may already have cleaned them up.
+func (c *Collector) jobPod(ctx context.Context, ns, job string) (*corev1.Pod, error) {
+	for _, sel := range []string{"batch.kubernetes.io/job-name=" + job, "job-name=" + job} {
+		list, err := c.clientset.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: sel})
+		if err != nil {
+			return nil, err
+		}
+		if len(list.Items) == 0 {
+			continue
+		}
+		newest := &list.Items[0]
+		for i := range list.Items {
+			if list.Items[i].CreationTimestamp.After(newest.CreationTimestamp.Time) {
+				newest = &list.Items[i]
+			}
+		}
+		return newest, nil
+	}
+	return nil, nil
+}
+
+// ReadLog answers one on-demand log read.
+func (c *Collector) ReadLog(ctx context.Context, t contract.LogTarget) contract.LogResult {
+	var pod *corev1.Pod
+	if t.Job != "" {
+		p, err := c.jobPod(ctx, t.Namespace, t.Job)
+		if err != nil {
+			return contract.LogResult{Error: "could not list the job's pods"}
+		}
+		if p == nil {
+			return contract.LogResult{Error: "This job's pods are gone (Kubernetes cleaned them up), so there is no log left to read."}
+		}
+		pod = p
+	} else {
+		p, err := c.clientset.CoreV1().Pods(t.Namespace).Get(ctx, t.Pod, metav1.GetOptions{})
+		if err != nil {
+			return contract.LogResult{Error: "Pod " + t.Namespace + "/" + t.Pod + " not found. It may have been replaced; refresh and pick it again."}
+		}
+		pod = p
+	}
+	res := contract.LogResult{Pod: pod.Name, Previous: t.Previous}
+	for _, ct := range pod.Spec.InitContainers {
+		res.Containers = append(res.Containers, ct.Name)
+	}
+	for _, ct := range pod.Spec.Containers {
+		res.Containers = append(res.Containers, ct.Name)
+	}
+	res.Container = t.Container
+	if res.Container == "" && len(pod.Spec.Containers) > 0 {
+		res.Container = pod.Spec.Containers[0].Name
+	}
+	tail := int64(min(max(t.Tail, 1), viewMaxTail))
+	limit := int64(viewMaxTail * viewMaxLineLen)
+	raw, err := c.clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+		Container: res.Container, Previous: t.Previous, TailLines: &tail, LimitBytes: &limit,
+	}).DoRaw(ctx)
+	if err != nil {
+		msg := "could not read the log"
+		if t.Previous {
+			msg = "No earlier instance of this container is kept, so there is no previous log."
+		} else if pod.Status.Phase == corev1.PodPending {
+			msg = "The pod hasn't started yet, so there is no log."
+		}
+		res.Error = msg
+		return res
+	}
+	res.Lines = viewLogLines(raw, int(tail))
+	return res
+}
+
+// viewLogLines splits, truncates and redacts log output for the log viewer.
+func viewLogLines(raw []byte, tail int) []string {
+	out := []string{}
+	sc := bufio.NewScanner(bytes.NewReader(raw))
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		l := strings.TrimRight(sc.Text(), "\r ")
+		if len(l) > viewMaxLineLen {
+			l = l[:viewMaxLineLen] + "…"
+		}
+		out = append(out, Redact(l))
+	}
+	if len(out) > tail {
+		out = out[len(out)-tail:]
 	}
 	return out
 }
