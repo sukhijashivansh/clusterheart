@@ -254,12 +254,11 @@ a.act.approve:hover{color:var(--accent-ink)}
 .cl-status.on{color:var(--green)}
 .cl-status.off{color:var(--amber)}
 .cl-status .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
-.cl-metrics{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:10px}
+.cl-metrics{display:flex;gap:22px}
 .cl-metric{display:flex;flex-direction:column;gap:3px;min-width:0}
-.cl-metric b{font-size:18px;font-weight:700;color:var(--text);line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
-/* five metrics (a server with a GPU) share one row in a slightly smaller size */
-.cl-metrics:has(>:nth-child(5)){gap:8px}
-.cl-metrics:has(>:nth-child(5)) b{font-size:16px}
+.cl-metric b{font-size:16px;font-weight:700;color:var(--text);line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* five metrics (a server with a GPU) split the row evenly so they fit */
+.cl-metrics:has(>:nth-child(5)){display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px}
 .cl-metric span{font-size:10.5px;color:var(--faint);letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cl-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;padding-top:12px;border-top:1px solid var(--border)}
 .cl-seen{font-size:12px;color:var(--muted)}
