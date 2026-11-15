@@ -235,7 +235,7 @@ a.act.approve:hover{color:var(--accent-ink)}
 .app2-main{flex:1 1 auto;width:100%;max-width:1440px;margin:0 auto;padding:30px 28px 64px}
 @media(max-width:640px){.topbar{padding:12px 16px}.app2-main{padding:22px 16px 48px}}
 /* cluster list: compact responsive card grid (no horizontal scroll) */
-.cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));align-content:start;gap:14px}
 .cl-card{display:flex;flex-direction:column;gap:14px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border);transition:border-color .14s,background .14s}
 .cl-card:hover{border-color:var(--border-strong);background:var(--hover)}
 .cl-grid>.cl-card,.tl-grid>.tl-card .tl-head{cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;position:relative;scale:1;transition:border-color .14s,background .14s,scale .2s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
@@ -254,11 +254,14 @@ a.act.approve:hover{color:var(--accent-ink)}
 .cl-status.on{color:var(--green)}
 .cl-status.off{color:var(--amber)}
 .cl-status .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
-.cl-metrics{display:flex;flex-wrap:wrap;gap:12px 24px}
-.cl-metric{display:flex;flex-direction:column;gap:1px}
-.cl-metric b{font-size:18px;font-weight:700;color:var(--text);line-height:1.1}
-.cl-metric span{font-size:10.5px;color:var(--faint);letter-spacing:.03em}
-.cl-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--border)}
+.cl-metrics{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:10px}
+.cl-metric{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cl-metric b{font-size:18px;font-weight:700;color:var(--text);line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* five metrics (a server with a GPU) share one row in a slightly smaller size */
+.cl-metrics:has(>:nth-child(5)){gap:8px}
+.cl-metrics:has(>:nth-child(5)) b{font-size:16px}
+.cl-metric span{font-size:10.5px;color:var(--faint);letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;padding-top:12px;border-top:1px solid var(--border)}
 .cl-seen{font-size:12px;color:var(--muted)}
 .cl-upd{color:var(--amber);font-weight:600}
 /* loading spinner (accent comet ring) */

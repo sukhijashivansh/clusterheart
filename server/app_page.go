@@ -166,13 +166,17 @@ async function load(){
       var nodes=n?(n.ready+' / '+n.total):'—';
       var pods=havePL?(podRun+' / '+svc.length):(p.running!=null?(p.running+' / '+p.total):'—');
       var jobsN=haveJL?(jobDone+' / '+jl.length):(wl.jobs!=null?(''+wl.jobs):'—');
+      // Failures go in the footer, not beside a metric label, so the metric
+      // columns stay even.
+      var nFail=havePL?podFail:0,failTxt=nFail+' failed pod'+(nFail===1?'':'s');
       var link='/app?cluster='+encodeURIComponent(c.clusterId||'');
-      var metrics='<div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods'+fbadge(havePL?podFail:0)+'</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div>';
+      var metrics='<div class="cl-metric"><b>'+nodes+'</b><span>Nodes</span></div><div class="cl-metric"><b>'+pods+'</b><span>Pods</span></div><div class="cl-metric"><b>'+jobsN+'</b><span>Jobs</span></div>';
       if(c.kind==='server'){
         var hs=L.host,dk=hs?fullestDisk(hs):null;
+        nFail=hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0;failTxt=nFail+' issue'+(nFail===1?'':'s');
         metrics='<div class="cl-metric"><b>'+(hs?fmtPct(hs.cpuPercent):'—')+'</b><span>CPU</span></div>'+
           '<div class="cl-metric"><b>'+(hs?pctOf(hs.memUsedMi,hs.memTotalMi)+'%':'—')+'</b><span>Memory</span></div>'+
-          '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk'+fbadge(hs&&hs.problems?hs.problems.filter(function(x){return x.severity==='high';}).length:0)+'</span></div>'+
+          '<div class="cl-metric"><b>'+(dk?pctOf(dk.usedMi,dk.totalMi)+'%':'—')+'</b><span>Disk</span></div>'+
           (hs&&(hs.gpus||[]).length?(function(g){return '<div class="cl-metric"><b>'+fmtPct(g.avg)+'</b><span>GPU ×'+hs.gpus.length+'</span></div>'+
             (g.memTotal?'<div class="cl-metric" title="'+fmtMem(g.memUsed)+' of '+fmtMem(g.memTotal)+'"><b>'+pctOf(g.memUsed,g.memTotal)+'%</b><span>VRAM</span></div>':'');})(gpuStats(hs.gpus)):'');
       }
@@ -180,7 +184,7 @@ async function load(){
         '<div class="cl-head"><div style="min-width:0"><a class="cl-name" href="'+link+'">'+esc(c.name||c.clusterId)+'</a><div class="cl-env">'+(c.kind==='server'?'Server':'Kubernetes')+(c.environment?' · '+esc(c.environment):'')+'</div></div>'+
           '<span class="cl-status '+(connected?'on':'off')+'"><span class="dot"></span>'+(connected?'Connected':'Offline')+'</span></div>'+
         '<div class="cl-metrics">'+metrics+'</div>'+
-        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+(c.kind==='server'&&c.agentVersion&&!hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?' · <span class="cl-upd">agent update available</span>':'')+'</span>'+kebab(c)+'</div>'+
+        '<div class="cl-foot"><span class="cl-seen">'+ago(c.lastHeartbeat)+(nFail>0?'<span class="fail-badge">'+failTxt+'</span>':'')+(c.kind==='server'&&c.agentVersion&&!hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?' · <span class="cl-upd">agent update available</span>':'')+'</span>'+kebab(c)+'</div>'+
       '</div>';
     });
     html+='</div>';
