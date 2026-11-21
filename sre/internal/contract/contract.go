@@ -455,6 +455,19 @@ type HostSnapshot struct {
 	FailedUnits []HostUnit    `json:"failedUnits,omitempty"` // systemd units in failed state
 	ErrorLogs   []HostLogLine `json:"errorLogs,omitempty"`   // recent error-level journal lines, redacted
 	Problems    []HostProblem `json:"problems,omitempty"`
+	// Containers is `docker ps -a`, running first.
+	Containers []HostContainer `json:"containers,omitempty"`
+}
+
+// HostContainer is one Docker container. Commands, labels, mounts and
+// environment are deliberately not collected: they can hold secrets.
+type HostContainer struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	State  string `json:"state"`  // running, exited, restarting, ...
+	Status string `json:"status"` // e.g. "Up 2 days (healthy)"
+	Ports  string `json:"ports,omitempty"`
 }
 
 // HostGPU is one GPU, read from nvidia-smi (NVIDIA) or the amdgpu driver (AMD).

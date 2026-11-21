@@ -14,7 +14,7 @@ import (
 )
 
 // Version is reported in heartbeats.
-const Version = "host-0.2.3"
+const Version = "host-0.2.4"
 
 const (
 	maxJournalLines = 2000 // per cycle
@@ -81,7 +81,9 @@ type Agent struct {
 	run     runFunc
 	gpus    *gpuReader
 	secrets *secretScanner
-	cursor  string
+	// dockerFile is the container list written by the root timer, "" to skip.
+	dockerFile string
+	cursor     string
 	// oldJournal is set once journalctl rejected --output-fields (systemd < 236).
 	oldJournal bool
 	errLogs    []contract.HostLogLine
@@ -92,7 +94,7 @@ type Agent struct {
 func New(c *Client, interval time.Duration, log *slog.Logger) *Agent {
 	return &Agent{Client: c, Interval: interval, Log: log,
 		sys: &sys{proc: "/proc", etc: "/etc", sysfs: "/sys", statfs: statfsMi, uidOf: fileOwner}, run: execRun,
-		gpus: newGPUReader(execRun, execStart, "/sys"), secrets: newSecretScanner()}
+		gpus: newGPUReader(execRun, execStart, "/sys"), secrets: newSecretScanner(), dockerFile: dockerStateFile}
 }
 
 // collect builds one snapshot.
@@ -103,6 +105,9 @@ func (a *Agent) collect(ctx context.Context, now time.Time) contract.ClusterSnap
 	var gpuProbs []contract.HostProblem
 	if a.gpus != nil {
 		h.GPUs, gpuProbs = a.gpus.read(ctx, now)
+	}
+	if a.dockerFile != "" {
+		h.Containers = readContainers(a.dockerFile, now)
 	}
 
 	entries, cursor, err := readJournal(ctx, a.run, a.cursor, !a.oldJournal)

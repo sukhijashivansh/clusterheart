@@ -20,6 +20,8 @@ SERVICE=clusterheart-host-agent
 BIN=/usr/local/bin/clusterheart-host-agent
 ENV_FILE=/etc/clusterheart/host-agent.env
 UNIT=/etc/systemd/system/$SERVICE.service
+DOCKER_UNIT=clusterheart-docker-ps
+DOCKER_HELPER=/usr/local/libexec/$DOCKER_UNIT
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -41,8 +43,15 @@ if ! command -v systemctl >/dev/null 2>&1; then
   exit 1
 fi
 
+remove_docker_timer() {
+  systemctl disable --now "$DOCKER_UNIT.timer" 2>/dev/null || true
+  rm -f "/etc/systemd/system/$DOCKER_UNIT.timer" "/etc/systemd/system/$DOCKER_UNIT.service" "$DOCKER_HELPER"
+  rm -rf /run/clusterheart
+}
+
 if [ -n "$UNINSTALL" ]; then
   systemctl disable --now "$SERVICE" 2>/dev/null || true
+  remove_docker_timer
   rm -f "$UNIT" "$BIN"
   rm -rf /etc/clusterheart
   systemctl daemon-reload
@@ -145,6 +154,67 @@ CPUQuota=20%
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# Docker's socket is root-equivalent, so the agent never touches it. A small
+# root timer runs one fixed `docker ps` and leaves only these fields in a file
+# the agent can read: no commands, labels, mounts or environment.
+if command -v docker >/dev/null 2>&1; then
+  mkdir -p "$(dirname "$DOCKER_HELPER")"
+  cat > "$DOCKER_HELPER" <<'EOF'
+#!/bin/sh
+set -eu
+umask 027
+d=/run/clusterheart
+chown root:clusterheart "$d"
+chmod 0750 "$d"
+t="$(mktemp "$d/.docker.XXXXXX")"
+trap 'rm -f "$t"' EXIT
+docker ps -a --format '{"id":{{json .ID}},"name":{{json .Names}},"image":{{json .Image}},"state":{{json .State}},"status":{{json .Status}},"ports":{{json .Ports}}}' > "$t"
+chown root:clusterheart "$t"
+chmod 0640 "$t"
+mv -f "$t" "$d/docker.json"
+trap - EXIT
+EOF
+  chown root:root "$DOCKER_HELPER"
+  chmod 0755 "$DOCKER_HELPER"
+
+  cat > "/etc/systemd/system/$DOCKER_UNIT.service" <<EOF
+[Unit]
+Description=Clusterheart container list (docker ps, read-only)
+
+[Service]
+Type=oneshot
+Group=clusterheart
+ExecStart=$DOCKER_HELPER
+TimeoutStartSec=20
+Environment=DOCKER_CONFIG=/nonexistent
+RuntimeDirectory=clusterheart
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+EOF
+
+  cat > "/etc/systemd/system/$DOCKER_UNIT.timer" <<EOF
+[Unit]
+Description=Refresh the Clusterheart container list
+
+[Timer]
+OnActiveSec=0
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl daemon-reload
+  systemctl enable "$DOCKER_UNIT.timer" >/dev/null 2>&1
+  systemctl restart "$DOCKER_UNIT.timer"
+else
+  remove_docker_timer
+fi
 
 systemctl daemon-reload
 systemctl enable "$SERVICE" >/dev/null 2>&1

@@ -64,8 +64,8 @@ document.querySelectorAll('.ws-pick').forEach(function(b){b.addEventListener('cl
   if(r.ok)location.href='/app';else b.disabled=false;
 });});
 var HOST_UPDATE_CMD={{.HostUpdateCmd}};
-// HOST_AGENT_LATEST is the host agent with GPU and network metrics.
-var HOST_AGENT_LATEST='0.2.3';
+// HOST_AGENT_LATEST is the host agent with Docker containers, GPU and network metrics.
+var HOST_AGENT_LATEST='0.2.4';
 function hostAgentAtLeast(v,want){return agentAtLeast(String(v||'').replace(/^host-/,''),want);}
 var _lo=document.getElementById('logout');
 if(_lo)_lo.addEventListener('click',async function(e){e.preventDefault();await _post('/api/logout',{});location.href='/login';});
@@ -597,7 +597,7 @@ function renderServerDetail(c,html,box){
   // Overview
   var row=function(k,v){return '<div class="sec-k">'+k+'</div><div class="sec-v">'+v+'</div>';};
   var upd=hostAgentAtLeast(c.agentVersion,HOST_AGENT_LATEST)?'':
-    '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent</p><p class="card2-desc">This server runs agent '+esc(c.agentVersion||'unknown')+'. Update it to see GPU and network usage. Run this on the server:</p></div>'+
+    '<section class="card2"><div class="card2-head"><p class="card2-title">Update the agent</p><p class="card2-desc">This server runs agent '+esc(c.agentVersion||'unknown')+'. Update it to see Docker containers, GPU and network usage. Run this on the server:</p></div>'+
     '<div class="card2-body"><textarea class="nb" rows="1" readonly onclick="this.select()">'+esc(HOST_UPDATE_CMD)+'</textarea><div class="nb-actions"><button class="act approve copy-setup">Copy</button></div></div></section>';
   // Overview is one screen, no sub-tabs: a system strip across the top, then
   // processes beside the GPUs and disks.
@@ -634,6 +634,13 @@ function renderServerDetail(c,html,box){
       h.processes.map(function(x){return '<tr><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">pid '+x.pid+'</div></td><td class="u-email">'+esc(x.user||'')+'</td><td class="u-time">'+(x.cpuPercent||0).toFixed(1)+'%</td><td class="u-time">'+fmtMem(x.memMi)+'</td></tr>';}).join('')+
       '</tbody></table></div>']);
   }
+  var ctrs=h.containers||[],ctrUp=ctrs.filter(function(x){return x.state==='running';}).length;
+  var ctrPill=function(x){var bad=/unhealthy/i.test(x.status||'')||x.state==='restarting'||x.state==='dead';
+    return '<span class="pill '+(x.state==='running'&&!bad?'on':'off')+'">'+esc(/unhealthy/i.test(x.status||'')?'unhealthy':x.state)+'</span>';};
+  var ctrCard=ctrs.length?'<section class="card2 ov-containers"><div class="card2-head"><p class="card2-title">'+plural(ctrs.length,'Container')+'</p><p class="card2-desc">'+ctrUp+' running</p></div>'+
+    '<div class="tscroll health-scroll"><table class="users ptable"><thead><tr><th>Container</th><th>Image</th><th>State</th><th>Status</th><th>Ports</th></tr></thead><tbody>'+
+    ctrs.map(function(x){return '<tr><td><div class="u-name pod-name">'+esc(x.name)+'</div><div class="u-email">'+esc(x.id)+'</div></td><td class="u-email" style="white-space:normal;word-break:break-all">'+esc(x.image)+'</td><td>'+ctrPill(x)+'</td><td class="u-time">'+esc(x.status)+'</td><td class="u-email" style="white-space:normal;word-break:break-word">'+(esc(x.ports)||'—')+'</td></tr>';}).join('')+
+    '</tbody></table></div></section>':'';
   // Health
   var hePanes=[];
   if(probs.length){
@@ -651,7 +658,7 @@ function renderServerDetail(c,html,box){
   var pane=function(id){for(var i=0;i<ovPanes.length;i++)if(ovPanes[i][0]===id)return ovPanes[i];return null;};
   var card=function(pn,cls){return pn?'<section class="card2 '+cls+'"><div class="card2-head"><p class="card2-title">'+pn[1]+'</p></div>'+pn[2]+'</section>':'';};
   var side=card(pane('gpus'),'ov-gpus')+card(pane('disks'),'ov-disks'),procs=card(pane('procs'),'ov-procs');
-  var ov=upd+sysCard+((procs||side)?'<div class="ov-grid'+(procs&&side?'':' one')+'">'+procs+(side?'<div class="ov-side">'+side+'</div>':'')+'</div>':'');
+  var ov=upd+sysCard+ctrCard+((procs||side)?'<div class="ov-grid'+(procs&&side?'':' one')+'">'+procs+(side?'<div class="ov-side">'+side+'</div>':'')+'</div>':'');
   var he=hePanes.length?subTabs('srv-health',hePanes):'<section class="card2"><div class="card2-body"><p class="sub" style="margin:0"><span class="pill on">Healthy.</span> No problems or errors reported.</p></div></section>';
   html+='<div class="tabpanel active" data-panel="overview">'+ov+'</div>'+
     '<div class="tabpanel" data-panel="timeline"><div id="tl-root"></div></div>'+

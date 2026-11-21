@@ -439,7 +439,8 @@ table.users tbody tr:hover{background:var(--hover)}
 .lat-err{grid-column:2/4;font-size:12.5px;color:var(--red)}
 @media (max-width:640px){.lat-row{grid-template-columns:58px minmax(0,1fr) 60px}.lat-port,.lat-n{width:84px}}
 /* Server overview: system strip + processes beside GPUs and disks */
-.ov-sys{margin-bottom:16px}
+.ov-sys,.ov-containers{margin-bottom:16px}
+.ov-containers .health-scroll{max-height:420px}
 .ov-specs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .ov-spec{padding:14px 18px;border-right:1px solid var(--border);min-width:0}
 .ov-spec:last-child{border-right:none}
